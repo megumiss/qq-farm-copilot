@@ -9,3 +9,4 @@ pydantic>=2.5.0
 opencv-python>=4.9.0
 numpy>=1.26.0
 keyboard>=0.13.5
+rapidocr_onnxruntime>=1.4.0

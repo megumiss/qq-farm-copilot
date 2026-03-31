@@ -1,42 +1,85 @@
 """游戏数据 - 作物信息、等级经验等静态数据"""
 
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+def _parse_grow_phases_seconds(grow_phases: str) -> list[int]:
+    """Parse `种子:30;发芽:30;成熟:0;` into [30, 30, 0]."""
+    phases: list[int] = []
+    for part in (grow_phases or "").split(";"):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        _, sec_str = part.split(":", 1)
+        sec_str = sec_str.strip()
+        try:
+            sec = int(float(sec_str))
+        except ValueError:
+            continue
+        if sec < 0:
+            continue
+        phases.append(sec)
+    return phases
+
+
+def _calc_grow_time_seconds(grow_phases: str, seasons: int) -> int:
+    """Compute total grow time.
+
+    Rules:
+    1. Base grow time = sum of all phase seconds.
+    2. For dual-season crops (`seasons == 2`), add the last two non-zero phases.
+    """
+    phases = _parse_grow_phases_seconds(grow_phases)
+    total = sum(phases)
+
+    if seasons == 2:
+        non_zero = [s for s in phases if s > 0]
+        if len(non_zero) >= 2:
+            total += non_zero[-1] + non_zero[-2]
+        elif len(non_zero) == 1:
+            total += non_zero[-1]
+    return total
+
+
+def _load_crops_from_plant_json() -> list[tuple]:
+    """Build CROPS tuple list from `models/Plant.json`.
+
+    Tuple format:
+      (name, seed_id, land_level_need, grow_time_seconds, exp, fruit_count)
+    """
+    plant_path = Path(__file__).resolve().parent / "Plant.json"
+    data = json.loads(plant_path.read_text(encoding="utf-8"))
+
+    crops: list[tuple] = []
+    for item in data:
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+
+        seed_id = int(item.get("seed_id", 0))
+        land_level_need = int(item.get("land_level_need", 0))
+        seasons = int(item.get("seasons", 1))
+        grow_phases = str(item.get("grow_phases", ""))
+        grow_time = _calc_grow_time_seconds(grow_phases, seasons)
+
+        exp = int(item.get("exp", 0))
+        if seasons == 2:
+            exp *= 2
+
+        fruit = item.get("fruit", {}) or {}
+        fruit_count = int(fruit.get("count", 0))
+
+        crops.append((name, seed_id, land_level_need, grow_time, exp, fruit_count))
+
+    crops.sort(key=lambda c: (c[2], c[1], c[0]))
+    return crops
+
+
 # 作物数据表：(名称, 种子ID, 解锁等级, 总生长时间秒, 经验, 果实数量)
-# 按解锁等级排序，从 Plant.json 提取
-CROPS = [
-    ("白萝卜", 20002, 1, 60, 1, 5),
-    ("胡萝卜", 20003, 2, 120, 2, 10),
-    ("大白菜", 20059, 3, 300, 5, 20),
-    ("大蒜", 20065, 4, 600, 10, 20),
-    ("大葱", 20064, 5, 1200, 20, 30),
-    ("水稻", 20060, 6, 2400, 41, 30),
-    ("小麦", 20061, 7, 3600, 62, 40),
-    ("玉米", 20004, 8, 4800, 82, 40),
-    ("鲜姜", 20066, 9, 6000, 106, 60),
-    ("土豆", 20005, 10, 7200, 128, 60),
-    ("小白菜", 20071, 11, 9000, 160, 80),
-    ("生菜", 20096, 12, 10800, 192, 80),
-    ("油菜", 20099, 13, 14400, 272, 200),
-    ("茄子", 20006, 14, 28800, 544, 200),
-    ("红枣", 20051, 15, 43200, 816, 200),
-    ("蒲公英", 20120, 16, 86400, 1632, 200),
-    ("银莲花", 20259, 17, 14400, 288, 200),
-    ("番茄", 20007, 18, 28800, 576, 200),
-    ("花菜", 20098, 19, 43200, 864, 200),
-    ("韭菜", 20305, 20, 86400, 1728, 200),
-    ("小雏菊", 20105, 21, 14400, 304, 200),
-    ("豌豆", 20008, 22, 28800, 608, 200),
-    ("莲藕", 20037, 23, 43200, 912, 200),
-    ("红玫瑰", 20041, 24, 86400, 1824, 200),
-    ("秋菊(黄)", 20161, 25, 14400, 324, 200),
-    ("满天星", 20110, 26, 28800, 648, 200),
-    ("含羞草", 20143, 27, 43200, 972, 200),
-    ("牵牛花", 20147, 28, 86400, 1944, 200),
-    ("秋菊(红)", 20162, 29, 14400, 344, 200),
-    ("辣椒", 20009, 30, 28800, 688, 200),
-    ("黄瓜", 20097, 31, 43200, 1032, 200),
-    ("芹菜", 20306, 32, 86400, 2064, 200),
-    ("天香百合", 20103, 33, 14400, 368, 200),
-]
+CROPS = _load_crops_from_plant_json()
 
 
 def get_crop_names() -> list[str]:

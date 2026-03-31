@@ -127,7 +127,7 @@ class PlantStrategy(BaseStrategy):
                 cv_check, _, _ = self.capture(rect)
                 if cv_check is not None:
                     shop_close = self.cv_detector.detect_single_template(
-                        cv_check, "btn_shop_close", threshold=0.8)
+                        cv_check, "btn_shop_close", threshold=0.75)
                     if shop_close:
                         logger.info("播种流程: 种子已用完，进入购买流程")
                         self._close_shop_and_buy(rect, crop_name, buy_qty, actions_done)
@@ -237,8 +237,25 @@ class PlantStrategy(BaseStrategy):
                 continue
 
             logger.info("购买流程: 商店已打开，查找种子")
-            seed_dets = self.cv_detector.detect_single_template(
-                cv_img, f"shop_{crop_name}", threshold=0.9)
+            # 商店已打开后，增加模板匹配重试，避免瞬时渲染导致漏检
+            match_retry = 3
+            seed_dets = []
+            for match_attempt in range(match_retry):
+                if self.stopped:
+                    return None
+                seed_dets = self.cv_detector.detect_single_template(
+                    cv_img, f"shop_{crop_name}", threshold=0.75)
+                if seed_dets:
+                    break
+                logger.warning(
+                    f"购买流程: 商店中未找到 'shop_{crop_name}' 模板，"
+                    f"重试({match_attempt+1}/{match_retry})"
+                )
+                if match_attempt < match_retry - 1:
+                    time.sleep(0.3)
+                    cv_img, dets, _ = self.capture(rect)
+                    if cv_img is None:
+                        return None
 
             if seed_dets:
                 det = seed_dets[0]
@@ -246,10 +263,10 @@ class PlantStrategy(BaseStrategy):
                 self.click(det.x, det.y, f"选择{crop_name}")
                 time.sleep(1.0)  # 等待购买弹窗出现
                 break
-            else:
-                logger.warning(f"购买流程: 商店中未找到 'shop_{crop_name}' 模板")
-                self._close_shop(rect)
-                return None
+
+            logger.warning(f"购买流程: 商店中未找到 'shop_{crop_name}' 模板")
+            self._close_shop(rect)
+            return None
         else:
             logger.warning("购买流程: 商店加载超时")
             self._close_shop(rect)

@@ -151,12 +151,20 @@ class CVDetector:
         for category, templates in self._templates.items():
             for tpl in templates:
                 if tpl["name"] == name:
-                    results = self._match_template(
+                    results, best_score = self._match_template_with_best(
                         screenshot, gray_screen, tpl, threshold
                     )
                     results = self._nms(results, iou_threshold=0.5)
                     results.sort(key=lambda r: r.confidence, reverse=True)
+                    top_score = results[0].confidence if results else best_score
+                    logger.debug(
+                        f"模板检测: name={name}, threshold={threshold:.3f}, "
+                        f"score={top_score:.3f}, hit={bool(results)}"
+                    )
                     return results
+        logger.debug(
+            f"模板检测: name={name}, threshold={threshold:.3f}, score=0.000, hit=False"
+        )
         return []
 
     def _match_template(self, screenshot: np.ndarray,
@@ -164,7 +172,18 @@ class CVDetector:
                         tpl: dict,
                         threshold: float) -> list[DetectResult]:
         """对单个模板执行多尺度匹配"""
+        results, _ = self._match_template_with_best(
+            screenshot, gray_screen, tpl, threshold
+        )
+        return results
+
+    def _match_template_with_best(self, screenshot: np.ndarray,
+                                  gray_screen: np.ndarray,
+                                  tpl: dict,
+                                  threshold: float) -> tuple[list[DetectResult], float]:
+        """对单个模板执行多尺度匹配，并返回最佳分数（不受阈值限制）。"""
         results = []
+        best_score = 0.0
         tpl_img = tpl["image"]
         tpl_mask = tpl["mask"]
         th, tw = tpl_img.shape[:2]
@@ -196,6 +215,12 @@ class CVDetector:
                     gray_screen, gray_tpl, cv2.TM_CCOEFF_NORMED
                 )
 
+            finite = np.isfinite(match_result)
+            if finite.any():
+                scale_best = float(match_result[finite].max())
+                if scale_best > best_score:
+                    best_score = scale_best
+
             # 找到所有超过阈值的匹配位置
             locations = np.where(match_result >= threshold)
             for pt_y, pt_x in zip(*locations):
@@ -217,7 +242,7 @@ class CVDetector:
             if scale == 1.0 and any(r.confidence > 0.95 for r in results):
                 break
 
-        return results
+        return results, best_score
 
     @staticmethod
     def _nms(results: list[DetectResult],
