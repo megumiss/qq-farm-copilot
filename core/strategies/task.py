@@ -10,7 +10,6 @@
   btn_task          — 左下角任务提示条
   btn_batch_sell    — 仓库"批量出售"按钮
   btn_sell          — 仓库"出售"按钮
-  shop_xx           — 仓库果实图标（复用商店模板）
 """
 import time
 import pyautogui
@@ -20,6 +19,7 @@ from models.farm_state import ActionType
 from models.config import SellMode
 from core.cv_detector import DetectResult
 from core.strategies.base import BaseStrategy
+from utils.shop_item_ocr import ShopItemOCR
 
 
 class TaskStrategy(BaseStrategy):
@@ -27,6 +27,7 @@ class TaskStrategy(BaseStrategy):
     def __init__(self, cv_detector):
         super().__init__(cv_detector)
         self.sell_config = None  # 由 bot_engine 设置
+        self.shop_ocr = ShopItemOCR()
 
     def try_task(self, rect: tuple, detections: list[DetectResult]) -> list[str]:
         """检测任务条并执行"""
@@ -133,7 +134,7 @@ class TaskStrategy(BaseStrategy):
     def _selective_sell(self, rect: tuple) -> list[str]:
         """选择性出售：逐个识别仓库果实，只点击配置中勾选的作物出售
 
-        用 shop_xx 模板匹配仓库中的果实图标，匹配到且在 sell_crops 列表中的就点击出售。
+        用 OCR 识别仓库页面物品名，匹配到且在 sell_crops 列表中的就点击出售。
         """
         if not self.sell_config or not self.sell_config.sell_crops:
             logger.info("任务: 未配置要出售的作物，跳过")
@@ -147,17 +148,21 @@ class TaskStrategy(BaseStrategy):
         if cv_img is None:
             return actions
 
-        # 在仓库页面用 shop_ 模板识别果实
+        # 在仓库页面用 OCR 识别果实
         for crop_name in sell_crops:
             if self.stopped:
                 break
-            fruit_dets = self.cv_detector.detect_single_template(
-                cv_img, f"shop_{crop_name}", threshold=0.85)
-            if not fruit_dets:
+            ocr_match = self.shop_ocr.find_item(cv_img, crop_name, min_similarity=0.70)
+            if not ocr_match.target:
+                if ocr_match.best:
+                    logger.info(
+                        f"任务: OCR未命中'{crop_name}'，best={ocr_match.best.name} "
+                        f"(raw={ocr_match.best.raw_name},sim={ocr_match.best_similarity:.2f})"
+                    )
                 continue
 
             # 点击果实 → 弹出出售面板
-            self.click(fruit_dets[0].x, fruit_dets[0].y, f"选择{crop_name}")
+            self.click(ocr_match.target.center_x, ocr_match.target.center_y, f"选择{crop_name}")
             time.sleep(0.5)  # 等待出售面板弹出
 
             # 找出售按钮并点击
