@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "description": "窗口非客户区实测值（边框宽度、标题高度），用于540x960客户区外框换算",
+  "default_platform": "qq",
+  "platforms": {
+    "qq": {
+      "scales": {
+        "100": { "border_width": 1, "title_height": 39 },
+        "125": { "border_width": 1, "title_height": 49 },
+        "150": { "border_width": 2, "title_height": 58 },
+        "175": { "border_width": 2, "title_height": 68 },
+        "200": { "border_width": 2, "title_height": 78 }
+      }
+    },
+    "wechat": {
+      "scales": {
+        "100": { "border_width": 1, "title_height": 43 },
+        "125": { "border_width": 1, "title_height": 54 },
+        "150": { "border_width": 2, "title_height": 64 },
+        "175": { "border_width": 2, "title_height": 75 },
+        "200": { "border_width": 2, "title_height": 86 }
+      }
+    }
+  }
+}
