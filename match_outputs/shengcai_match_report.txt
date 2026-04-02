@@ -1,4 +1,0 @@
-threshold=0.95, raw=0, nms=0
-threshold=0.90, raw=0, nms=0
-threshold=0.85, raw=0, nms=0
-threshold=0.80, raw=0, nms=0
