@@ -38,7 +38,6 @@ TEMPLATE_CATEGORIES = {
     "ui": "ui_element",
     "land": "land",
     "seed": "seed",
-    "shop": "shop",
 }
 
 
@@ -57,41 +56,55 @@ class CVDetector:
             logger.warning(f"模板目录 {self._templates_dir} 为空，请先采集模板")
             return
 
+        self._templates = {}
         count = 0
-        for filename in os.listdir(self._templates_dir):
-            if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                continue
+        ignored_top_dirs = {"__pycache__"}
+        for root, dirs, files in os.walk(self._templates_dir):
+            rel = os.path.relpath(root, self._templates_dir)
+            if rel == ".":
+                dirs[:] = [d for d in dirs if d.lower() not in ignored_top_dirs]
+            else:
+                top_dir = rel.split(os.sep)[0].lower()
+                if top_dir in ignored_top_dirs:
+                    continue
+                dirs[:] = [d for d in dirs if d.lower() not in ignored_top_dirs]
 
-            filepath = os.path.join(self._templates_dir, filename)
-            # cv2.imread 不支持中文路径，用 numpy 中转
-            template = cv2.imdecode(
-                np.fromfile(filepath, dtype=np.uint8), cv2.IMREAD_UNCHANGED
-            )
-            if template is None:
-                logger.warning(f"无法读取模板: {filename}")
-                continue
+            for filename in files:
+                if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                    continue
 
-            name = os.path.splitext(filename)[0]
-            # 从文件名前缀判断类别: btn_harvest.png -> button
-            prefix = name.split("_")[0]
-            category = TEMPLATE_CATEGORIES.get(prefix, "unknown")
+                filepath = os.path.join(root, filename)
+                # cv2.imread 不支持中文路径，用 numpy 中转
+                template = cv2.imdecode(
+                    np.fromfile(filepath, dtype=np.uint8), cv2.IMREAD_UNCHANGED
+                )
+                if template is None:
+                    logger.warning(f"无法读取模板: {filepath}")
+                    continue
 
-            # 处理带alpha通道的模板（用于mask匹配）
-            mask = None
-            if template.shape[2] == 4:
-                mask = template[:, :, 3]
-                template = template[:, :, :3]
+                name = os.path.splitext(filename)[0]
+                # 从文件名前缀判断类别: btn_harvest.png -> button
+                prefix = name.split("_")[0]
+                category = TEMPLATE_CATEGORIES.get(prefix, "unknown")
 
-            if category not in self._templates:
-                self._templates[category] = []
+                # 处理带alpha通道的模板（用于mask匹配）
+                mask = None
+                if template.ndim == 3 and template.shape[2] == 4:
+                    mask = template[:, :, 3]
+                    template = template[:, :, :3]
+                elif template.ndim == 2:
+                    template = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR)
 
-            self._templates[category].append({
-                "name": name,
-                "image": template,
-                "mask": mask,
-                "category": category,
-            })
-            count += 1
+                if category not in self._templates:
+                    self._templates[category] = []
+
+                self._templates[category].append({
+                    "name": name,
+                    "image": template,
+                    "mask": mask,
+                    "category": category,
+                })
+                count += 1
 
         self._loaded = True
         logger.info(f"已加载 {count} 个模板，分 {len(self._templates)} 个类别")

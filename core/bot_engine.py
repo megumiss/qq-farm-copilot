@@ -270,7 +270,7 @@ class BotEngine(QObject):
         else:
             detections = []
             for cat in self.cv_detector._templates:
-                if cat in ("seed", "shop"):
+                if cat in ("seed",):
                     continue
                 if cat == "land":
                     thresh = 0.89

@@ -11,7 +11,7 @@ SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 
 # 目标目录
 DST_DIR = os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), "templates")
+    os.path.abspath(__file__))), "templates", "seed")
 
 
 def main():

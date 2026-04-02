@@ -44,6 +44,14 @@ class TemplateCollector:
         self._original_image = None   # 原始截图（全分辨率）
         self._display_image = None    # 缩放后用于显示的图
         self._scale = 1.0             # 缩放比例
+        self._known_prefixes = {"btn", "icon", "crop", "ui", "land", "seed"}
+
+    def _resolve_save_path(self, name: str) -> str:
+        prefix = (name.split("_")[0] if "_" in name else name).lower()
+        subdir = prefix if prefix in self._known_prefixes else "unknown"
+        save_dir = os.path.join(self.templates_dir, subdir)
+        os.makedirs(save_dir, exist_ok=True)
+        return os.path.join(save_dir, f"{name}.png")
 
     def capture_game_window(self, keyword: str = "QQ经典农场") -> np.ndarray | None:
         window = self.wm.find_window(keyword)
@@ -188,7 +196,7 @@ class TemplateCollector:
                         print("已取消")
                         continue
 
-                    filepath = os.path.join(self.templates_dir, f"{name}.png")
+                    filepath = self._resolve_save_path(name)
                     # cv2.imwrite 不支持中文路径，用 imencode + 写文件
                     success, buf = cv2.imencode('.png', cropped)
                     if success:
