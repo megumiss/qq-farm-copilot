@@ -2,7 +2,7 @@
 import json
 import os
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class PlantMode(str, Enum):
@@ -13,6 +13,21 @@ class PlantMode(str, Enum):
 class SellMode(str, Enum):
     BATCH_ALL = "batch_all"        # 批量全部出售
     SELECTIVE = "selective"        # 选择性出售（只卖勾选的作物）
+
+
+class WindowPosition(str, Enum):
+    LEFT_CENTER = "left_center"
+    CENTER = "center"
+    RIGHT_CENTER = "right_center"
+    TOP_LEFT = "top_left"
+    TOP_RIGHT = "top_right"
+    LEFT_BOTTOM = "left_bottom"
+    RIGHT_BOTTOM = "right_bottom"
+
+
+class WindowPlatform(str, Enum):
+    QQ = "qq"
+    WECHAT = "wechat"
 
 
 class FeaturesConfig(BaseModel):
@@ -59,8 +74,8 @@ class PlantingConfig(BaseModel):
     preferred_crop: str = "白萝卜"  # strategy=preferred 时使用
     player_level: int = 10
     buy_quantity: int = 50
-    window_width: int = 581
-    window_height: int = 1054
+    window_platform: WindowPlatform = WindowPlatform.QQ
+    window_position: WindowPosition = WindowPosition.LEFT_CENTER
 
 
 class AppConfig(BaseModel):
@@ -72,7 +87,7 @@ class AppConfig(BaseModel):
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
     sell: SellConfig = Field(default_factory=SellConfig)
 
-    _config_path: str = ""
+    _config_path: str = PrivateAttr(default="")
 
     @classmethod
     def load(cls, path: str = "config.json") -> "AppConfig":

@@ -132,12 +132,24 @@ class BotEngine(QObject):
         """
         if not self.action_executor:
             return
-        w, h = rect[2], rect[3]
-        sky_x = w // 2
-        sky_y = int(h * 0.05)
+
+        platform = getattr(self.config.planting, "window_platform", "qq")
+        platform_value = platform.value if hasattr(platform, "value") else str(platform)
+        if not rect or len(rect) != 4:
+            logger.warning("清屏点击跳过: capture rect 不可用")
+            return
+
+        cap_left, cap_top, cap_w, cap_h = [int(v) for v in rect]
+        x1, y1, crop_w, crop_h = self.window_manager.get_preview_crop_box(
+            raw_width=cap_w,
+            raw_height=cap_h,
+            platform=platform_value,
+        )
+        sky_x = int(cap_left + x1 + crop_w // 2)
+        sky_y = int(cap_top + y1 + max(10, int(crop_h * 0.05)))
+
         for _ in range(2):
-            self.action_executor.click(
-                *self.action_executor.relative_to_absolute(sky_x, sky_y))
+            self.action_executor.click(sky_x, sky_y)
             time.sleep(0.3)
 
 
@@ -153,14 +165,21 @@ class BotEngine(QObject):
             self.log_message.emit("未找到QQ农场窗口，请先打开微信小程序中的QQ农场")
             return False
 
-        w, h = self.config.planting.window_width, self.config.planting.window_height
-        if w > 0 and h > 0:
-            self.window_manager.resize_window(w, h)
-            time.sleep(0.5)
-            window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
-            self.log_message.emit(f"窗口已调整为 {window.width}x{window.height}")
+        pos = getattr(self.config.planting, "window_position", "left_center")
+        pos_value = pos.value if hasattr(pos, "value") else str(pos)
+        platform = getattr(self.config.planting, "window_platform", "qq")
+        platform_value = platform.value if hasattr(platform, "value") else str(platform)
+        self.window_manager.resize_window(pos_value, platform_value)
+        time.sleep(0.5)
+        window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
+        self.log_message.emit(
+            "窗口已调整（整窗外框目标：540x960 + 非客户区增量）-> "
+            f"实际外框 {window.width}x{window.height}"
+        )
 
-        rect = (window.left, window.top, window.width, window.height)
+        rect = self.window_manager.get_capture_rect()
+        if not rect:
+            rect = (window.left, window.top, window.width, window.height)
         self.action_executor = ActionExecutor(
             window_rect=rect,
             delay_min=self.config.safety.random_delay_min,
@@ -244,10 +263,20 @@ class BotEngine(QObject):
             return None
         self.window_manager.activate_window()
         time.sleep(0.3)
-        rect = (window.left, window.top, window.width, window.height)
+        rect = self.window_manager.get_capture_rect()
+        if not rect:
+            rect = (window.left, window.top, window.width, window.height)
         if self.action_executor:
             self.action_executor.update_window_rect(rect)
         return rect
+
+    def _crop_preview_image(self, image: PILImage.Image | None) -> PILImage.Image | None:
+        """仅用于左侧预览显示：按 nonclient 配置裁掉窗口边框/标题栏。"""
+        if image is None:
+            return None
+        platform = getattr(self.config.planting, "window_platform", "qq")
+        platform_value = platform.value if hasattr(platform, "value") else str(platform)
+        return self.window_manager.crop_window_image_for_preview(image, platform_value)
 
     def _capture_and_detect(self, rect: tuple, prefix: str = "farm",
                             categories: list[str] | None = None,
@@ -259,7 +288,9 @@ class BotEngine(QObject):
             image = self.screen_capture.capture_region(rect)
         if image is None:
             return None, [], None
-        self.screenshot_updated.emit(image)
+        preview_image = self._crop_preview_image(image)
+        if preview_image is not None:
+            self.screenshot_updated.emit(preview_image)
         cv_image = self.cv_detector.pil_to_cv2(image)
 
         if categories is not None:
@@ -289,7 +320,10 @@ class BotEngine(QObject):
         if detections:
             annotated = self.cv_detector.draw_results(cv_image, detections)
             annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-            self.detection_result.emit(PILImage.fromarray(annotated_rgb))
+            annotated_pil = PILImage.fromarray(annotated_rgb)
+            preview_annotated = self._crop_preview_image(annotated_pil)
+            if preview_annotated is not None:
+                self.detection_result.emit(preview_annotated)
 
     def _record_stat(self, action_type: str):
         type_map = {
