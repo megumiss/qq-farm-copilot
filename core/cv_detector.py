@@ -90,7 +90,11 @@ class CVDetector:
                 # 处理带alpha通道的模板（用于mask匹配）
                 mask = None
                 if template.ndim == 3 and template.shape[2] == 4:
-                    mask = template[:, :, 3]
+                    alpha = template[:, :, 3]
+                    # alpha 全不透明时无需 mask；直接用 mask 会让 TM_CCOEFF_NORMED
+                    # 在部分 OpenCV 环境产生 NaN/Inf，导致误命中。
+                    if not np.all(alpha == 255):
+                        mask = alpha
                     template = template[:, :, :3]
                 elif template.ndim == 2:
                     template = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR)
@@ -120,8 +124,14 @@ class CVDetector:
 
         for category, templates in self._templates.items():
             for tpl in templates:
-                matches = self._match_template(
+                matches, best_score = self._match_template_with_best(
                     screenshot, gray_screen, tpl, threshold
+                )
+                self._log_template_probe(
+                    template_name=tpl["name"],
+                    threshold=threshold,
+                    best_score=best_score,
+                    hit_count=len(matches),
                 )
                 results.extend(matches)
 
@@ -143,8 +153,14 @@ class CVDetector:
 
         templates = self._templates.get(category, [])
         for tpl in templates:
-            matches = self._match_template(
+            matches, best_score = self._match_template_with_best(
                 screenshot, gray_screen, tpl, threshold
+            )
+            self._log_template_probe(
+                template_name=tpl["name"],
+                threshold=threshold,
+                best_score=best_score,
+                hit_count=len(matches),
             )
             results.extend(matches)
 
@@ -169,16 +185,30 @@ class CVDetector:
                     )
                     results = self._nms(results, iou_threshold=0.5)
                     results.sort(key=lambda r: r.confidence, reverse=True)
-                    top_score = results[0].confidence if results else best_score
-                    logger.debug(
-                        f"模板检测: name={name}, threshold={threshold:.3f}, "
-                        f"score={top_score:.3f}, hit={bool(results)}"
+                    self._log_template_probe(
+                        template_name=name,
+                        threshold=threshold,
+                        best_score=best_score,
+                        hit_count=len(results),
                     )
                     return results
-        logger.debug(
-            f"模板检测: name={name}, threshold={threshold:.3f}, score=0.000, hit=False"
+        self._log_template_probe(
+            template_name=name,
+            threshold=threshold,
+            best_score=0.0,
+            hit_count=0,
         )
         return []
+
+    @staticmethod
+    def _log_template_probe(template_name: str,
+                            threshold: float,
+                            best_score: float,
+                            hit_count: int) -> None:
+        logger.debug(
+            f"模板识别: 模板={template_name}, 阈值={threshold:.3f}, "
+            f"最大分数={best_score:.3f}, 命中数={int(hit_count)}"
+        )
 
     def _match_template(self, screenshot: np.ndarray,
                         gray_screen: np.ndarray,
@@ -229,6 +259,11 @@ class CVDetector:
                 )
 
             finite = np.isfinite(match_result)
+            if not finite.all():
+                # 屏蔽 NaN/Inf：避免被阈值筛选命中并污染置信度。
+                match_result = np.where(finite, match_result, -1.0)
+                finite = np.isfinite(match_result)
+
             if finite.any():
                 scale_best = float(match_result[finite].max())
                 if scale_best > best_score:

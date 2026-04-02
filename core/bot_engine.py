@@ -11,7 +11,9 @@
   P0  收益:     harvest   — 一键收获 + 自动出售
   P1  维护:     maintain  — 一键除草/除虫/浇水
   P2  生产:     plant     — 播种 + 购买种子 + 施肥
-  P3  资源:     expand    — 扩建土地 + 领取任务
+  P3  资源:     expand    — 扩建土地
+  P3.2 出售:    sell      — 仓库批量出售
+  P3.5 任务:    task      — 领取任务奖励
   P4  社交:     friend    — 好友巡查/帮忙/偷菜/同意好友
 """
 import time
@@ -33,7 +35,7 @@ from core.task_scheduler import TaskScheduler, BotState
 from core.scene_detector import Scene, identify_scene
 from core.strategies import (
     PopupStrategy, HarvestStrategy, MaintainStrategy,
-    PlantStrategy, ExpandStrategy, FriendStrategy, TaskStrategy,
+    PlantStrategy, ExpandStrategy, SellStrategy, TaskStrategy, FriendStrategy,
 )
 
 
@@ -84,10 +86,11 @@ class BotEngine(QObject):
         self.maintain = MaintainStrategy(self.cv_detector)  # P1
         self.plant = PlantStrategy(self.cv_detector)        # P2
         self.expand = ExpandStrategy(self.cv_detector)      # P3
+        self.sell = SellStrategy(self.cv_detector)          # P3.2
         self.task = TaskStrategy(self.cv_detector)          # P3.5
         self.friend = FriendStrategy(self.cv_detector)      # P4
         self._strategies = [self.popup, self.harvest, self.maintain,
-                            self.plant, self.expand, self.task, self.friend]
+                            self.plant, self.expand, self.sell, self.task, self.friend]
 
         # [4] 操作执行层
         self.action_executor: ActionExecutor | None = None
@@ -108,11 +111,9 @@ class BotEngine(QObject):
             s.action_executor = self.action_executor
             s.set_capture_fn(self._capture_and_detect)
             s._stop_requested = False
-        self.task.sell_config = self.config.sell
 
     def update_config(self, config: AppConfig):
         self.config = config
-        self.task.sell_config = config.sell
 
     def _resolve_crop_name(self) -> str:
         """根据策略决定种植作物"""
@@ -356,6 +357,7 @@ class BotEngine(QObject):
 
         idle_rounds = 0
         max_idle = 3
+        sold_this_round = False
 
         for round_num in range(1, 51):
             if self.popup.stopped:
@@ -413,7 +415,17 @@ class BotEngine(QObject):
                 if not action_desc and features.get("auto_upgrade", True):
                     action_desc = self.expand.try_expand(rect, detections)
 
-                # P3.5 任务：领取奖励 / 售卖果实
+                # P3.2 出售：仓库批量出售（独立于任务）
+                if (not action_desc
+                        and features.get("auto_sell", True)
+                        and not sold_this_round):
+                    sa = self.sell.try_sell(rect, detections)
+                    if sa:
+                        sold_this_round = True
+                        result["actions_done"].extend(sa)
+                        action_desc = sa[-1]
+
+                # P3.5 任务：领取任务奖励
                 if not action_desc and features.get("auto_task", True):
                     ta = self.task.try_task(rect, detections)
                     if ta:
