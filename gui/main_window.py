@@ -11,21 +11,28 @@
   TextDim:    #94a3b8
   Border:     #e2e8f0
 """
-import keyboard
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QTabWidget,
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage
-from PIL import Image
 
-from models.config import AppConfig
+import keyboard
+from PIL import Image
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 from core.bot_engine import BotEngine
 from gui.widgets.log_panel import LogPanel
-from gui.widgets.status_panel import StatusPanel
-from gui.widgets.settings_panel import SettingsPanel
 from gui.widgets.sell_panel import SellPanel
+from gui.widgets.settings_panel import SettingsPanel
+from gui.widgets.status_panel import StatusPanel
+from models.config import AppConfig
 from utils.logger import get_log_signal
 
 STYLESHEET = """
@@ -98,11 +105,11 @@ class MainWindow(QMainWindow):
         self.engine = BotEngine(config)
         self._init_ui()
         self._connect_signals()
-        keyboard.add_hotkey("F9", self._on_pause)
-        keyboard.add_hotkey("F10", self._on_stop)
+        keyboard.add_hotkey('F9', self._on_pause)
+        keyboard.add_hotkey('F10', self._on_stop)
 
     def _init_ui(self):
-        self.setWindowTitle("QQ Farm Vision Bot")
+        self.setWindowTitle('QQ Farm Vision Bot')
         self.setMinimumSize(960, 680)
         self.resize(1060, 740)
         self.setStyleSheet(STYLESHEET)
@@ -121,7 +128,7 @@ class MainWindow(QMainWindow):
         preview_card.setFixedWidth(320)
         pv_layout = QVBoxLayout(preview_card)
         pv_layout.setContentsMargins(6, 6, 6, 6)
-        self._screenshot_label = QLabel("启动后显示\n实时截图")
+        self._screenshot_label = QLabel('启动后显示\n实时截图')
         self._screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._screenshot_label.setStyleSheet("""
             QLabel { background-color: #f8fafc; border: 1px dashed #cbd5e1;
@@ -139,10 +146,10 @@ class MainWindow(QMainWindow):
         # 控制按钮
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
-        self._btn_start = _make_btn("开始", "#16a34a", "#15803d")
-        self._btn_pause = _make_btn("暂停", "#d97706", "#b45309")
-        self._btn_stop = _make_btn("停止", "#dc2626", "#b91c1c")
-        self._btn_run_once = _make_btn("立即执行", "#2563eb", "#1d4ed8")
+        self._btn_start = _make_btn('开始', '#16a34a', '#15803d')
+        self._btn_pause = _make_btn('暂停', '#d97706', '#b45309')
+        self._btn_stop = _make_btn('停止', '#dc2626', '#b91c1c')
+        self._btn_run_once = _make_btn('立即执行', '#2563eb', '#1d4ed8')
         self._btn_pause.setEnabled(False)
         self._btn_stop.setEnabled(False)
         self._btn_start.clicked.connect(self._on_start)
@@ -174,11 +181,11 @@ class MainWindow(QMainWindow):
         status_layout.setSpacing(8)
         status_layout.addWidget(self._status_panel)
         status_layout.addWidget(_card(self._log_panel), 1)
-        tabs.addTab(status_page, "状态")
+        tabs.addTab(status_page, '状态')
         self._settings_panel = SettingsPanel(self.config)
-        tabs.addTab(self._settings_panel, "设置")
+        tabs.addTab(self._settings_panel, '设置')
         self._sell_panel = SellPanel(self.config)
-        tabs.addTab(self._sell_panel, "出售")
+        tabs.addTab(self._sell_panel, '出售')
         right_layout.addWidget(tabs)
 
         root.addWidget(right, 1)
@@ -195,15 +202,15 @@ class MainWindow(QMainWindow):
 
     def _update_screenshot(self, image: Image.Image):
         try:
-            image = image.convert("RGB")
-            data = image.tobytes("raw", "RGB")
-            qimg = QImage(data, image.width, image.height,
-                          3 * image.width, QImage.Format.Format_RGB888)
+            image = image.convert('RGB')
+            data = image.tobytes('raw', 'RGB')
+            qimg = QImage(data, image.width, image.height, 3 * image.width, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
             scaled = pixmap.scaled(
                 self._screenshot_label.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation)
+                Qt.TransformationMode.SmoothTransformation,
+            )
             self._screenshot_label.setPixmap(scaled)
         except Exception:
             pass
@@ -215,19 +222,19 @@ class MainWindow(QMainWindow):
             self._btn_stop.setEnabled(True)
 
     def _on_pause(self):
-        if self._btn_pause.text() == "暂停":
+        if self._btn_pause.text() == '暂停':
             self.engine.pause()
-            self._btn_pause.setText("恢复")
+            self._btn_pause.setText('恢复')
         else:
             self.engine.resume()
-            self._btn_pause.setText("暂停")
+            self._btn_pause.setText('暂停')
 
     def _on_stop(self):
         self.engine.stop()
         self._btn_start.setEnabled(True)
         self._btn_pause.setEnabled(False)
         self._btn_stop.setEnabled(False)
-        self._btn_pause.setText("暂停")
+        self._btn_pause.setText('暂停')
         # 兜底刷新状态，避免线程信号时序导致面板停留在旧状态。
         self._status_panel.update_stats(self.engine.scheduler.get_stats())
 

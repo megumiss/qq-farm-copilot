@@ -1,6 +1,7 @@
 """日志面板 - 深色终端风格"""
-from PyQt6.QtWidgets import QTextEdit
+
 from PyQt6.QtGui import QTextCursor
+from PyQt6.QtWidgets import QTextEdit
 
 
 class LogPanel(QTextEdit):
@@ -18,24 +19,23 @@ class LogPanel(QTextEdit):
         """)
 
     def append_log(self, message: str):
-        if "ERROR" in message or "\u2717" in message:
-            color = "#dc2626"
-        elif "WARNING" in message:
-            color = "#d97706"
-        elif "\u2713" in message:
-            color = "#16a34a"
-        elif "INFO" in message:
-            color = "#2563eb"
+        if 'ERROR' in message or '\u2717' in message:
+            color = '#dc2626'
+        elif 'WARNING' in message:
+            color = '#d97706'
+        elif '\u2713' in message:
+            color = '#16a34a'
+        elif 'INFO' in message:
+            color = '#2563eb'
         else:
-            color = "#64748b"
+            color = '#64748b'
 
         self.append(f'<span style="color:{color}">{message}</span>')
 
         if self.document().blockCount() > self.MAX_LINES:
             cursor = self.textCursor()
             cursor.movePosition(QTextCursor.MoveOperation.Start)
-            cursor.movePosition(QTextCursor.MoveOperation.Down,
-                                QTextCursor.MoveMode.KeepAnchor, 50)
+            cursor.movePosition(QTextCursor.MoveOperation.Down, QTextCursor.MoveMode.KeepAnchor, 50)
             cursor.removeSelectedText()
 
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())

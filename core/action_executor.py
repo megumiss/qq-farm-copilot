@@ -1,11 +1,12 @@
 """操作执行器 - 模拟鼠标操作"""
+
 import random
 import time
-from loguru import logger
 
 import pyautogui
-from models.farm_state import Action, OperationResult
+from loguru import logger
 
+from models.farm_state import Action, OperationResult
 
 # 禁用pyautogui的安全暂停（我们自己控制延迟）
 pyautogui.PAUSE = 0.1
@@ -13,9 +14,13 @@ pyautogui.FAILSAFE = True  # 鼠标移到左上角可紧急停止
 
 
 class ActionExecutor:
-    def __init__(self, window_rect: tuple[int, int, int, int],
-                 delay_min: float = 0.5, delay_max: float = 2.0,
-                 click_offset: int = 5):
+    def __init__(
+        self,
+        window_rect: tuple[int, int, int, int],
+        delay_min: float = 0.5,
+        delay_max: float = 2.0,
+        click_offset: int = 5,
+    ):
         self._window_left = window_rect[0]
         self._window_top = window_rect[1]
         self._window_width = window_rect[2]
@@ -81,69 +86,60 @@ class ActionExecutor:
             if self._is_cancelled():
                 return False
             pyautogui.click(target_x, target_y)
-            logger.debug(f"点击 ({target_x}, {target_y})")
+            logger.debug(f'点击 ({target_x}, {target_y})')
             return True
         except Exception as e:
-            logger.error(f"点击失败: {e}")
+            logger.error(f'点击失败: {e}')
             return False
 
     def execute_action(self, action: Action) -> OperationResult:
         """执行单个操作"""
         if self._is_cancelled():
-            return OperationResult(
-                action=action, success=False,
-                message="执行已取消", timestamp=time.time()
-            )
+            return OperationResult(action=action, success=False, message='执行已取消', timestamp=time.time())
         pos = action.click_position
-        if not pos or "x" not in pos or "y" not in pos:
-            return OperationResult(
-                action=action, success=False,
-                message="缺少点击坐标", timestamp=time.time()
-            )
+        if not pos or 'x' not in pos or 'y' not in pos:
+            return OperationResult(action=action, success=False, message='缺少点击坐标', timestamp=time.time())
 
         # 转换坐标
-        abs_x, abs_y = self.relative_to_absolute(int(pos["x"]), int(pos["y"]))
+        abs_x, abs_y = self.relative_to_absolute(int(pos['x']), int(pos['y']))
 
         # 检查坐标是否在窗口范围内
-        if not (self._window_left <= abs_x <= self._window_left + self._window_width and
-                self._window_top <= abs_y <= self._window_top + self._window_height):
+        if not (
+            self._window_left <= abs_x <= self._window_left + self._window_width
+            and self._window_top <= abs_y <= self._window_top + self._window_height
+        ):
             return OperationResult(
-                action=action, success=False,
-                message=f"坐标 ({abs_x},{abs_y}) 超出窗口范围",
-                timestamp=time.time()
+                action=action, success=False, message=f'坐标 ({abs_x},{abs_y}) 超出窗口范围', timestamp=time.time()
             )
 
         success = self.click(abs_x, abs_y)
         self._random_delay()
 
         return OperationResult(
-            action=action, success=success,
-            message=action.description if success else "点击失败",
-            timestamp=time.time()
+            action=action, success=success, message=action.description if success else '点击失败', timestamp=time.time()
         )
 
-    def execute_actions(self, actions: list[Action],
-                        max_count: int = 20) -> list[OperationResult]:
+    def execute_actions(self, actions: list[Action], max_count: int = 20) -> list[OperationResult]:
         """按优先级执行操作序列"""
         results = []
         executed = 0
 
         for action in actions:
             if self._is_cancelled():
-                logger.info("动作序列执行取消")
+                logger.info('动作序列执行取消')
                 break
             if executed >= max_count:
-                logger.info(f"已达到单轮最大操作数 {max_count}，停止执行")
+                logger.info(f'已达到单轮最大操作数 {max_count}，停止执行')
                 break
 
-            logger.info(f"执行: {action.description} (优先级:{action.priority})")
+            logger.info(f'执行: {action.description} (优先级:{action.priority})')
             result = self.execute_action(action)
             results.append(result)
 
             if result.success:
                 executed += 1
-                logger.info(f"✓ {action.description}")
+                logger.info(f'✓ {action.description}')
             else:
-                logger.warning(f"✗ {action.description}: {result.message}")
+                logger.warning(f'✗ {action.description}: {result.message}')
 
         return results

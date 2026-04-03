@@ -1,6 +1,7 @@
 """出售设置面板 - 仅保留批量出售"""
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from models.config import AppConfig, SellMode
 
@@ -19,11 +20,11 @@ class SellPanel(QWidget):
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(8)
 
-        title = QLabel("出售模式")
-        title.setStyleSheet("font-weight: 600;")
+        title = QLabel('出售模式')
+        title.setStyleSheet('font-weight: 600;')
         layout.addWidget(title)
 
-        desc = QLabel("当前版本仅支持批量出售。任务售卖会自动执行“批量出售 -> 确认出售”。")
+        desc = QLabel('当前版本仅支持批量出售。任务售卖会自动执行“批量出售 -> 确认出售”。')
         desc.setWordWrap(True)
         layout.addWidget(desc)
         layout.addStretch(1)

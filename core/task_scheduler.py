@@ -1,20 +1,21 @@
 """任务调度器 - 管理自动化任务的执行周期"""
+
 import time
 from datetime import datetime
 from enum import Enum
-from loguru import logger
 
+from loguru import logger
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 
 class BotState(str, Enum):
-    IDLE = "idle"
-    RUNNING = "running"
-    PAUSED = "paused"
-    ANALYZING = "analyzing"
-    EXECUTING = "executing"
-    WAITING = "waiting"
-    ERROR = "error"
+    IDLE = 'idle'
+    RUNNING = 'running'
+    PAUSED = 'paused'
+    ANALYZING = 'analyzing'
+    EXECUTING = 'executing'
+    WAITING = 'waiting'
+    ERROR = 'error'
 
 
 class TaskScheduler(QObject):
@@ -36,21 +37,26 @@ class TaskScheduler(QObject):
         # 统计
         self._start_time: float = 0
         self._stats = {
-            "harvest": 0, "plant": 0, "water": 0,
-            "weed": 0, "bug": 0, "steal": 0,
-            "sell": 0, "total_actions": 0,
+            'harvest': 0,
+            'plant': 0,
+            'water': 0,
+            'weed': 0,
+            'bug': 0,
+            'steal': 0,
+            'sell': 0,
+            'total_actions': 0,
         }
         self._next_farm_check: float = 0
         self._next_friend_check: float = 0
         self._runtime_metrics = {
-            "current_page": "--",
-            "current_task": "--",
-            "failure_count": 0,
-            "running_tasks": 0,
-            "pending_tasks": 0,
-            "waiting_tasks": 0,
-            "last_result": "--",
-            "last_tick_ms": "--",
+            'current_page': '--',
+            'current_task': '--',
+            'failure_count': 0,
+            'running_tasks': 0,
+            'pending_tasks': 0,
+            'waiting_tasks': 0,
+            'last_result': '--',
+            'last_tick_ms': '--',
         }
 
     @property
@@ -61,8 +67,7 @@ class TaskScheduler(QObject):
         self._state = state
         self.state_changed.emit(state.value)
 
-    def start(self, farm_interval_ms: int = 300000,
-              friend_interval_ms: int = 1800000):
+    def start(self, farm_interval_ms: int = 300000, friend_interval_ms: int = 1800000):
         """启动调度器"""
         if self._state == BotState.RUNNING:
             return
@@ -77,14 +82,14 @@ class TaskScheduler(QObject):
 
         # 首次立即触发
         QTimer.singleShot(500, self._on_farm_timer)
-        logger.info(f"调度器已启动 (农场:{farm_interval_ms//1000}s, 好友:{friend_interval_ms//1000}s)")
+        logger.info(f'调度器已启动 (农场:{farm_interval_ms // 1000}s, 好友:{friend_interval_ms // 1000}s)')
 
     def stop(self):
         """停止调度器"""
         self._farm_timer.stop()
         self._friend_timer.stop()
         self._set_state(BotState.IDLE)
-        logger.info("调度器已停止")
+        logger.info('调度器已停止')
 
     def pause(self):
         """暂停"""
@@ -92,7 +97,7 @@ class TaskScheduler(QObject):
             self._farm_timer.stop()
             self._friend_timer.stop()
             self._set_state(BotState.PAUSED)
-            logger.info("调度器已暂停")
+            logger.info('调度器已暂停')
 
     def resume(self):
         """恢复"""
@@ -100,11 +105,11 @@ class TaskScheduler(QObject):
             self._farm_timer.start()
             self._friend_timer.start()
             self._set_state(BotState.RUNNING)
-            logger.info("调度器已恢复")
+            logger.info('调度器已恢复')
 
     def run_once(self):
         """手动触发一次农场检查"""
-        logger.info("手动触发农场检查")
+        logger.info('手动触发农场检查')
         self.farm_check_triggered.emit()
 
     def set_farm_interval(self, seconds: int):
@@ -113,9 +118,9 @@ class TaskScheduler(QObject):
         self._farm_timer.setInterval(ms)
         self._next_farm_check = time.time() + seconds
         if seconds >= 60:
-            logger.info(f"农场检查间隔调整为 {seconds // 60}分{seconds % 60}秒")
+            logger.info(f'农场检查间隔调整为 {seconds // 60}分{seconds % 60}秒')
         else:
-            logger.info(f"农场检查间隔调整为 {seconds}秒")
+            logger.info(f'农场检查间隔调整为 {seconds}秒')
 
     def _on_farm_timer(self):
         if self._state not in (BotState.RUNNING,):
@@ -133,7 +138,7 @@ class TaskScheduler(QObject):
         """记录操作统计"""
         if action_type in self._stats:
             self._stats[action_type] += count
-        self._stats["total_actions"] += count
+        self._stats['total_actions'] += count
         self.stats_updated.emit(self.get_stats())
 
     def get_stats(self) -> dict:
@@ -144,10 +149,14 @@ class TaskScheduler(QObject):
         return {
             **self._stats,
             **self._runtime_metrics,
-            "elapsed": f"{hours}小时{minutes}分",
-            "next_farm_check": datetime.fromtimestamp(self._next_farm_check).strftime("%H:%M:%S") if self._next_farm_check else "--",
-            "next_friend_check": datetime.fromtimestamp(self._next_friend_check).strftime("%H:%M:%S") if self._next_friend_check else "--",
-            "state": self._state.value,
+            'elapsed': f'{hours}小时{minutes}分',
+            'next_farm_check': datetime.fromtimestamp(self._next_farm_check).strftime('%H:%M:%S')
+            if self._next_farm_check
+            else '--',
+            'next_friend_check': datetime.fromtimestamp(self._next_friend_check).strftime('%H:%M:%S')
+            if self._next_friend_check
+            else '--',
+            'state': self._state.value,
         }
 
     def reset_stats(self):
@@ -180,9 +189,14 @@ class TaskScheduler(QObject):
     def update_runtime_metrics(self, **kwargs):
         changed = False
         for key in (
-            "current_page", "current_task", "failure_count",
-            "running_tasks", "pending_tasks", "waiting_tasks",
-            "last_result", "last_tick_ms",
+            'current_page',
+            'current_task',
+            'failure_count',
+            'running_tasks',
+            'pending_tasks',
+            'waiting_tasks',
+            'last_result',
+            'last_tick_ms',
         ):
             if key in kwargs and self._runtime_metrics.get(key) != kwargs[key]:
                 self._runtime_metrics[key] = kwargs[key]

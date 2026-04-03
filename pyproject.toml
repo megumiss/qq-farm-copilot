@@ -1,0 +1,42 @@
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "**/**/assets.py",
+    "**/**/assets_game.py",
+    "module/base",
+    "module/config",
+    "module/webui",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["F403", "F405", "F811"]
+
+[tool.ruff.format]
+quote-style = "single"

@@ -13,10 +13,7 @@ from PIL import Image
 try:
     from rapidocr_onnxruntime import RapidOCR
 except ImportError as exc:  # pragma: no cover
-    raise RuntimeError(
-        "Missing dependency `rapidocr_onnxruntime`. "
-        "Please install requirements first."
-    ) from exc
+    raise RuntimeError('Missing dependency `rapidocr_onnxruntime`. Please install requirements first.') from exc
 
 
 @dataclass
@@ -46,20 +43,20 @@ class OCRTool:
             path = Path(image)
             arr = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_UNCHANGED)
             if arr is None:
-                raise ValueError(f"Failed to read image: {path}")
+                raise ValueError(f'Failed to read image: {path}')
             image = arr
 
         if isinstance(image, Image.Image):
-            rgb = np.array(image.convert("RGB"))
+            rgb = np.array(image.convert('RGB'))
             return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         if not isinstance(image, np.ndarray):
-            raise TypeError(f"Unsupported image type: {type(image)}")
+            raise TypeError(f'Unsupported image type: {type(image)}')
 
         if image.ndim == 2:
             return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         if image.ndim != 3:
-            raise ValueError(f"Invalid ndarray image shape: {image.shape}")
+            raise ValueError(f'Invalid ndarray image shape: {image.shape}')
 
         # BGRA -> BGR
         if image.shape[2] == 4:
@@ -67,7 +64,7 @@ class OCRTool:
         # BGR/RGB are both 3-channel; caller controls color semantics.
         if image.shape[2] == 3:
             return image
-        raise ValueError(f"Unsupported channel count: {image.shape[2]}")
+        raise ValueError(f'Unsupported channel count: {image.shape[2]}')
 
     @staticmethod
     def _clip_region(region: tuple[int, int, int, int], w: int, h: int) -> tuple[int, int, int, int]:
@@ -77,7 +74,7 @@ class OCRTool:
         x2 = max(0, min(x2, w))
         y2 = max(0, min(y2, h))
         if x2 <= x1 or y2 <= y1:
-            raise ValueError(f"Invalid region after clipping: {(x1, y1, x2, y2)}")
+            raise ValueError(f'Invalid region after clipping: {(x1, y1, x2, y2)}')
         return x1, y1, x2, y2
 
     def detect(
@@ -140,12 +137,12 @@ class OCRTool:
         scale: float = 1.0,
         alpha: float = 1.0,
         beta: float = 0.0,
-        joiner: str = "",
+        joiner: str = '',
     ) -> tuple[str, float]:
         """Run OCR and return merged text and average confidence."""
         items = self.detect(image, region=region, scale=scale, alpha=alpha, beta=beta)
         if not items:
-            return "", 0.0
+            return '', 0.0
 
         # Keep reading order by left-most x of each box.
         ordered = sorted(items, key=lambda it: min(pt[0] for pt in it.box))
@@ -156,4 +153,4 @@ class OCRTool:
     @staticmethod
     def to_dict(items: list[OCRItem]) -> list[dict[str, Any]]:
         """Convert OCR items to plain dict list for logging/serialization."""
-        return [{"box": it.box, "text": it.text, "score": it.score} for it in items]
+        return [{'box': it.box, 'text': it.text, 'score': it.score} for it in items]

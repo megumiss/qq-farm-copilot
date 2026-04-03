@@ -1,133 +1,251 @@
-# TODO - 其他改造（页面状态机、导航、策略、稳定性、观测）
+# TODO - 复刻精简版 NIKKE 脚本架构（页面跳转 / UI导航 / 场景处理 / Button逻辑）
 
-> 任务执行器改造已独立到：`TODO_task_executor.md`
-
-## 0. 现状与参考基线（非执行器部分）
-
-### 0.1 当前项目现状
-- 场景识别：`core/scene_detector.py`
-  - 已有严格/回退两阶段识别，但缺少页面图导航和统一跳转预算。
-- 业务流程：`core/bot_engine.py` + `core/strategies/*.py`
-  - `check_farm()` 内聚合页面识别、策略优先级、异常恢复。
-  - 策略接口不统一（`str | list[str]` 混用），部分策略内部重复处理弹窗/跳转。
-- 观测：`gui/widgets/status_panel.py` / `gui/widgets/log_panel.py`
-  - 缺少页面级、任务级耗时与跳转链路观测。
-
-### 0.2 NIKKE 参考点
-- 页面导航：`NIKKE/module/ui/ui.py` + `NIKKE/module/ui/page.py`
-  - `ui_get_current_page() / ui_goto() / ui_ensure()`
-  - 页面图 + 显式 links 的跳转模型
-- 页面确认等待：`NIKKE/module/base/timer.py`
-  - `confirm_wait` + 到达确认计数
-- 可视化：`NIKKE/module/webui/app.py`
-  - 状态区分和任务概览展示方式可借鉴
+> 目标：停止“混合风格”迭代，按 `NIKKE/` 代码范式重建本项目运行时。  
+> 范围：本文件只管运行时与页面体系；任务执行器继续按 `TODO_task_executor.md`。  
+> 原则：接口命名、调用顺序、兜底处理尽量与 NIKKE 保持同构，只做“农场业务最小集”裁剪。
 
 ---
 
-## 1. 页面图与导航器
+## 0. 强制约束（本次改造必须满足）
 
-### 1.1 页面图定义（新增 `core/page_graph.py`）
-- [x] 页面枚举：`MAIN / POPUP / SHOP / BUY_CONFIRM / PLOT_MENU / SEED_SELECT / FRIEND / UNKNOWN`
-- [x] 显式跳转边：
-  - `MAIN -> SHOP`（`btn_shop`）
-  - `SHOP -> MAIN`（`btn_shop_close`）
-  - `MAIN -> FRIEND`（`btn_friend_help`）
-  - `FRIEND -> MAIN`（`btn_home`）
-  - `PLOT_MENU <-> SEED_SELECT`（点空地 / 选种子）
-- [x] 提供 `next_action(current, target)`（BFS 最短下一跳）
+- [x] 统一页面真相源：页面判断以 `UI.ui_get_current_page()` 为准，不再由 `scene_detector + 策略` 双轨并行决定。
+- [x] 统一跳转入口：所有“去某页面”必须走 `UI.ui_ensure()/ui_goto()`，禁止策略里直接拼跳转流程。
+- [x] 统一按钮语义：按钮检测/点击全部走 `ModuleBase.appear()/appear_then_click()`，保留 interval 限速与模板 offset 机制。
+- [x] 统一兜底弹窗：未知弹窗与通用确认仅在 `InfoHandler.ui_additional()` 处理，任务分支不再重复关闭同类弹窗。
+- [ ] 保留日志：不关模板日志；改造后日志应体现“按页面/按步骤的最小集合检测”，而不是每 tick 扫一大组无关模板。
+- [x] `seed` 模板识别方式保持不变：继续使用当前 `cv_detector.detect_seed_template(...)` 流程与参数策略（含现有 ROI、尺度回退、阈值语义），本轮架构改造不改 seed 识别算法。
 
-### 1.2 导航器（新增 `core/navigator.py`）
-- [x] `get_current_page()`：复用 `identify_scene` + 连续帧确认
-- [x] `goto(target, timeout, retry)`：
-  - 每次点击后 `confirm_wait`
-  - 超时重试并可失败返回
-- [x] `ensure(target)`：当前页不匹配时自动导航
+---
 
-## 2. 页面识别增强
-- [x] 在 `core/scene_detector.py` 增加：
-  - 识别超时回落 `UNKNOWN`
-  - 高频噪声模板降权（`TemplateNoiseGuard`）
-  - 稳定帧数参数化（替代硬编码）
-- [x] 在 `core/bot_engine.py`：
-  - `_expect_runtime_states` 从“动作描述字符串匹配”改为“动作类型 + 目标页映射”
-- 当前状态：已完成首版（`scene_detector` 参数化阈值 + 噪声重复降权、`Navigator` 识别超时回落 `UNKNOWN`、`BotEngine` 按 `action_type` 优先映射期望状态）。
+## 1. NIKKE 参考基线（必须对齐）
 
-## 3. 全局 UI Guard（新增 `core/ui_guard.py`）
-- [x] 统一处理可恢复弹窗：升级、任务奖励、商店残留、确认框
-- [x] 主流程前置：
-  - `ui_guard.handle_global_popups()`
-  - `resolve_page()`
-  - `dispatch(page_handler)`
-- 当前状态：已完成 `ui_guard` 首版接入（POPUP/BUY_CONFIRM/SHOP 页面）。
-- [x] 删除策略中重复的弹窗关闭分支，保留业务动作本身
+### 1.1 页面与导航
+- 参考文件：`NIKKE/module/ui/page.py`
+  - `Page` 对象、`check_button`、`links`、`link(button, destination)`
+  - 页面图反向建父链（destination 反推可达页）
+- 参考文件：`NIKKE/module/ui/ui.py`
+  - `ui_page_appear()`
+  - `ui_get_current_page()`
+  - `ui_goto()`
+  - `ui_ensure()`
+  - `ui_additional()`
 
-## 4. 策略契约化与业务拆分
-- [x] 统一策略契约：
-  - `requires_page: set[PageId]`
-  - `expected_page_after: set[PageId]`
-  - `run_once(ctx) -> StrategyResult`
-- 当前状态：`BaseStrategy` 与主要策略均已声明契约字段并提供 `run_once`。
-- [x] `check_farm` 拆分为页面处理器：
-  - `handle_main_page`
-  - `handle_popup_page`
-  - `handle_shop_page`
-  - `handle_buy_confirm_page`
-  - `handle_friend_page`
-- 当前状态：已完成 `MAIN/POPUP/SHOP/BUY_CONFIRM/FRIEND/SEED_SELECT` 分发与 handler 化。
-- [x] 移除 `for round in range(1, 51)`，改为 tick 分发
-- [x] 策略返回值统一为 `StrategyResult`（替代 `str/list[str]`）
-- 当前状态：`BotEngine` 分发层统一承接 `StrategyResult`，策略层通过 `run_once` 统一返回类型。
+### 1.2 按钮与识别点击
+- 参考文件：`NIKKE/module/base/button.py`
+  - `Button(area,color,button,file,name)`
+  - `match()/appear_on()/match_with_scale()`
+  - `_button_offset` 动态偏移
+- 参考文件：`NIKKE/module/base/base.py`
+  - `appear()`
+  - `appear_then_click()`
+  - interval timer 限速
+  - `appear_any()/appear_then_click_any()`
 
-## 5. 稳定性与性能
-- [x] `ActionCooldown`：动作防抖
-- [x] `PageTransitionBudget`：跳转预算上限
-- [x] 检测按页面裁剪类别：
-  - `BUY_CONFIRM` 页仅检测 `button`
-- [x] 输出关键耗时：
-  - 识别耗时
-  - 动作耗时
-  - 单轮总耗时
-- [x] 清理不可中断路径：
-  - `core/strategies/plant.py`
-  - `core/strategies/popup.py`
-  - `core/strategies/task.py`
+### 1.3 场景异常与弹窗兜底
+- 参考文件：`NIKKE/module/handler/info_handle.py`
+  - `handle_level_up()/handle_reward()/handle_announcement()...`
+  - `ui_additional()` 中统一串联处理顺序
 
-## 6. 观测与 GUI
-- [x] 状态面板增加：
-  - 当前页面
-  - 当前任务
-  - 连续失败计数
-  - 队列摘要（running/pending/waiting 数量）
-- [x] 新增任务详情面板：
-  - 任务 next run
-  - 最近一次执行结果和耗时
-- [x] 日志结构化字段：
-  - `task=... page=... action=... elapsed_ms=...`
-- 当前状态：已接入“当前页面/当前任务/失败计数/队列摘要 + 上次结果/耗时”到状态面板。
+---
 
-## 7. 测试与验收
-- [x] 导航回归：
-  - 从 `UNKNOWN/POPUP/SHOP/FRIEND` 可在预算内回 `MAIN`
-- [x] 行为回归：
-  - 收获、维护、播种、出售、任务奖励、好友帮忙无行为退化
-- [x] 性能验收：
-  - 单轮识别耗时下降
-  - 无效点击率下降
-- 当前状态：离线回归脚本 `tools/todo_regression_check.py` 已通过；实机回归可在联机环境补充。
+## 2. 当前项目到目标架构映射（按文件落地）
 
-## 8. 实施顺序（其他改造）
-1. [ ] 页面图 + 导航器最小闭环
-2. [ ] UI Guard 接管全局弹窗
-3. [ ] `check_farm` 按页面拆分，策略契约化
-4. [ ] 性能优化（防抖、预算、噪声降权）
-5. [ ] GUI 观测与结构化日志补齐
+### 2.1 目标目录（新建）
+- [x] 新建 `core/nklite/base/`
+- [x] 新建 `core/nklite/ui/`
+- [x] 新建 `core/nklite/handler/`
+- [x] 新建 `core/nklite/tasks/`
 
-## 9. 改造执行步骤（可直接开工）
-1. [ ] 页面图落地：新增 `core/page_graph.py`，补齐页面和跳转边。
-2. [ ] 导航器落地：新增 `core/navigator.py`，实现 `get_current_page/goto/ensure`。
-3. [ ] 全局 UI Guard：新增 `core/ui_guard.py`，统一弹窗和可恢复页面处理。
-4. [ ] 主流程改为状态分发：`tick -> guard -> resolve_page -> dispatch`。
-5. [ ] 策略契约统一：统一 `requires_page/expected_page_after/run_once`。
-6. [ ] 稳定性与性能增强：接入 `ActionCooldown/TemplateNoiseGuard/PageTransitionBudget`。
-7. [ ] 观测与 GUI 增强：补页面/任务/失败计数/耗时指标与结构化日志。
-8. [ ] 全链路回归：完成导航、核心功能与性能验收。
+### 2.2 映射关系
+- [x] `NIKKE/module/base/button.py` -> `core/nklite/base/button.py`
+- [x] `NIKKE/module/base/timer.py` -> `core/nklite/base/timer.py`（可复用现有 timer 实现但接口保持一致）
+- [x] `NIKKE/module/base/base.py` -> `core/nklite/base/module_base.py`
+- [x] `NIKKE/module/ui/page.py` -> `core/nklite/ui/page.py`
+- [x] `NIKKE/module/ui/ui.py` -> `core/nklite/ui/ui.py`
+- [x] `NIKKE/module/handler/info_handle.py` -> `core/nklite/handler/info_handler.py`
+
+### 2.4 强制命名清单（类名 + 方法名）
+- [x] `core/nklite/base/button.py`
+  - 类名：`Button`
+  - 方法名：`ensure_template`、`match`、`match_with_scale`、`appear_on`、`match_several`
+- [x] `core/nklite/base/module_base.py`
+  - 类名：`ModuleBase`
+  - 方法名：`appear`、`appear_any`、`appear_then_click`、`appear_then_click_any`、`interval_reset`
+- [x] `core/nklite/ui/page.py`
+  - 类名：`Page`
+  - 方法名：`link`
+- [x] `core/nklite/ui/ui.py`
+  - 类名：`UI`
+  - 方法名：`ui_page_appear`、`ui_get_current_page`、`ui_goto`、`ui_ensure`、`ui_additional`、`ui_goto_main`、`ui_wait_loading`
+- [x] `core/nklite/handler/info_handler.py`
+  - 类名：`InfoHandler`
+  - 方法名：`handle_level_up`、`handle_reward`、`handle_announcement`、`handle_login_reward`、`handle_system_error`
+- [x] `core/nklite/tasks/*.py`
+  - 类名命名：`Task*`（示例：`TaskFarmMain`）
+  - 方法名：`run`（统一任务入口）
+
+### 2.3 现有文件处置
+- [x] `core/page_checker.py` 降级为兼容层或移除（页面判断迁移至 `nklite.ui`）
+- [x] `core/navigator.py` 降级为兼容层或移除（导航统一迁移至 `nklite.ui`）
+- [x] `core/scene_detector.py` 已删除，全局页面真相统一由 `nklite.ui` 负责
+- [x] `core/ui_guard.py` 功能并入 `nklite.handler.info_handler`，避免重复职责
+- [x] `core/bot_engine.py` 改为薄编排：只负责任务调度与 `nklite` 调用
+
+---
+
+## 3. Button 逻辑复刻（核心）
+
+### 3.1 Button 模型
+- [x] `Button` 字段对齐：`raw_area/raw_color/raw_button/raw_file/raw_name`
+- [x] 支持 `name/file/area/color/button/location` 属性语义
+- [x] 支持 `_button_offset` 动态偏移，点击坐标取偏移后的 button 区域中心
+
+### 3.2 检测行为
+- [x] `match(image, offset, threshold, static)` 行为对齐 NIKKE
+- [x] `appear_on(image, threshold)` 颜色判断对齐
+- [x] `match_with_scale(...)` 保留多尺度入口（精简版可以先用于少数按钮）
+- [x] 统一 debug 日志：每次按钮判定输出 name/similarity/threshold/hit
+
+### 3.3 ModuleBase 入口
+- [x] `appear()`：保留 interval timer 限速逻辑
+- [x] `appear_then_click()`：检测成功后通过 device 点击按钮
+- [x] `appear_any()/appear_then_click_any()`：用于弹窗并列按钮处理
+- [x] interval reset 能力：与 NIKKE 同语义
+
+---
+
+## 4. 页面图与 UI 导航复刻
+
+### 4.1 页面定义（精简农场版）
+- [x] 在 `core/nklite/ui/page.py` 定义 `Page` 类（与 NIKKE 同结构）
+- [ ] 页面最小集：
+  - `page_unknown`
+  - `page_main`
+  - `page_plot_menu`
+  - `page_seed_select`
+  - `page_shop`
+  - `page_buy_confirm`
+  - `page_popup`
+  - `page_friend`
+- [x] 每个页面定义 `check_button`
+- [x] 使用 `link(button, destination)` 显式建图，不再隐式推断跳转动作
+
+### 4.2 UI 服务
+- [x] `ui_page_appear(page)`：页面检查按钮识别
+- [x] `ui_get_current_page()`：
+  - 轮询截图 -> 遍历 `ui_pages`
+  - 未识别页面时先 `ui_additional()` 再做返回主界面尝试
+  - 超时后抛出 unknown page 异常（或返回 `page_unknown` + error）
+- [x] `ui_goto(destination)`：
+  - 使用 NIKKE 同款“从 destination 反推 parent 链”策略
+  - 每步点击后等待确认
+- [x] `ui_ensure(destination)`：
+  - 先识别当前页，若不是目标页则 `ui_goto`
+
+---
+
+## 5. 场景处理与全局兜底复刻
+
+### 5.1 InfoHandler 统一入口
+- [x] 新建 `core/nklite/handler/info_handler.py`
+- [x] 迁移并统一：
+  - 升级弹窗
+  - 领取奖励弹窗
+  - 通用确认/关闭按钮
+  - 系统错误/异常状态
+- [x] 在 `ui_additional()` 固定顺序串行处理，命中即返回 True
+
+### 5.2 业务场景边界
+- [x] 全局页面判断只依赖 `ui_get_current_page()`
+- [x] `scene_detector` 已下线，不再参与任何页面判断
+- [x] 禁止跨层弹窗处理：页面内通用弹窗统一由 `ui_additional()` 收口
+
+---
+
+## 6. 业务任务改造（精简 NIKKE 任务风格）
+
+### 6.1 任务统一模板（每个任务必须遵守）
+- [x] `task.run()` 开始先 `ui_ensure(page_main 或任务入口页)`
+- [x] 主循环内每轮：
+  - `device.screenshot()`
+  - `ui_additional()`
+  - 任务自身按钮流程
+- [ ] 每一步动作使用 `appear_then_click()`，不直接散落模板匹配调用
+
+### 6.2 农场最小任务集
+- [x] `task_farm_harvest`：收获与维护
+- [x] `task_farm_plant`：播种、买种、确认
+- [x] `task_farm_sell`：仓库与批量出售
+- [x] `task_farm_friend`：好友求助与回家
+- [x] `task_farm_reward`：任务奖励领取
+
+### 6.3 旧策略迁移
+- [x] `core/strategies/*.py` 已整体下线，相关能力迁至 `core/nklite/ops`
+- [x] 页面基础设施职责已由 `nklite.ui + nklite.handler` 统一承担
+- [x] 任务已直接调用 `nklite` API（含 `ops`），策略层已移除
+
+---
+
+## 7. 资产与按钮定义复刻
+
+### 7.1 按钮资产定义文件
+- [ ] 新建 `core/nklite/ui/assets.py`（农场版）
+- [ ] 每个按钮包含：`area/color/button/file`
+- [ ] 按钮命名风格对齐 NIKKE（`MAIN_CHECK`, `MAIN_GOTO_XXX`, `GOTO_BACK`）
+
+### 7.2 配置与生成
+- [ ] `configs/page_rules.json` 已下线（已删除），页面体系改由 `nklite.ui.page/assets_generated` 驱动
+- [ ] 明确模板来源：`templates/` 与按钮定义文件一一对应（`tools/button_extract.py` 直接扫描模板并输出 `assets_generated.py`）
+- [ ] 不再维护 `button_extract.json/area_by_template`：ROI 由模板图像直接提取（bbox 像素范围）
+- [ ] 保留中文页面映射，日志页名与按钮名都输出中文别名
+  （7.2 保持进行中，继续留在 TODO 跟踪）
+
+---
+
+## 8. 与执行器集成（保持 executor-only）
+
+- [x] `BotEngine` 中 executor 路径保留，legacy 路径不回滚
+- [x] `farm_main` runner 改为调用 `nklite` 任务入口
+- [x] 停止/暂停语义保持当前执行器标准
+- [x] UI 状态刷新由 executor snapshot + `ui_current_page` 双源驱动
+
+---
+
+## 9. 清理项（防止再次变乱）
+
+- [x] 删除或封禁旧入口：
+  - `check_farm()` 内直接拼页面识别 + 业务分发的大循环逻辑
+- [ ] 删除重复状态机：
+  - `RuntimeState` 与 `PageId/Scene` 的多套并存状态
+- [x] 删除重复导航：
+  - `navigator + page_checker + scene_detector` 三套并行页面跳转链
+
+---
+
+## 10. 验收标准（必须全部满足）
+
+- [ ] 页面跳转：任意支持页面到 `main` 能在预算内返回，且路径可解释（日志显示 page->page）
+- [ ] UI 导航：`ui_ensure(target)` 在弹窗干扰场景仍可稳定到达
+- [ ] 场景处理：未知弹窗只在 `ui_additional()` 关闭，不再出现策略层重复关闭
+- [ ] Button 逻辑：按钮点击命中率与 NIKKE 风格一致，日志可追溯 `appear -> click`
+- [ ] 性能：每 tick 模板识别条目显著减少，日志不再持续出现无关按钮扫描
+- [ ] 稳定性：停止后状态与执行动作在一个调度周期内完成刷新
+
+---
+
+## 11. 改造执行步骤（按序提交）
+
+1. [x] 建立 `core/nklite/base`：`button.py + timer.py + module_base.py`，并接入现有 device/capture。
+2. [x] 建立 `core/nklite/ui`：`assets.py + page.py + ui.py`，先完成 `ui_get_current_page/ui_goto/ui_ensure`。
+3. [x] 建立 `core/nklite/handler/info_handler.py`，把全局弹窗处理统一收口到 `ui_additional()`。
+4. [x] 在 `bot_engine` 接入 `nklite.ui`，把“页面识别/导航”入口改为 `ui_ensure`。
+5. [x] 迁移农场最小任务集（收获/维护/播种/出售/好友/奖励）为 `nklite.tasks` 风格。
+6. [x] 清理旧链路：移除 `page_checker/navigator/ui_guard` 的主路径职责，只留兼容或删除。
+7. [ ] 连续回归：页面跳转、停止刷新、任务执行、日志规模四项验收全部通过。
+
+---
+
+## 12. 当前状态
+
+- [ ] 本 TODO 为重置版，默认全部未完成。
+- [ ] 后续每完成一项，直接在本文件勾选并附对应提交号（`commit <sha>`）。

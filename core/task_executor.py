@@ -1,4 +1,5 @@
 """统一任务执行器（pending/waiting 队列 + task_delay/task_call）。"""
+
 from __future__ import annotations
 
 import threading
@@ -9,7 +10,6 @@ from typing import Callable
 from loguru import logger
 
 from core.task_registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
-
 
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
@@ -23,14 +23,14 @@ class TaskExecutor:
         tasks: dict[str, TaskItem],
         runners: dict[str, TaskRunner],
         *,
-        empty_queue_policy: str = "stay",
+        empty_queue_policy: str = 'stay',
         on_snapshot: SnapshotHook | None = None,
         on_task_done: TaskDoneHook | None = None,
         on_idle: IdleHook | None = None,
     ):
         self._tasks = tasks
         self._runners = runners
-        self._empty_queue_policy = str(empty_queue_policy or "stay")
+        self._empty_queue_policy = str(empty_queue_policy or 'stay')
         self._on_snapshot = on_snapshot
         self._on_task_done = on_task_done
         self._on_idle = on_idle
@@ -50,7 +50,7 @@ class TaskExecutor:
             self._pause_event.clear()
             self._thread = threading.Thread(
                 target=self._loop,
-                name="TaskExecutorLoop",
+                name='TaskExecutorLoop',
                 daemon=True,
             )
             self._thread.start()
@@ -76,7 +76,7 @@ class TaskExecutor:
 
     def set_empty_queue_policy(self, policy: str):
         with self._lock:
-            self._empty_queue_policy = str(policy or "stay")
+            self._empty_queue_policy = str(policy or 'stay')
 
     def update_task(self, name: str, **kwargs):
         with self._lock:
@@ -160,23 +160,19 @@ class TaskExecutor:
         try:
             self._on_snapshot(self.snapshot())
         except Exception as exc:
-            logger.debug(f"snapshot hook error: {exc}")
+            logger.debug(f'snapshot hook error: {exc}')
 
     def _apply_task_result(self, task: TaskItem, result: TaskResult):
         now = datetime.now()
         if result.success:
             task.failure_count = 0
             interval = (
-                int(result.next_run_seconds)
-                if result.next_run_seconds is not None
-                else int(task.success_interval)
+                int(result.next_run_seconds) if result.next_run_seconds is not None else int(task.success_interval)
             )
         else:
             task.failure_count += 1
             interval = (
-                int(result.next_run_seconds)
-                if result.next_run_seconds is not None
-                else int(task.failure_interval)
+                int(result.next_run_seconds) if result.next_run_seconds is not None else int(task.failure_interval)
             )
             if task.failure_count >= max(1, int(task.max_failures)):
                 interval = max(interval, int(task.failure_interval) * 3)
@@ -202,16 +198,12 @@ class TaskExecutor:
             self._emit_snapshot()
 
             if not task:
-                if (
-                    self._empty_queue_policy == "goto_main"
-                    and self._on_idle
-                    and time.time() - self._last_idle_at > 2.0
-                ):
+                if self._empty_queue_policy == 'goto_main' and self._on_idle and time.time() - self._last_idle_at > 2.0:
                     self._last_idle_at = time.time()
                     try:
                         self._on_idle()
                     except Exception as exc:
-                        logger.debug(f"idle hook error: {exc}")
+                        logger.debug(f'idle hook error: {exc}')
                 time.sleep(0.12)
                 continue
 
@@ -224,7 +216,7 @@ class TaskExecutor:
                             item,
                             TaskResult(
                                 success=False,
-                                error=f"missing runner: {task.name}",
+                                error=f'missing runner: {task.name}',
                             ),
                         )
                         self._running_task = None
@@ -236,10 +228,10 @@ class TaskExecutor:
                 if not isinstance(result, TaskResult):
                     result = TaskResult(
                         success=False,
-                        error=f"runner returned invalid result: {type(result)}",
+                        error=f'runner returned invalid result: {type(result)}',
                     )
             except Exception as exc:
-                logger.exception(f"task `{task.name}` crashed: {exc}")
+                logger.exception(f'task `{task.name}` crashed: {exc}')
                 result = TaskResult(success=False, error=str(exc))
 
             with self._lock:
@@ -252,7 +244,7 @@ class TaskExecutor:
                 try:
                     self._on_task_done(task.name, result)
                 except Exception as exc:
-                    logger.debug(f"task done hook error: {exc}")
+                    logger.debug(f'task done hook error: {exc}')
 
             self._emit_snapshot()
             time.sleep(0.03)

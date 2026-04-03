@@ -6,9 +6,9 @@ then binds OCR text blocks into each card to resolve item names and centers.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-import re
 
 import cv2
 import numpy as np
@@ -70,12 +70,12 @@ class ShopItemOCR:
 
     @staticmethod
     def _clean_text(text: str) -> str:
-        return re.sub(r"[^\u4e00-\u9fffA-Za-z0-9（）()]+", "", text).strip()
+        return re.sub(r'[^\u4e00-\u9fffA-Za-z0-9（）()]+', '', text).strip()
 
     @staticmethod
     def _norm_name(text: str) -> str:
         t = ShopItemOCR._clean_text(text)
-        t = t.replace("（", "(").replace("）", ")")
+        t = t.replace('（', '(').replace('）', ')')
         return t
 
     @staticmethod
@@ -135,7 +135,7 @@ class ShopItemOCR:
     def _resolve_name(self, text: str) -> tuple[str, float]:
         raw = self._norm_name(text)
         if not raw:
-            return "", 0.0
+            return '', 0.0
         if raw in self.vocab:
             return self._norm_to_original.get(raw, raw), 1.0
 
@@ -170,18 +170,18 @@ class ShopItemOCR:
             raw = self._norm_name(it.text)
             if not raw:
                 continue
-            if re.match(r"^\d+品$", raw):
+            if re.match(r'^\d+品$', raw):
                 continue
-            if re.match(r"^\d+$", raw):
+            if re.match(r'^\d+$', raw):
                 continue
-            if not re.search(r"[\u4e00-\u9fff]", raw):
+            if not re.search(r'[\u4e00-\u9fff]', raw):
                 continue
 
             resolved, sim = self._resolve_name(raw)
             names.append((resolved, raw, float(it.score), float(sim)))
 
         if not names:
-            return "", "", 0.0, 0.0
+            return '', '', 0.0, 0.0
 
         names.sort(key=lambda x: (x[3], x[2], len(x[0])), reverse=True)
         return names[0]
@@ -197,7 +197,7 @@ class ShopItemOCR:
             fallback: list[ShopItem] = []
             for it in all_items:
                 text = self._norm_name(it.text)
-                if not text or not re.search(r"[\u4e00-\u9fff]", text):
+                if not text or not re.search(r'[\u4e00-\u9fff]', text):
                     continue
                 name, sim = self._resolve_name(text)
                 if not name:
