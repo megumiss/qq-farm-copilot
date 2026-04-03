@@ -4,6 +4,23 @@ from PyQt6.QtCore import Qt
 
 
 class StatusPanel(QWidget):
+    _PAGE_NAME_MAP = {
+        "--": "--",
+        "unknown": "未知页面",
+        "farm_overview": "农场主界面",
+        "friend_farm": "好友农场",
+        "plot_menu": "土地菜单",
+        "seed_select": "种子选择",
+        "shop_page": "商店页面",
+        "buy_confirm": "购买确认",
+        "popup": "弹窗",
+        "level_up": "升级弹窗",
+        # 兼容运行态枚举值
+        "main": "农场主界面",
+        "shop": "商店页面",
+        "friend": "好友农场",
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._labels = {}
@@ -60,6 +77,13 @@ class StatusPanel(QWidget):
         grid.addWidget(wrapper, row, col)
         self._labels[key] = value
 
+    @classmethod
+    def _localize_page(cls, raw_page) -> str:
+        text = str(raw_page or "--").strip()
+        if not text:
+            return "--"
+        return cls._PAGE_NAME_MAP.get(text, text)
+
     def update_stats(self, stats: dict):
         state = stats.get("state", "idle")
         state_map = {
@@ -74,7 +98,9 @@ class StatusPanel(QWidget):
             f"color: {color}; font-size: 12px; font-weight: bold;")
         self._labels["elapsed"].setText(stats.get("elapsed", "--"))
         self._labels["next_farm"].setText(stats.get("next_farm_check", "--"))
-        self._labels["current_page"].setText(str(stats.get("current_page", "--")))
+        self._labels["current_page"].setText(
+            self._localize_page(stats.get("current_page", "--"))
+        )
         self._labels["current_task"].setText(str(stats.get("current_task", "--")))
         self._labels["failure_count"].setText(str(stats.get("failure_count", 0)))
         self._labels["running_tasks"].setText(str(stats.get("running_tasks", 0)))

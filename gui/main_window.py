@@ -228,6 +228,8 @@ class MainWindow(QMainWindow):
         self._btn_pause.setEnabled(False)
         self._btn_stop.setEnabled(False)
         self._btn_pause.setText("暂停")
+        # 兜底刷新状态，避免线程信号时序导致面板停留在旧状态。
+        self._status_panel.update_stats(self.engine.scheduler.get_stats())
 
     def _on_run_once(self):
         self.engine.run_once()

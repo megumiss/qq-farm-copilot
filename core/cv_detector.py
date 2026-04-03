@@ -48,6 +48,7 @@ class CVDetector:
     def __init__(self, templates_dir: str = "templates"):
         self._templates_dir = templates_dir
         self._templates: dict[str, list[dict]] = {}  # category -> [{name, image, mask}]
+        self._templates_by_name: dict[str, dict] = {}
         self._loaded = False
         # 详细模板探测日志默认关闭；需要时可设置环境变量 QFARM_TEMPLATE_PROBE_LOG=1
         # self._probe_log_enabled = os.environ.get("QFARM_TEMPLATE_PROBE_LOG", "0") == "1"
@@ -60,6 +61,7 @@ class CVDetector:
             return
 
         self._templates = {}
+        self._templates_by_name = {}
         count = 0
         ignored_top_dirs = {"__pycache__"}
         for root, dirs, files in os.walk(self._templates_dir):
@@ -105,13 +107,15 @@ class CVDetector:
                 if category not in self._templates:
                     self._templates[category] = []
 
-                self._templates[category].append({
+                tpl_payload = {
                     "name": name,
                     "image": template,
                     "gray": cv2.cvtColor(template, cv2.COLOR_BGR2GRAY),
                     "mask": mask,
                     "category": category,
-                })
+                }
+                self._templates[category].append(tpl_payload)
+                self._templates_by_name[name] = tpl_payload
                 count += 1
 
         self._loaded = True
@@ -203,6 +207,83 @@ class CVDetector:
             hit_count=0,
         )
         return []
+
+    def detect_templates(
+        self,
+        screenshot: np.ndarray,
+        template_names: list[str],
+        default_threshold: float = 0.8,
+        thresholds: dict[str, float] | None = None,
+        roi_map: dict[str, tuple[int, int, int, int]] | None = None,
+    ) -> list[DetectResult]:
+        """按模板名批量识别，避免全类别扫描。"""
+        if not self._loaded:
+            self.load_templates()
+
+        if not template_names:
+            return []
+
+        results: list[DetectResult] = []
+        gray_screen = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+        seen: set[str] = set()
+        for name in template_names:
+            name = str(name or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            tpl = self._templates_by_name.get(name)
+            if tpl is None:
+                self._log_template_probe(
+                    template_name=name,
+                    threshold=default_threshold,
+                    best_score=0.0,
+                    hit_count=0,
+                )
+                continue
+
+            threshold = float(
+                thresholds.get(name, default_threshold) if thresholds else default_threshold
+            )
+            roi = roi_map.get(name) if roi_map else None
+            if roi is not None:
+                x1, y1, x2, y2 = [int(v) for v in roi]
+                sh, sw = screenshot.shape[:2]
+                x1 = max(0, min(x1, sw - 1))
+                y1 = max(0, min(y1, sh - 1))
+                x2 = max(x1 + 1, min(x2, sw))
+                y2 = max(y1 + 1, min(y2, sh))
+                if x2 <= x1 or y2 <= y1:
+                    self._log_template_probe(
+                        template_name=name,
+                        threshold=threshold,
+                        best_score=0.0,
+                        hit_count=0,
+                    )
+                    continue
+                roi_img = screenshot[y1:y2, x1:x2]
+                roi_gray = gray_screen[y1:y2, x1:x2]
+                matches, best_score = self._match_template_with_best(
+                    roi_img, roi_gray, tpl, threshold
+                )
+                for m in matches:
+                    m.x += x1
+                    m.y += y1
+                    m.extra["roi"] = (x1, y1, x2, y2)
+            else:
+                matches, best_score = self._match_template_with_best(
+                    screenshot, gray_screen, tpl, threshold
+                )
+            self._log_template_probe(
+                template_name=name,
+                threshold=threshold,
+                best_score=best_score,
+                hit_count=len(matches),
+            )
+            results.extend(matches)
+
+        results = self._nms(results, iou_threshold=0.5)
+        results.sort(key=lambda r: r.confidence, reverse=True)
+        return results
 
     def detect_seed_template(
         self,

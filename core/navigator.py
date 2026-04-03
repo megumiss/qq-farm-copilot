@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from typing import Any
 
 from loguru import logger
 
@@ -12,10 +13,7 @@ from core.scene_detector import identify_scene
 from models.farm_state import ActionType
 
 
-CaptureFn = Callable[
-    [tuple, str, list[str] | None, bool],
-    tuple[object | None, list[DetectResult], object | None],
-]
+CaptureFn = Callable[..., tuple[object | None, list[DetectResult], object | None]]
 
 
 class Navigator:
@@ -23,15 +21,45 @@ class Navigator:
         self,
         cv_detector: CVDetector,
         popup_strategy,
-        capture_fn: Callable,
+        capture_fn: CaptureFn,
         cancel_checker: Callable[[], bool] | None = None,
         page_graph: PageGraph | None = None,
+        rules: dict[str, Any] | None = None,
     ):
         self.cv_detector = cv_detector
         self.popup = popup_strategy
         self.capture_fn = capture_fn
         self.cancel_checker = cancel_checker
         self.page_graph = page_graph or PageGraph()
+        cfg = dict(rules or {})
+        self._nav_templates = tuple(str(x) for x in cfg.get("templates", []) if str(x).strip())
+        self._nav_thresholds = {
+            str(k): float(v) for k, v in dict(cfg.get("thresholds", {})).items()
+        }
+        self._nav_roi_px: dict[str, tuple[int, int, int, int]] = {}
+        raw_roi_px = cfg.get("roi_px", {})
+        if isinstance(raw_roi_px, dict):
+            for name, roi in raw_roi_px.items():
+                if not isinstance(roi, (list, tuple)) or len(roi) != 4:
+                    continue
+                try:
+                    self._nav_roi_px[str(name)] = (
+                        int(roi[0]), int(roi[1]), int(roi[2]), int(roi[3])
+                    )
+                except Exception:
+                    continue
+        self._nav_roi_ratios: dict[str, tuple[float, float, float, float]] = {}
+        raw_ratios = cfg.get("roi_ratios", {})
+        if isinstance(raw_ratios, dict):
+            for name, ratio in raw_ratios.items():
+                if not isinstance(ratio, (list, tuple)) or len(ratio) != 4:
+                    continue
+                try:
+                    self._nav_roi_ratios[str(name)] = (
+                        float(ratio[0]), float(ratio[1]), float(ratio[2]), float(ratio[3])
+                    )
+                except Exception:
+                    continue
 
     def _is_cancelled(self) -> bool:
         return bool(self.cancel_checker and self.cancel_checker())
@@ -48,6 +76,30 @@ class Navigator:
                 return True
             time.sleep(min(interval, remain))
 
+    def _build_roi_map(self, rect: tuple) -> dict[str, tuple[int, int, int, int]]:
+        width = int(rect[2])
+        height = int(rect[3])
+        roi_map: dict[str, tuple[int, int, int, int]] = {}
+        for name, roi in self._nav_roi_px.items():
+            x1 = max(0, min(int(roi[0]), width - 1))
+            y1 = max(0, min(int(roi[1]), height - 1))
+            x2 = max(0, min(int(roi[2]), width))
+            y2 = max(0, min(int(roi[3]), height))
+            x2 = max(x1 + 1, min(x2, width))
+            y2 = max(y1 + 1, min(y2, height))
+            roi_map[name] = (x1, y1, x2, y2)
+        for name, ratio in self._nav_roi_ratios.items():
+            if name in roi_map:
+                continue
+            x1 = int(max(0.0, min(1.0, ratio[0])) * width)
+            y1 = int(max(0.0, min(1.0, ratio[1])) * height)
+            x2 = int(max(0.0, min(1.0, ratio[2])) * width)
+            y2 = int(max(0.0, min(1.0, ratio[3])) * height)
+            x2 = max(x1 + 1, min(x2, width))
+            y2 = max(y1 + 1, min(y2, height))
+            roi_map[name] = (x1, y1, x2, y2)
+        return roi_map
+
     def get_current_page(
         self,
         rect: tuple,
@@ -63,7 +115,15 @@ class Navigator:
         while time.perf_counter() < deadline:
             if self._is_cancelled():
                 break
-            cv_image, detections, _ = self.capture_fn(rect, "nav", None, False)
+            cv_image, detections, _ = self.capture_fn(
+                rect,
+                prefix="nav",
+                categories=None,
+                template_names=list(self._nav_templates),
+                template_thresholds=self._nav_thresholds,
+                template_rois=self._build_roi_map(rect),
+                save=False,
+            )
             if cv_image is None:
                 continue
             scene = identify_scene(detections, self.cv_detector, cv_image)

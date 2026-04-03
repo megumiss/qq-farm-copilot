@@ -44,6 +44,8 @@ from core.task_registry import (
     build_default_tasks,
 )
 from core.scene_detector import Scene, identify_scene, SceneStabilityTracker
+from core.page_checker import PageChecker
+from core.page_rules import load_page_rules
 from core.page_graph import PageId
 from core.navigator import Navigator
 from core.ui_guard import UIGuard
@@ -95,6 +97,11 @@ class BotEngine(QObject):
 
         # [2] 图像识别层
         self.cv_detector = CVDetector(templates_dir="templates")
+        self._page_rules = load_page_rules()
+        self.page_checker = PageChecker(
+            self.cv_detector,
+            rules=self._page_rules.get("page_checker"),
+        )
 
         # [3] 行为决策层（按优先级）
         self.popup = PopupStrategy(self.cv_detector)       # P-1
@@ -117,6 +124,7 @@ class BotEngine(QObject):
         self.scheduler = TaskScheduler()
         self._task_executor: TaskExecutor | None = None
         self._executor_tasks: dict[str, TaskItem] = {}
+        self._accept_executor_events = False
 
         self.scheduler.state_changed.connect(self.state_changed.emit)
         self.scheduler.stats_updated.connect(self.stats_updated.emit)
@@ -188,6 +196,7 @@ class BotEngine(QObject):
     def _init_executor(self):
         self._executor_tasks = build_default_tasks(self.config)
         self._sync_executor_tasks_from_config()
+        self._accept_executor_events = True
         self._task_executor = TaskExecutor(
             tasks=self._executor_tasks,
             runners={
@@ -202,6 +211,7 @@ class BotEngine(QObject):
         self._task_executor.start()
 
     def _stop_executor(self):
+        self._accept_executor_events = False
         executor = self._task_executor
         self._task_executor = None
         if executor:
@@ -217,6 +227,8 @@ class BotEngine(QObject):
         return TaskResult.from_legacy_dict(payload)
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):
+        if not self._accept_executor_events:
+            return
         self.scheduler.update_runtime_metrics(
             current_task=snapshot.running_task or "--",
             failure_count=self._runtime_failure_count,
@@ -230,6 +242,8 @@ class BotEngine(QObject):
         )
 
     def _on_executor_task_done(self, task_name: str, result: TaskResult):
+        if not self._accept_executor_events:
+            return
         if result.actions:
             self.log_message.emit(f"[{task_name}] 本轮完成: {', '.join(result.actions)}")
         if result.success:
@@ -246,6 +260,8 @@ class BotEngine(QObject):
         )
 
     def _on_executor_idle(self):
+        if not self._accept_executor_events:
+            return
         if self._is_cancel_requested():
             return
         if not self.navigator:
@@ -408,15 +424,23 @@ class BotEngine(QObject):
         self.config.executor.enabled = True
         self._sync_executor_tasks_from_config()
 
-    def _resolve_crop_name(self) -> str:
-        """根据策略决定种植作物"""
+    def _resolve_crop_name_quiet(self) -> str:
+        """根据策略决定种植作物（静默版本，不打印日志）。"""
         planting = self.config.planting
         if planting.strategy == PlantMode.BEST_EXP_RATE:
             best = get_best_crop_for_level(planting.player_level)
             if best:
-                logger.info(f"策略选择: {best[0]} (经验效率 {best[4]/best[3]:.4f}/秒)")
                 return best[0]
         return planting.preferred_crop
+
+    def _resolve_crop_name(self) -> str:
+        """根据策略决定种植作物"""
+        crop_name = self._resolve_crop_name_quiet()
+        if self.config.planting.strategy == PlantMode.BEST_EXP_RATE:
+            best = get_best_crop_for_level(self.config.planting.player_level)
+            if best:
+                logger.info(f"策略选择: {best[0]} (经验效率 {best[4]/best[3]:.4f}/秒)")
+        return crop_name
 
     def _clear_screen(self, rect: tuple, session_id: int | None = None):
         """点击窗口顶部天空区域，关闭残留弹窗/菜单/土地信息
@@ -463,6 +487,11 @@ class BotEngine(QObject):
         self._reset_scene_confirm()
         self._set_runtime_state(RuntimeState.UNKNOWN, "start")
         self.cv_detector.load_templates()
+        self._page_rules = load_page_rules()
+        self.page_checker = PageChecker(
+            self.cv_detector,
+            rules=self._page_rules.get("page_checker"),
+        )
         tpl_count = sum(len(v) for v in self.cv_detector._templates.values())
         if tpl_count == 0:
             self.log_message.emit("未找到模板图片，请先运行模板采集工具")
@@ -501,6 +530,7 @@ class BotEngine(QObject):
             popup_strategy=self.popup,
             capture_fn=self._capture_and_detect,
             cancel_checker=self._is_cancel_requested,
+            rules=self._page_rules.get("navigator"),
         )
         self.ui_guard = UIGuard(
             self.popup,
@@ -543,17 +573,24 @@ class BotEngine(QObject):
             last_tick_ms="--",
         )
         self.scheduler.set_next_checks(farm_ts=0.0, friend_ts=0.0)
+        # 兜底刷新：确保UI在点击停止后立即看到最新状态。
+        self.state_changed.emit("idle")
+        self.stats_updated.emit(self.scheduler.get_stats())
         self.log_message.emit("Bot已停止")
 
     def pause(self):
         if self._task_executor:
             self._task_executor.pause()
         self.scheduler.force_state("paused")
+        self.state_changed.emit("paused")
+        self.stats_updated.emit(self.scheduler.get_stats())
 
     def resume(self):
         if self._task_executor:
             self._task_executor.resume()
         self.scheduler.force_state("running")
+        self.state_changed.emit("running")
+        self.stats_updated.emit(self.scheduler.get_stats())
 
     def run_once(self):
         if not self._task_executor or not self._task_executor.is_running():
@@ -588,22 +625,51 @@ class BotEngine(QObject):
         platform_value = platform.value if hasattr(platform, "value") else str(platform)
         return self.window_manager.crop_window_image_for_preview(image, platform_value)
 
-    def _capture_and_detect(self, rect: tuple, prefix: str = "farm",
-                            categories: list[str] | None = None,
-                            save: bool = True
-                            ) -> tuple[np.ndarray | None, list[DetectResult], PILImage.Image | None]:
+    def _capture_frame(
+        self,
+        rect: tuple,
+        prefix: str = "farm",
+        save: bool = True,
+    ) -> tuple[np.ndarray | None, PILImage.Image | None]:
         if save:
             image, _ = self.screen_capture.capture_and_save(rect, prefix)
         else:
             image = self.screen_capture.capture_region(rect)
         if image is None:
-            return None, [], None
+            return None, None
         preview_image = self._crop_preview_image(image)
         if preview_image is not None:
             self.screenshot_updated.emit(preview_image)
         cv_image = self.cv_detector.pil_to_cv2(image)
+        return cv_image, image
 
-        if categories is not None:
+    def _capture_and_detect(self, rect: tuple, prefix: str = "farm",
+                            categories: list[str] | None = None,
+                            template_names: list[str] | None = None,
+                            template_thresholds: dict[str, float] | None = None,
+                            template_rois: dict[str, tuple[int, int, int, int]] | None = None,
+                            save: bool = True
+                            ) -> tuple[np.ndarray | None, list[DetectResult], PILImage.Image | None]:
+        cv_image, image = self._capture_frame(rect, prefix=prefix, save=save)
+        if cv_image is None or image is None:
+            return None, [], None
+
+        if template_names is None and categories is None:
+            auto_templates, auto_categories, auto_thresholds = self._detect_plan_for_tick()
+            template_names = auto_templates
+            categories = auto_categories
+            if template_thresholds is None:
+                template_thresholds = auto_thresholds
+
+        if template_names is not None:
+            detections = self.cv_detector.detect_templates(
+                cv_image,
+                template_names=template_names,
+                default_threshold=0.8,
+                thresholds=template_thresholds,
+                roi_map=template_rois,
+            )
+        elif categories is not None:
             detections = []
             for cat in categories:
                 detections += self.cv_detector.detect_category(cv_image, cat, threshold=0.8)
@@ -649,38 +715,120 @@ class BotEngine(QObject):
     def _handle_main_scene(
         self,
         rect: tuple,
+        cv_image: np.ndarray,
         detections: list[DetectResult],
         features: dict,
-        _result: dict,
+        result: dict,
         sold_this_round: bool,
     ) -> tuple[StrategyResult, bool]:
         out = StrategyResult()
+        main_detections = list(detections or [])
 
         if not out.action and features.get("auto_harvest", True):
-            out = StrategyResult.from_value(self.harvest.try_harvest(detections))
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["btn_harvest"],
+            )
+            out = StrategyResult.from_value(self.harvest.try_harvest(main_detections))
 
         if not out.action:
-            out = StrategyResult.from_value(self.maintain.try_maintain(detections, features))
+            maintain_templates = []
+            if features.get("auto_weed", True):
+                maintain_templates.append("btn_weed")
+            if features.get("auto_bug", True):
+                maintain_templates.append("btn_bug")
+            if features.get("auto_water", True):
+                maintain_templates.append("btn_water")
+            if maintain_templates:
+                main_detections = self._augment_detections(
+                    cv_image,
+                    main_detections,
+                    maintain_templates,
+                )
+            out = StrategyResult.from_value(self.maintain.try_maintain(main_detections, features))
 
         if not out.action and features.get("auto_plant", True):
-            out = StrategyResult.from_value(self.plant.plant_all(rect, self._resolve_crop_name()))
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["land_empty", "land_empty_2", "land_empty_3"],
+                thresholds={
+                    "land_empty": 0.89,
+                    "land_empty_2": 0.89,
+                    "land_empty_3": 0.89,
+                },
+            )
+            if any(d.name.startswith("land_empty") for d in main_detections):
+                out = StrategyResult.from_value(self.plant.plant_all(rect, self._resolve_crop_name()))
 
         if not out.action and features.get("auto_upgrade", True):
-            out = StrategyResult.from_value(self.expand.try_expand(rect, detections))
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["btn_expand"],
+            )
+            out = StrategyResult.from_value(self.expand.try_expand(rect, main_detections))
 
         if (not out.action and features.get("auto_sell", True) and not sold_this_round):
-            sa = self.sell.try_sell(rect, detections)
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["btn_warehouse"],
+            )
+            sa = self.sell.try_sell(rect, main_detections)
             if sa:
                 sold_this_round = True
                 out = StrategyResult.from_value(sa)
 
         if not out.action and features.get("auto_task", True):
-            out = StrategyResult.from_value(self.task.try_task(rect, detections))
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["btn_task"],
+            )
+            out = StrategyResult.from_value(self.task.try_task(rect, main_detections))
 
         if not out.action and features.get("auto_help", True):
-            out = StrategyResult.from_value(self.friend.try_friend_help(rect, detections))
+            main_detections = self._augment_detections(
+                cv_image,
+                main_detections,
+                ["btn_friend_help"],
+            )
+            out = StrategyResult.from_value(self.friend.try_friend_help(rect, main_detections))
 
         return out, sold_this_round
+
+    def _augment_detections(
+        self,
+        cv_image: np.ndarray,
+        detections: list[DetectResult],
+        template_names: list[str],
+        thresholds: dict[str, float] | None = None,
+        default_threshold: float = 0.8,
+    ) -> list[DetectResult]:
+        """仅补齐缺失模板，避免每轮重复跑大集合识别。"""
+        base = list(detections or [])
+        wanted = [str(name).strip() for name in template_names if str(name).strip()]
+        if not wanted:
+            return base
+
+        existing = {d.name for d in base}
+        missing = [name for name in wanted if name not in existing]
+        if not missing:
+            return base
+
+        extra = self.cv_detector.detect_templates(
+            cv_image,
+            template_names=missing,
+            default_threshold=default_threshold,
+            thresholds=thresholds,
+        )
+        if not extra:
+            return base
+
+        merged = base + extra
+        return self.cv_detector._nms(merged, iou_threshold=0.5)
 
     def _handle_friend_scene(self, rect: tuple, _result: dict) -> StrategyResult:
         return StrategyResult.from_value(self.friend._help_in_friend_farm(rect))
@@ -736,6 +884,7 @@ class BotEngine(QObject):
         self,
         scene: Scene,
         rect: tuple,
+        cv_image: np.ndarray,
         detections: list[DetectResult],
         features: dict,
         result: dict,
@@ -763,6 +912,7 @@ class BotEngine(QObject):
         if scene == Scene.FARM_OVERVIEW:
             return self._handle_main_scene(
                 rect=rect,
+                cv_image=cv_image,
                 detections=detections,
                 features=features,
                 result=result,
@@ -791,10 +941,130 @@ class BotEngine(QObject):
 
         return out, sold_this_round
 
-    def _categories_for_tick(self) -> list[str] | None:
-        if self._runtime_state in (RuntimeState.BUY_CONFIRM, RuntimeState.POPUP, RuntimeState.SHOP):
-            return ["button"]
-        return None
+    @staticmethod
+    def _scene_core_templates() -> list[str]:
+        return [
+            "btn_buy_confirm", "btn_buy_max",
+            "btn_shop", "btn_shop_close",
+            "btn_home",
+            "btn_plant", "btn_remove", "btn_fertilize",
+            "btn_close", "btn_confirm", "btn_cancel", "btn_claim", "btn_share",
+            "icon_levelup",
+            "land_empty", "land_empty_2", "land_empty_3",
+        ]
+
+    def _main_templates_for_tick(self) -> list[str]:
+        features = self.config.features.model_dump()
+        names = set(self._scene_core_templates())
+        if features.get("auto_harvest", True):
+            names.add("btn_harvest")
+        if features.get("auto_weed", True):
+            names.add("btn_weed")
+        if features.get("auto_bug", True):
+            names.add("btn_bug")
+        if features.get("auto_water", True):
+            names.add("btn_water")
+        if features.get("auto_upgrade", True):
+            names.add("btn_expand")
+        if features.get("auto_task", True):
+            names.add("btn_task")
+        if features.get("auto_help", True):
+            names.add("btn_friend_help")
+        if features.get("auto_sell", True):
+            names.update({"btn_warehouse", "btn_batch_sell"})
+        return sorted(names)
+
+    def _detect_plan_for_tick(
+        self,
+    ) -> tuple[list[str] | None, list[str] | None, dict[str, float] | None]:
+        thresholds = {
+            "land_empty": 0.89,
+            "land_empty_2": 0.89,
+            "land_empty_3": 0.89,
+        }
+
+        if self._runtime_state == RuntimeState.SEED_SELECT:
+            return None, ["seed"], None
+
+        if self._runtime_state == RuntimeState.BUY_CONFIRM:
+            return [
+                "btn_buy_confirm", "btn_buy_max",
+                "btn_close", "btn_confirm", "btn_cancel", "btn_claim",
+            ], None, None
+
+        if self._runtime_state == RuntimeState.POPUP:
+            return ["btn_share", "btn_claim", "btn_confirm", "btn_close", "btn_cancel", "icon_levelup"], None, None
+
+        if self._runtime_state == RuntimeState.SHOP:
+            return ["btn_shop_close", "btn_close", "btn_confirm", "btn_cancel", "btn_claim"], None, None
+
+        if self._runtime_state == RuntimeState.PLOT_MENU:
+            return ["btn_plant", "btn_remove", "btn_fertilize", "btn_close", "btn_confirm", "btn_cancel"], None, None
+
+        if self._runtime_state == RuntimeState.FRIEND:
+            return ["btn_home", "btn_friend_help", "btn_water", "btn_weed", "btn_bug", "btn_close"], None, None
+
+        return self._main_templates_for_tick(), None, thresholds
+
+    def _detect_action_templates_for_scene(
+        self,
+        scene: Scene,
+        cv_image: np.ndarray,
+        scene_detections: list[DetectResult] | None = None,
+    ) -> list[DetectResult]:
+        """场景确认后，按场景拉取业务动作所需检测结果。"""
+        scene_detections = list(scene_detections or [])
+
+        if scene == Scene.SEED_SELECT:
+            crop_name = self._resolve_crop_name_quiet()
+            return self.cv_detector.detect_seed_template(cv_image, crop_name_or_template=crop_name, threshold=0.62)
+
+        if scene == Scene.LEVEL_UP:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["icon_levelup", "btn_share", "btn_claim", "btn_confirm", "btn_close", "btn_cancel"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.POPUP:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["btn_share", "btn_claim", "btn_confirm", "btn_close", "btn_cancel"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.BUY_CONFIRM:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["btn_buy_confirm", "btn_buy_max", "btn_close", "btn_confirm", "btn_cancel", "btn_claim"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.SHOP_PAGE:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["btn_shop_close", "btn_close", "btn_confirm", "btn_cancel", "btn_claim"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.PLOT_MENU:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["btn_plant", "btn_remove", "btn_fertilize", "btn_close", "btn_confirm", "btn_cancel"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.FRIEND_FARM:
+            return self.cv_detector.detect_templates(
+                cv_image,
+                template_names=["btn_home", "btn_friend_help", "btn_water", "btn_weed", "btn_bug", "btn_close"],
+                default_threshold=0.8,
+            )
+
+        if scene == Scene.FARM_OVERVIEW:
+            return scene_detections
+
+        return scene_detections
 
 
     # ============================================================
@@ -831,17 +1101,36 @@ class BotEngine(QObject):
 
             tick_start = time.perf_counter()
             detect_start = time.perf_counter()
-            cv_image, detections, _ = self._capture_and_detect(
-                rect,
-                save=False,
-                categories=self._categories_for_tick(),
-            )
-            detect_ms = (time.perf_counter() - detect_start) * 1000.0
+            cv_image, _ = self._capture_frame(rect, save=False)
             if cv_image is None:
                 result["message"] = "截屏失败"
                 break
 
-            raw_scene = identify_scene(detections, self.cv_detector, cv_image)
+            raw_scene, scene_detections = self.page_checker.detect_scene(
+                cv_image,
+                runtime_hint=self._runtime_state.value,
+                crop_name=self._resolve_crop_name_quiet(),
+            )
+            if raw_scene == Scene.UNKNOWN:
+                # 兼容回退：页面检查器未命中时，再走原有规则推断。
+                fb_templates, fb_categories, fb_thresholds = self._detect_plan_for_tick()
+                if fb_templates is not None:
+                    fallback_detections = self.cv_detector.detect_templates(
+                        cv_image,
+                        template_names=fb_templates,
+                        default_threshold=0.8,
+                        thresholds=fb_thresholds,
+                    )
+                elif fb_categories is not None:
+                    fallback_detections = []
+                    for cat in fb_categories:
+                        fallback_detections += self.cv_detector.detect_category(cv_image, cat, threshold=0.8)
+                    fallback_detections = self.cv_detector._nms(fallback_detections, iou_threshold=0.5)
+                else:
+                    fallback_detections = scene_detections
+                raw_scene = identify_scene(fallback_detections, self.cv_detector, cv_image)
+                scene_detections = fallback_detections
+
             scene = self._confirm_scene(raw_scene)
             if scene is None:
                 logger.debug(
@@ -851,6 +1140,13 @@ class BotEngine(QObject):
                     break
                 continue
             tick += 1
+
+            detections = self._detect_action_templates_for_scene(
+                scene=scene,
+                cv_image=cv_image,
+                scene_detections=scene_detections,
+            )
+            detect_ms = (time.perf_counter() - detect_start) * 1000.0
 
             self._set_runtime_state(self._scene_to_runtime_state(scene), "scene")
             self.scheduler.update_runtime_metrics(
@@ -870,6 +1166,7 @@ class BotEngine(QObject):
             dispatch_result, sold_this_round = self._dispatch_scene_action(
                 scene=scene,
                 rect=rect,
+                cv_image=cv_image,
                 detections=detections,
                 features=features,
                 result=result,

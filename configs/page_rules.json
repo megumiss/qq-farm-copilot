@@ -1,0 +1,285 @@
+{
+  "_comment": "标准 JSON 不支持 // 注释；这里使用 _comment 字段承载说明文字。",
+  "page_checker": {
+    "_comment": "页面判定规则：按顺序匹配，命中即返回对应 scene。",
+    "scene_rules": [
+      {
+        "scene": "level_up",
+        "templates": [
+          "icon_levelup"
+        ],
+        "roi_px": [
+          81,
+          96,
+          459,
+          576
+        ],
+        "threshold": 0.76,
+        "_comment": "升级弹窗特征"
+      },
+      {
+        "scene": "buy_confirm",
+        "templates": [
+          "btn_buy_confirm",
+          "btn_buy_max"
+        ],
+        "roi_px": [
+          27,
+          336,
+          513,
+          912
+        ],
+        "threshold": 0.80,
+        "_comment": "购买确认弹窗"
+      },
+      {
+        "scene": "shop_page",
+        "templates": [
+          "btn_shop_close"
+        ],
+        "roi_px": [
+          297,
+          0,
+          540,
+          336
+        ],
+        "threshold": 0.80,
+        "_comment": "商店页右上关闭按钮"
+      },
+      {
+        "scene": "friend_farm",
+        "templates": [
+          "btn_home"
+        ],
+        "roi_px": [
+          0,
+          624,
+          227,
+          960
+        ],
+        "threshold": 0.80,
+        "_comment": "好友农场回家按钮"
+      },
+      {
+        "scene": "plot_menu",
+        "templates": [
+          "btn_plant",
+          "btn_remove",
+          "btn_fertilize"
+        ],
+        "roi_px": [
+          0,
+          595,
+          540,
+          960
+        ],
+        "threshold": 0.80,
+        "_comment": "地块菜单底部按钮"
+      },
+      {
+        "scene": "popup",
+        "templates": [
+          "btn_claim",
+          "btn_confirm",
+          "btn_close",
+          "btn_cancel",
+          "btn_share"
+        ],
+        "roi_px": [
+          43,
+          173,
+          497,
+          941
+        ],
+        "threshold": 0.80,
+        "_comment": "通用弹窗按钮集合"
+      }
+    ],
+    "_comment_hint_to_scene": "运行态提示到 scene 的映射，用于优先检查。",
+    "hint_to_scene": {
+      "main": "farm_overview",
+      "popup": "popup",
+      "shop": "shop_page",
+      "buy_confirm": "buy_confirm",
+      "plot_menu": "plot_menu",
+      "seed_select": "seed_select",
+      "friend": "friend_farm",
+      "unknown": "unknown"
+    },
+    "_comment_farm": "主界面兜底判定模板与阈值。",
+    "farm_templates": [
+      "btn_shop",
+      "btn_harvest",
+      "btn_friend_help",
+      "land_empty",
+      "land_empty_2",
+      "land_empty_3"
+    ],
+    "farm_thresholds": {
+      "btn_shop": 0.80,
+      "btn_harvest": 0.80,
+      "btn_friend_help": 0.80,
+      "land_empty": 0.89,
+      "land_empty_2": 0.89,
+      "land_empty_3": 0.89
+    },
+    "farm_roi_px": {
+      "btn_shop": [
+        0,
+        614,
+        194,
+        960
+      ],
+      "btn_harvest": [
+        76,
+        499,
+        443,
+        960
+      ],
+      "btn_friend_help": [
+        313,
+        346,
+        540,
+        902
+      ],
+      "land_empty": [
+        0,
+        211,
+        540,
+        960
+      ],
+      "land_empty_2": [
+        0,
+        211,
+        540,
+        960
+      ],
+      "land_empty_3": [
+        0,
+        211,
+        540,
+        960
+      ]
+    }
+  },
+  "navigator": {
+    "_comment": "导航识别模板（用于 get_current_page / goto / ensure）。",
+    "templates": [
+      "btn_buy_confirm",
+      "btn_buy_max",
+      "btn_shop",
+      "btn_shop_close",
+      "btn_home",
+      "btn_plant",
+      "btn_remove",
+      "btn_fertilize",
+      "btn_close",
+      "btn_confirm",
+      "btn_cancel",
+      "btn_claim",
+      "btn_share",
+      "icon_levelup",
+      "land_empty",
+      "land_empty_2",
+      "land_empty_3"
+    ],
+    "thresholds": {
+      "land_empty": 0.89,
+      "land_empty_2": 0.89,
+      "land_empty_3": 0.89
+    },
+    "_comment_roi_px": "模板对应的局部 ROI 像素坐标：[x1,y1,x2,y2]。",
+    "roi_px": {
+      "btn_shop_close": [
+        297,
+        0,
+        540,
+        336
+      ],
+      "btn_home": [
+        0,
+        624,
+        227,
+        960
+      ],
+      "btn_plant": [
+        0,
+        595,
+        540,
+        960
+      ],
+      "btn_remove": [
+        0,
+        595,
+        540,
+        960
+      ],
+      "btn_fertilize": [
+        0,
+        595,
+        540,
+        960
+      ],
+      "btn_claim": [
+        43,
+        173,
+        497,
+        941
+      ],
+      "btn_confirm": [
+        43,
+        173,
+        497,
+        941
+      ],
+      "btn_close": [
+        43,
+        173,
+        497,
+        941
+      ],
+      "btn_cancel": [
+        43,
+        173,
+        497,
+        941
+      ],
+      "btn_share": [
+        43,
+        173,
+        497,
+        941
+      ],
+      "icon_levelup": [
+        81,
+        96,
+        459,
+        576
+      ],
+      "btn_shop": [
+        0,
+        614,
+        194,
+        960
+      ],
+      "land_empty": [
+        0,
+        211,
+        540,
+        960
+      ],
+      "land_empty_2": [
+        0,
+        211,
+        540,
+        960
+      ],
+      "land_empty_3": [
+        0,
+        211,
+        540,
+        960
+      ]
+    }
+  }
+}
