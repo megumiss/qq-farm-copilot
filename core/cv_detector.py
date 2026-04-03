@@ -338,6 +338,7 @@ class CVDetector:
         )
         return fallback_results
 
+
     @staticmethod
     def _log_template_probe(template_name: str,
                             threshold: float,

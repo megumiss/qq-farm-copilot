@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
         pv_layout.addWidget(self._screenshot_label)
         root.addWidget(preview_card)
 
-        # ========== 右侧：控制按钮 + Tab + 日志 ==========
+        # ========== 右侧：控制按钮 + Tab ==========
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -167,17 +167,19 @@ class MainWindow(QMainWindow):
             QTabBar::tab:hover { background: #e2e8f0; }
         """)
         self._status_panel = StatusPanel()
-        tabs.addTab(self._status_panel, "状态")
+        self._log_panel = LogPanel()
+        status_page = QWidget()
+        status_layout = QVBoxLayout(status_page)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(8)
+        status_layout.addWidget(self._status_panel)
+        status_layout.addWidget(_card(self._log_panel), 1)
+        tabs.addTab(status_page, "状态")
         self._settings_panel = SettingsPanel(self.config)
         tabs.addTab(self._settings_panel, "设置")
         self._sell_panel = SellPanel(self.config)
         tabs.addTab(self._sell_panel, "出售")
         right_layout.addWidget(tabs)
-
-        # 日志
-        self._log_panel = LogPanel()
-        log_card = _card(self._log_panel)
-        right_layout.addWidget(log_card, 2)
 
         root.addWidget(right, 1)
 
