@@ -200,6 +200,145 @@ class CVDetector:
         )
         return []
 
+    def detect_seed_template(
+        self,
+        screenshot: np.ndarray,
+        crop_name_or_template: str,
+        threshold: float = 0.6,
+        roi: tuple[int, int, int, int] = (40, 630, 490, 720),
+    ) -> list[DetectResult]:
+        """Seed 专用识别：
+        - 固定参数：color + tpl_interp=AREA + mask_interp=NEAREST
+        - 固定范围：ROI=(40,630)-(490,720)
+        - 缩放策略：先 0.75，若无命中再尝试 0.70/0.80
+        """
+        if not self._loaded:
+            self.load_templates()
+
+        if crop_name_or_template.startswith("seed_"):
+            template_name = crop_name_or_template
+        else:
+            template_name = f"seed_{crop_name_or_template}"
+
+        tpl = None
+        for templates in self._templates.values():
+            for item in templates:
+                if item["name"] == template_name:
+                    tpl = item
+                    break
+            if tpl is not None:
+                break
+
+        if tpl is None:
+            self._log_template_probe(
+                template_name=template_name,
+                threshold=threshold,
+                best_score=0.0,
+                hit_count=0,
+            )
+            return []
+
+        h, w = screenshot.shape[:2]
+        x1, y1, x2, y2 = roi
+        x1 = max(0, min(int(x1), w - 1))
+        y1 = max(0, min(int(y1), h - 1))
+        x2 = max(x1 + 1, min(int(x2), w))
+        y2 = max(y1 + 1, min(int(y2), h))
+        roi_img = screenshot[y1:y2, x1:x2]
+        if roi_img.size == 0:
+            self._log_template_probe(
+                template_name=template_name,
+                threshold=threshold,
+                best_score=0.0,
+                hit_count=0,
+            )
+            return []
+
+        def _run_scales(scales: list[float]) -> tuple[list[DetectResult], float]:
+            results: list[DetectResult] = []
+            best_score = 0.0
+            tpl_img = tpl["image"]
+            tpl_mask = tpl["mask"]
+            th, tw = tpl_img.shape[:2]
+            rh, rw = roi_img.shape[:2]
+
+            for scale in scales:
+                new_w = int(tw * scale)
+                new_h = int(th * scale)
+                if new_w < 10 or new_h < 10 or new_w >= rw or new_h >= rh:
+                    continue
+
+                resized_tpl = cv2.resize(
+                    tpl_img, (new_w, new_h), interpolation=cv2.INTER_AREA
+                )
+                resized_mask = None
+                if tpl_mask is not None:
+                    resized_mask = cv2.resize(
+                        tpl_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST
+                    )
+
+                if resized_mask is not None:
+                    mask3 = cv2.merge([resized_mask] * 3)
+                    match_result = cv2.matchTemplate(
+                        roi_img, resized_tpl, cv2.TM_CCOEFF_NORMED, mask=mask3
+                    )
+                else:
+                    match_result = cv2.matchTemplate(
+                        roi_img, resized_tpl, cv2.TM_CCOEFF_NORMED
+                    )
+
+                finite = np.isfinite(match_result)
+                if not finite.all():
+                    match_result = np.where(finite, match_result, -1.0)
+                    finite = np.isfinite(match_result)
+
+                if finite.any():
+                    scale_best = float(match_result[finite].max())
+                    if scale_best > best_score:
+                        best_score = scale_best
+
+                locations = np.where(match_result >= threshold)
+                for pt_y, pt_x in zip(*locations):
+                    confidence = float(match_result[pt_y, pt_x])
+                    center_x = x1 + pt_x + new_w // 2
+                    center_y = y1 + pt_y + new_h // 2
+                    results.append(DetectResult(
+                        name=tpl["name"],
+                        category=tpl["category"],
+                        x=center_x,
+                        y=center_y,
+                        w=new_w,
+                        h=new_h,
+                        confidence=confidence,
+                        extra={"scale": scale, "roi": (x1, y1, x2, y2)},
+                    ))
+
+            results = self._nms(results, iou_threshold=0.5)
+            results.sort(key=lambda r: r.confidence, reverse=True)
+            return results, best_score
+
+        # 优先 0.75
+        primary_results, primary_best = _run_scales([0.75])
+        if primary_results:
+            self._log_template_probe(
+                template_name=template_name,
+                threshold=threshold,
+                best_score=primary_best,
+                hit_count=len(primary_results),
+            )
+            return primary_results
+
+        # 仅当 0.75 无命中时，回退到 0.70 / 0.80
+        fallback_results, fallback_best = _run_scales([0.70, 0.80])
+        self._log_template_probe(
+            template_name=template_name,
+            threshold=threshold,
+            best_score=max(primary_best, fallback_best),
+            hit_count=len(fallback_results),
+        )
+        return fallback_results
+
+
     @staticmethod
     def _log_template_probe(template_name: str,
                             threshold: float,

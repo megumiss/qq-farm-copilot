@@ -40,8 +40,8 @@ class PlantStrategy(BaseStrategy):
             cv_img, dets, _ = self.capture(rect)
             if cv_img is None:
                 return all_actions
-            seed_dets = self.cv_detector.detect_single_template(
-                cv_img, f"seed_{crop_name}", threshold=0.8)
+            seed_dets = self.cv_detector.detect_seed_template(
+                cv_img, crop_name)
             if seed_dets:
                 seed_det = seed_dets[0]
                 break
@@ -118,8 +118,8 @@ class PlantStrategy(BaseStrategy):
             if cv_img is None:
                 return actions_done
 
-            seed_dets = self.cv_detector.detect_single_template(
-                cv_img, f"seed_{crop_name}", threshold=0.8)
+            seed_dets = self.cv_detector.detect_seed_template(
+                cv_img, crop_name)
 
             if seed_dets:
                 seed = seed_dets[0]
@@ -201,8 +201,8 @@ class PlantStrategy(BaseStrategy):
         cv_img2, _, _ = self.capture(rect)
         if cv_img2 is None:
             return
-        seed_dets = self.cv_detector.detect_single_template(
-            cv_img2, f"seed_{crop_name}", threshold=0.85)
+        seed_dets = self.cv_detector.detect_seed_template(
+            cv_img2, crop_name)
         if seed_dets:
             self.click(seed_dets[0].x, seed_dets[0].y,
                        f"播种{crop_name}", ActionType.PLANT)
