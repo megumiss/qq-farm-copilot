@@ -1,10 +1,12 @@
 """P1 维护 — 一键除草/除虫/浇水"""
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class MaintainStrategy(BaseStrategy):
+    requires_page = {"main"}
+    expected_page_after = {"main"}
 
     def try_maintain(self, detections: list[DetectResult],
                      features: dict) -> str | None:
@@ -22,3 +24,6 @@ class MaintainStrategy(BaseStrategy):
                 self.click(btn.x, btn.y, desc, action_type)
                 return desc
         return None
+
+    def run_once(self, detections: list[DetectResult], features: dict, **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.try_maintain(detections, features))

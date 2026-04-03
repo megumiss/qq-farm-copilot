@@ -1,14 +1,15 @@
 """P-1 异常处理 — 关闭弹窗/商店/任务奖励分享"""
-import time
 import pyautogui
 from loguru import logger
 
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class PopupStrategy(BaseStrategy):
+    requires_page = {"popup", "buy_confirm", "shop", "unknown"}
+    expected_page_after = {"main", "popup", "plot_menu", "seed_select", "shop", "buy_confirm"}
 
     def handle_popup(self, detections: list[DetectResult]) -> str | None:
         """处理弹窗：分享(双倍奖励) > 领取 > 确认 > 关闭 > 取消"""
@@ -31,28 +32,26 @@ class PopupStrategy(BaseStrategy):
         微信分享窗口"取消"按钮在窗口右下角，位置相对固定。
         点取消后游戏不检测是否真的分享了，直接发放双倍奖励。
         """
+        if self.stopped:
+            return "取消领取双倍任务奖励(停止中)"
         self.click(share_btn.x, share_btn.y, "点击分享(双倍奖励)", ActionType.CLOSE_POPUP)
-        self.sleep(2.0)  # 等待微信分享窗口弹出
+        if not self.sleep(2.0):  # 等待微信分享窗口弹出
+            return "取消领取双倍任务奖励(停止中)"
 
         # 按 Escape 关闭微信分享窗口（比找取消按钮更可靠）
+        if self.stopped:
+            return "取消领取双倍任务奖励(停止中)"
         pyautogui.press("escape")
-        self.sleep(1.0)  # 等待窗口关闭，回到游戏
+        if not self.sleep(1.0):  # 等待窗口关闭，回到游戏
+            return "取消领取双倍任务奖励(停止中)"
 
         logger.info("任务奖励: 分享→取消，领取双倍奖励")
         return "领取双倍任务奖励"
 
     def close_shop(self, rect: tuple):
         """关闭商店页面"""
-        for _ in range(3):
-            cv_img, dets, _ = self.capture(rect)
-            if cv_img is None:
-                return
-            shop_close = self.cv_detector.detect_single_template(
-                cv_img, "btn_shop_close", threshold=0.8)
-            close_btn = shop_close[0] if shop_close else self.find_by_name(dets, "btn_close")
-            if close_btn:
-                self.click(close_btn.x, close_btn.y, "关闭商店", ActionType.CLOSE_POPUP)
-                self.sleep(0.3)
-            else:
-                return
+        self.close_shop_page(rect, max_attempts=3)
+
+    def run_once(self, detections: list[DetectResult], **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.handle_popup(detections))
 

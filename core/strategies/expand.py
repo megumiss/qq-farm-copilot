@@ -1,13 +1,14 @@
 """P3 资源 — 扩建土地 + 领取任务"""
-import time
 from loguru import logger
 
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class ExpandStrategy(BaseStrategy):
+    requires_page = {"main"}
+    expected_page_after = {"main", "popup"}
 
     def __init__(self, cv_detector):
         super().__init__(cv_detector)
@@ -55,4 +56,7 @@ class ExpandStrategy(BaseStrategy):
         """自动领取任务奖励（待实现：需要 btn_task 模板）"""
         # TODO: 打开任务页面 → 检测可领取 → 点击领取
         return None
+
+    def run_once(self, rect: tuple, detections: list[DetectResult], **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.try_expand(rect, detections))
 

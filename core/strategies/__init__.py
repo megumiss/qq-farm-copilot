@@ -1,4 +1,4 @@
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 from core.strategies.popup import PopupStrategy
 from core.strategies.harvest import HarvestStrategy
 from core.strategies.maintain import MaintainStrategy

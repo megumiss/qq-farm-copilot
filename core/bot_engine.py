@@ -34,11 +34,15 @@ from core.screen_capture import ScreenCapture
 from core.cv_detector import CVDetector, DetectResult
 from core.action_executor import ActionExecutor
 from core.task_scheduler import TaskScheduler
-from core.scene_detector import Scene, identify_scene
+from core.scene_detector import Scene, identify_scene, SceneStabilityTracker
+from core.page_graph import PageId
+from core.navigator import Navigator
+from core.ui_guard import UIGuard
 from core.strategies import (
     PopupStrategy, HarvestStrategy, MaintainStrategy,
     PlantStrategy, ExpandStrategy, SellStrategy, TaskStrategy, FriendStrategy,
 )
+from core.strategies.base import StrategyResult
 
 
 class RuntimeState(str, Enum):
@@ -97,9 +101,12 @@ class BotEngine(QObject):
         self._expected_states: set[RuntimeState] | None = None
         self._expected_reason = ""
         self._expected_deadline = 0.0
-        self._scene_candidate = Scene.UNKNOWN
-        self._scene_candidate_hits = 0
-        self._scene_confirmed = Scene.UNKNOWN
+        self._runtime_failure_count = 0
+        self._scene_tracker = SceneStabilityTracker(
+            stable_hits=2,
+            level_up_hits=1,
+            confirm_timeout=1.0,
+        )
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()
@@ -122,6 +129,8 @@ class BotEngine(QObject):
 
         # [4] 操作执行层
         self.action_executor: ActionExecutor | None = None
+        self.navigator: Navigator | None = None
+        self.ui_guard: UIGuard | None = None
 
         # 调度
         self.scheduler = TaskScheduler()
@@ -142,23 +151,10 @@ class BotEngine(QObject):
             s.set_action_hook(self._on_strategy_action)
 
     def _reset_scene_confirm(self):
-        self._scene_candidate = Scene.UNKNOWN
-        self._scene_candidate_hits = 0
-        self._scene_confirmed = Scene.UNKNOWN
+        self._scene_tracker.reset()
 
     def _confirm_scene(self, raw_scene: Scene) -> Scene | None:
-        if raw_scene == self._scene_candidate:
-            self._scene_candidate_hits += 1
-        else:
-            self._scene_candidate = raw_scene
-            self._scene_candidate_hits = 1
-
-        required_hits = 1 if raw_scene == Scene.LEVEL_UP else 2
-        if self._scene_candidate_hits < required_hits:
-            return None
-
-        self._scene_confirmed = raw_scene
-        return raw_scene
+        return self._scene_tracker.feed(raw_scene)
 
     @staticmethod
     def _scene_to_runtime_state(scene: Scene) -> RuntimeState:
@@ -225,45 +221,48 @@ class BotEngine(QObject):
         if not text:
             return
 
-        if "点击任务" in text:
-            self._expect_runtime_states(
-                {RuntimeState.POPUP, RuntimeState.SHOP, RuntimeState.BUY_CONFIRM},
-                timeout=2.0,
-                reason=text,
+        expected = self._get_expected_states(action_type, text)
+        if not expected:
+            return
+        states, timeout = expected
+        self._expect_runtime_states(states, timeout=timeout, reason=text or action_type)
+
+    def _get_expected_states(
+        self,
+        action_type: str,
+        text: str,
+    ) -> tuple[set[RuntimeState], float] | None:
+        if action_type == ActionType.PLANT:
+            return (
+                {RuntimeState.MAIN, RuntimeState.PLOT_MENU, RuntimeState.SEED_SELECT},
+                1.5,
             )
-        elif "打开商店" in text:
-            self._expect_runtime_states(
-                {RuntimeState.SHOP, RuntimeState.BUY_CONFIRM},
-                timeout=2.0,
-                reason=text,
-            )
-        elif "好友求助" in text:
-            self._expect_runtime_states(
-                {RuntimeState.FRIEND},
-                timeout=2.0,
-                reason=text,
-            )
-        elif "回家" in text:
-            self._expect_runtime_states(
-                {RuntimeState.MAIN},
-                timeout=2.0,
-                reason=text,
-            )
-        elif "关闭" in text or "点击空白处" in text:
-            self._expect_runtime_states(
+        if action_type == ActionType.CLOSE_POPUP:
+            return (
                 {
                     RuntimeState.MAIN, RuntimeState.POPUP, RuntimeState.PLOT_MENU,
                     RuntimeState.SEED_SELECT, RuntimeState.SHOP, RuntimeState.BUY_CONFIRM,
                 },
-                timeout=1.5,
-                reason=text,
+                1.5,
             )
-        elif action_type == ActionType.PLANT:
-            self._expect_runtime_states(
-                {RuntimeState.MAIN, RuntimeState.PLOT_MENU, RuntimeState.SEED_SELECT},
-                timeout=1.5,
-                reason=text or "plant",
-            )
+        if action_type in {
+            ActionType.HARVEST, ActionType.WATER, ActionType.WEED,
+            ActionType.BUG, ActionType.SELL,
+        }:
+            return ({RuntimeState.MAIN}, 1.5)
+
+        nav_text_map: list[tuple[str, set[RuntimeState], float]] = [
+            ("点击任务", {RuntimeState.POPUP, RuntimeState.SHOP, RuntimeState.BUY_CONFIRM}, 2.0),
+            ("打开商店", {RuntimeState.SHOP, RuntimeState.BUY_CONFIRM}, 2.0),
+            ("好友求助", {RuntimeState.FRIEND}, 2.0),
+            ("回家", {RuntimeState.MAIN}, 2.0),
+            ("关闭", {RuntimeState.MAIN, RuntimeState.POPUP, RuntimeState.SHOP, RuntimeState.BUY_CONFIRM}, 1.5),
+            ("点击空白处", {RuntimeState.MAIN, RuntimeState.POPUP, RuntimeState.PLOT_MENU, RuntimeState.SEED_SELECT}, 1.5),
+        ]
+        for keyword, states, timeout in nav_text_map:
+            if keyword in text:
+                return states, timeout
+        return None
 
     def _switch_session(self, cancelled: bool) -> int:
         """切换到新会话，旧会话结果自动作废。"""
@@ -303,6 +302,12 @@ class BotEngine(QObject):
         if self._worker_running():
             logger.debug("上一轮操作尚未完成，跳过")
             return
+        self.scheduler.update_runtime_metrics(
+            current_task=task_type,
+            running_tasks=1,
+            pending_tasks=0,
+            waiting_tasks=0,
+        )
         worker = BotWorker(self, session_id=self._session_id, task_type=task_type)
         worker.finished.connect(self._on_task_finished)
         worker.error.connect(self._on_task_error)
@@ -361,6 +366,7 @@ class BotEngine(QObject):
             self.log_message.emit("上一轮任务仍在停止中，请稍候再启动")
             return False
         self._switch_session(cancelled=False)
+        self._runtime_failure_count = 0
         self._clear_expected_states()
         self._reset_scene_confirm()
         self._set_runtime_state(RuntimeState.UNKNOWN, "start")
@@ -398,10 +404,29 @@ class BotEngine(QObject):
         )
         self.action_executor.set_cancel_checker(self._is_cancel_requested)
         self._init_strategies()
+        self.navigator = Navigator(
+            cv_detector=self.cv_detector,
+            popup_strategy=self.popup,
+            capture_fn=self._capture_and_detect,
+            cancel_checker=self._is_cancel_requested,
+        )
+        self.ui_guard = UIGuard(
+            self.popup,
+            navigator=self.navigator,
+            on_level_up=self._on_level_up,
+        )
 
         farm_ms = self.config.schedule.farm_check_minutes * 60 * 1000
         friend_ms = self.config.schedule.friend_check_minutes * 60 * 1000
         self.scheduler.start(farm_ms, friend_ms)
+        self.scheduler.update_runtime_metrics(
+            current_task="farm_main",
+            current_page="unknown",
+            failure_count=self._runtime_failure_count,
+            running_tasks=0,
+            pending_tasks=0,
+            waiting_tasks=1,
+        )
         self.log_message.emit(f"Bot已启动 - 窗口: {window.title} | 模板: {tpl_count}个")
         return True
 
@@ -410,6 +435,14 @@ class BotEngine(QObject):
         self._clear_expected_states()
         self._reset_scene_confirm()
         self.scheduler.stop()
+        self.scheduler.update_runtime_metrics(
+            current_task="--",
+            current_page="--",
+            failure_count=self._runtime_failure_count,
+            running_tasks=0,
+            pending_tasks=0,
+            waiting_tasks=0,
+        )
         if self._worker and self._worker.isRunning():
             self._worker.requestInterruption()
             if not self._worker.wait(80):
@@ -459,6 +492,15 @@ class BotEngine(QObject):
         actions = result.get("actions_done", [])
         if actions:
             self.log_message.emit(f"本轮完成: {', '.join(actions)}")
+        if result.get("success", False):
+            self._runtime_failure_count = 0
+            self.scheduler.update_runtime_metrics(
+                failure_count=self._runtime_failure_count,
+                current_task="farm_main",
+                running_tasks=0,
+                pending_tasks=0,
+                waiting_tasks=1,
+            )
         next_sec = result.get("next_check_seconds", 0)
         if next_sec > 0:
             self.scheduler.set_farm_interval(next_sec)
@@ -470,6 +512,14 @@ class BotEngine(QObject):
         if session_id != self._session_id:
             logger.debug(f"忽略过期任务异常: session={session_id}, current={self._session_id}")
             return
+        self._runtime_failure_count += 1
+        self.scheduler.update_runtime_metrics(
+            failure_count=self._runtime_failure_count,
+            current_task="farm_main",
+            running_tasks=0,
+            pending_tasks=0,
+            waiting_tasks=1,
+        )
         self.log_message.emit(f"操作异常: {error_msg}")
 
     # ============================================================
@@ -556,6 +606,156 @@ class BotEngine(QObject):
         if stat_key:
             self.scheduler.record_action(stat_key)
 
+    def _handle_main_scene(
+        self,
+        rect: tuple,
+        detections: list[DetectResult],
+        features: dict,
+        _result: dict,
+        sold_this_round: bool,
+    ) -> tuple[StrategyResult, bool]:
+        out = StrategyResult()
+
+        if not out.action and features.get("auto_harvest", True):
+            out = StrategyResult.from_value(self.harvest.try_harvest(detections))
+
+        if not out.action:
+            out = StrategyResult.from_value(self.maintain.try_maintain(detections, features))
+
+        if not out.action and features.get("auto_plant", True):
+            out = StrategyResult.from_value(self.plant.plant_all(rect, self._resolve_crop_name()))
+
+        if not out.action and features.get("auto_upgrade", True):
+            out = StrategyResult.from_value(self.expand.try_expand(rect, detections))
+
+        if (not out.action and features.get("auto_sell", True) and not sold_this_round):
+            sa = self.sell.try_sell(rect, detections)
+            if sa:
+                sold_this_round = True
+                out = StrategyResult.from_value(sa)
+
+        if not out.action and features.get("auto_task", True):
+            out = StrategyResult.from_value(self.task.try_task(rect, detections))
+
+        if not out.action and features.get("auto_help", True):
+            out = StrategyResult.from_value(self.friend.try_friend_help(rect, detections))
+
+        return out, sold_this_round
+
+    def _handle_friend_scene(self, rect: tuple, _result: dict) -> StrategyResult:
+        return StrategyResult.from_value(self.friend._help_in_friend_farm(rect))
+
+    def _handle_seed_select_scene(self, detections: list[DetectResult]) -> StrategyResult:
+        crop_name = self._resolve_crop_name()
+        seed = self.popup.find_by_name(detections, f"seed_{crop_name}")
+        if not seed:
+            return StrategyResult()
+        self.popup.click(seed.x, seed.y, f"播种{crop_name}", ActionType.PLANT)
+        self._record_stat(ActionType.PLANT)
+        return StrategyResult.from_value(f"播种{crop_name}")
+
+    def _on_level_up(self):
+        self.config.planting.player_level += 1
+        self.config.save()
+        new_level = self.config.planting.player_level
+        self.log_message.emit(f"升级! Lv.{new_level - 1} → Lv.{new_level}")
+        self.log_message.emit(f"当前种植: {self._resolve_crop_name()}")
+
+    def _handle_level_up_scene(self, rect: tuple, detections: list[DetectResult]) -> StrategyResult:
+        if self.ui_guard:
+            return StrategyResult.from_value(
+                self.ui_guard.handle_global_popups(rect, Scene.LEVEL_UP, detections)
+            )
+        out = StrategyResult.from_value(self.popup.handle_popup(detections))
+        self._on_level_up()
+        return out
+
+    def _handle_popup_scene(self, rect: tuple, detections: list[DetectResult]) -> StrategyResult:
+        if self.ui_guard:
+            return StrategyResult.from_value(
+                self.ui_guard.handle_global_popups(rect, Scene.POPUP, detections)
+            )
+        return StrategyResult.from_value(self.popup.handle_popup(detections))
+
+    def _handle_buy_confirm_scene(self, rect: tuple, detections: list[DetectResult]) -> StrategyResult:
+        if self.ui_guard:
+            return StrategyResult.from_value(
+                self.ui_guard.handle_global_popups(rect, Scene.BUY_CONFIRM, detections)
+            )
+        return StrategyResult.from_value(self.popup.handle_popup(detections))
+
+    def _handle_shop_scene(self, rect: tuple, detections: list[DetectResult]) -> StrategyResult:
+        if self.ui_guard:
+            return StrategyResult.from_value(
+                self.ui_guard.handle_global_popups(rect, Scene.SHOP_PAGE, detections)
+            )
+        self.popup.close_shop(rect)
+        return StrategyResult.from_value("关闭商店")
+
+    def _dispatch_scene_action(
+        self,
+        scene: Scene,
+        rect: tuple,
+        detections: list[DetectResult],
+        features: dict,
+        result: dict,
+        sold_this_round: bool,
+    ) -> tuple[StrategyResult, bool]:
+        out = StrategyResult()
+
+        if scene == Scene.LEVEL_UP:
+            out = self._handle_level_up_scene(rect, detections)
+            return out, sold_this_round
+
+        if scene == Scene.POPUP:
+            return self._handle_popup_scene(rect, detections), sold_this_round
+
+        if scene == Scene.BUY_CONFIRM:
+            return self._handle_buy_confirm_scene(rect, detections), sold_this_round
+
+        if scene == Scene.SHOP_PAGE:
+            return self._handle_shop_scene(rect, detections), sold_this_round
+
+        if scene == Scene.PLOT_MENU:
+            out = StrategyResult.from_value(self.popup.handle_popup(detections))
+            return out, sold_this_round
+
+        if scene == Scene.FARM_OVERVIEW:
+            return self._handle_main_scene(
+                rect=rect,
+                detections=detections,
+                features=features,
+                result=result,
+                sold_this_round=sold_this_round,
+            )
+
+        if scene == Scene.FRIEND_FARM:
+            return self._handle_friend_scene(rect, result), sold_this_round
+
+        if scene == Scene.SEED_SELECT:
+            return self._handle_seed_select_scene(detections), sold_this_round
+
+        if scene == Scene.UNKNOWN:
+            recovered = False
+            if self.navigator:
+                recovered = self.navigator.goto(
+                    rect=rect,
+                    target=PageId.MAIN,
+                    timeout=1.2,
+                    confirm_wait=0.15,
+                )
+            if recovered:
+                return StrategyResult.from_value("导航回主界面"), sold_this_round
+            self.popup.click_blank(rect)
+            return StrategyResult.from_value("点击空白处"), sold_this_round
+
+        return out, sold_this_round
+
+    def _categories_for_tick(self) -> list[str] | None:
+        if self._runtime_state in (RuntimeState.BUY_CONFIRM, RuntimeState.POPUP, RuntimeState.SHOP):
+            return ["button"]
+        return None
+
 
     # ============================================================
     # 主循环
@@ -575,17 +775,28 @@ class BotEngine(QObject):
 
         # 清屏：点击天空区域关闭残留弹窗/菜单
         self._clear_screen(rect, session_id)
+        if self.navigator:
+            self.navigator.ensure(rect, PageId.MAIN, timeout=1.2, confirm_wait=0.15)
 
         idle_rounds = 0
         max_idle = 3
         sold_this_round = False
+        tick = 0
+        transition_budget = max(30, int(self.config.safety.max_actions_per_round) * 3)
 
-        for round_num in range(1, 51):
+        while tick < transition_budget:
             if self._is_cancel_requested(session_id) or self.popup.stopped:
                 logger.info("收到停止/暂停信号，中断当前操作")
                 break
 
-            cv_image, detections, _ = self._capture_and_detect(rect, save=False)
+            tick_start = time.perf_counter()
+            detect_start = time.perf_counter()
+            cv_image, detections, _ = self._capture_and_detect(
+                rect,
+                save=False,
+                categories=self._categories_for_tick(),
+            )
+            detect_ms = (time.perf_counter() - detect_start) * 1000.0
             if cv_image is None:
                 result["message"] = "截屏失败"
                 break
@@ -594,109 +805,55 @@ class BotEngine(QObject):
             scene = self._confirm_scene(raw_scene)
             if scene is None:
                 logger.debug(
-                    f"场景候选待确认: raw={raw_scene.value}, hits={self._scene_candidate_hits}"
+                    f"场景候选待确认: raw={raw_scene.value}, hits={self._scene_tracker.hits}"
                 )
                 if not self._sleep_interruptible(0.12, session_id):
                     break
                 continue
+            tick += 1
 
             self._set_runtime_state(self._scene_to_runtime_state(scene), "scene")
+            self.scheduler.update_runtime_metrics(
+                current_page=scene.value,
+                current_task="farm_main",
+                failure_count=self._runtime_failure_count,
+            )
             if not self._verify_expected_runtime():
                 self.popup.click_blank(rect)
                 if not self._sleep_interruptible(0.2, session_id):
                     break
                 continue
             det_summary = ", ".join(f"{d.name}({d.confidence:.0%})" for d in detections[:6])
-            logger.info(f"[轮{round_num}] 场景={scene.value} | {det_summary}")
+            logger.info(f"[tick={tick}] 场景={scene.value} | {det_summary}")
             self._emit_annotated(cv_image, detections)
-
-            action_desc = None
-
-            # ---- P-1 异常处理 ----
-            if scene == Scene.LEVEL_UP:
-                action_desc = self.popup.handle_popup(detections)
-                self.config.planting.player_level += 1
-                self.config.save()
-                new_level = self.config.planting.player_level
-                self.log_message.emit(f"升级! Lv.{new_level - 1} → Lv.{new_level}")
-                self.log_message.emit(f"当前种植: {self._resolve_crop_name()}")
-            elif scene == Scene.POPUP:
-                action_desc = self.popup.handle_popup(detections)
-            elif scene == Scene.BUY_CONFIRM:
-                action_desc = self.popup.handle_popup(detections)
-            elif scene == Scene.SHOP_PAGE:
-                self.popup.close_shop(rect)
-                action_desc = "关闭商店"
-            elif scene == Scene.PLOT_MENU:
-                action_desc = self.popup.handle_popup(detections)
-
-            # ---- 农场主页操作 ----
-            elif scene == Scene.FARM_OVERVIEW:
-                # P0 收益：一键收获
-                if not action_desc and features.get("auto_harvest", True):
-                    action_desc = self.harvest.try_harvest(detections)
-
-                # P1 维护：除草/除虫/浇水
-                if not action_desc:
-                    action_desc = self.maintain.try_maintain(detections, features)
-
-                # P2 生产：播种
-                if not action_desc and features.get("auto_plant", True):
-                    pa = self.plant.plant_all(rect, self._resolve_crop_name())
-                    if pa:
-                        result["actions_done"].extend(pa)
-                        action_desc = pa[-1]
-
-                # P3 资源：扩建
-                if not action_desc and features.get("auto_upgrade", True):
-                    action_desc = self.expand.try_expand(rect, detections)
-
-                # P3.2 出售：仓库批量出售（独立于任务）
-                if (not action_desc
-                        and features.get("auto_sell", True)
-                        and not sold_this_round):
-                    sa = self.sell.try_sell(rect, detections)
-                    if sa:
-                        sold_this_round = True
-                        result["actions_done"].extend(sa)
-                        action_desc = sa[-1]
-
-                # P3.5 任务：领取任务奖励
-                if not action_desc and features.get("auto_task", True):
-                    ta = self.task.try_task(rect, detections)
-                    if ta:
-                        result["actions_done"].extend(ta)
-                        action_desc = ta[-1]
-
-                # P4 社交：好友求助
-                if not action_desc and features.get("auto_help", True):
-                    fa = self.friend.try_friend_help(rect, detections)
-                    if fa:
-                        result["actions_done"].extend(fa)
-                        action_desc = fa[-1]
-
-            # ---- 好友家园 ----
-            elif scene == Scene.FRIEND_FARM:
-                fa = self.friend._help_in_friend_farm(rect)
-                if fa:
-                    result["actions_done"].extend(fa)
-                    action_desc = fa[-1]
-
-            elif scene == Scene.SEED_SELECT:
-                crop_name = self._resolve_crop_name()
-                seed = self.popup.find_by_name(detections, f"seed_{crop_name}")
-                if seed:
-                    self.popup.click(seed.x, seed.y, f"播种{crop_name}", ActionType.PLANT)
-                    self._record_stat(ActionType.PLANT)
-                    action_desc = f"播种{crop_name}"
-
-            elif scene == Scene.UNKNOWN:
-                self.popup.click_blank(rect)
-                action_desc = "点击空白处"
+            action_start = time.perf_counter()
+            dispatch_result, sold_this_round = self._dispatch_scene_action(
+                scene=scene,
+                rect=rect,
+                detections=detections,
+                features=features,
+                result=result,
+                sold_this_round=sold_this_round,
+            )
+            action_ms = (time.perf_counter() - action_start) * 1000.0
+            tick_ms = (time.perf_counter() - tick_start) * 1000.0
 
             # ---- 结果处理 ----
+            result["actions_done"].extend(dispatch_result.actions)
+            action_desc = dispatch_result.action
+            logger.info(
+                "task=farm_main page={} action={} detect_ms={:.1f} action_ms={:.1f} tick_ms={:.1f}",
+                scene.value,
+                action_desc or "none",
+                detect_ms,
+                action_ms,
+                tick_ms,
+            )
+            self.scheduler.update_runtime_metrics(
+                last_result=action_desc or "none",
+                last_tick_ms=f"{tick_ms:.1f}ms",
+            )
             if action_desc:
-                result["actions_done"].append(action_desc)
                 idle_rounds = 0
             else:
                 idle_rounds += 1
@@ -707,6 +864,8 @@ class BotEngine(QObject):
 
             if not self._sleep_interruptible(0.3, session_id):
                 break
+        else:
+            logger.info(f"达到页面跳转预算上限: {transition_budget}，结束本轮")
 
         # 设置下次检查间隔
         # 有播种操作 → 5分钟后检查维护（除虫/除草/浇水）

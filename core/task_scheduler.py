@@ -42,6 +42,16 @@ class TaskScheduler(QObject):
         }
         self._next_farm_check: float = 0
         self._next_friend_check: float = 0
+        self._runtime_metrics = {
+            "current_page": "--",
+            "current_task": "--",
+            "failure_count": 0,
+            "running_tasks": 0,
+            "pending_tasks": 0,
+            "waiting_tasks": 0,
+            "last_result": "--",
+            "last_tick_ms": "--",
+        }
 
     @property
     def state(self) -> BotState:
@@ -133,6 +143,7 @@ class TaskScheduler(QObject):
         minutes = int((elapsed % 3600) // 60)
         return {
             **self._stats,
+            **self._runtime_metrics,
             "elapsed": f"{hours}小时{minutes}分",
             "next_farm_check": datetime.fromtimestamp(self._next_farm_check).strftime("%H:%M:%S") if self._next_farm_check else "--",
             "next_friend_check": datetime.fromtimestamp(self._next_friend_check).strftime("%H:%M:%S") if self._next_friend_check else "--",
@@ -142,3 +153,16 @@ class TaskScheduler(QObject):
     def reset_stats(self):
         for key in self._stats:
             self._stats[key] = 0
+
+    def update_runtime_metrics(self, **kwargs):
+        changed = False
+        for key in (
+            "current_page", "current_task", "failure_count",
+            "running_tasks", "pending_tasks", "waiting_tasks",
+            "last_result", "last_tick_ms",
+        ):
+            if key in kwargs and self._runtime_metrics.get(key) != kwargs[key]:
+                self._runtime_metrics[key] = kwargs[key]
+                changed = True
+        if changed:
+            self.stats_updated.emit(self.get_stats())

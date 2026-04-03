@@ -8,16 +8,17 @@
 需要模板：
   btn_task          — 左下角任务提示条
 """
-import time
 import pyautogui
 from loguru import logger
 
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class TaskStrategy(BaseStrategy):
+    requires_page = {"main", "popup"}
+    expected_page_after = {"main", "popup"}
 
     def __init__(self, cv_detector):
         super().__init__(cv_detector)
@@ -72,9 +73,17 @@ class TaskStrategy(BaseStrategy):
 
     def _share_and_cancel(self, share_btn: DetectResult):
         """点分享 → 按 Escape 关闭微信窗口 → 拿双倍奖励"""
+        if self.stopped:
+            return
         self.click(share_btn.x, share_btn.y, "点击分享(双倍奖励)", ActionType.CLOSE_POPUP)
-        self.sleep(2.0)  # 等待微信分享窗口弹出
+        if not self.sleep(2.0):  # 等待微信分享窗口弹出
+            return
+        if self.stopped:
+            return
         pyautogui.press("escape")
         self.sleep(1.0)  # 等待回到游戏
         logger.info("任务: 分享→取消，领取双倍奖励")
+
+    def run_once(self, rect: tuple, detections: list[DetectResult], **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.try_task(rect, detections))
 

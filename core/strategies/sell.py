@@ -1,12 +1,13 @@
 """P3.2 出售 — 独立仓库批量出售"""
-import time
 from loguru import logger
 
 from models.farm_state import ActionType
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class SellStrategy(BaseStrategy):
+    requires_page = {"main"}
+    expected_page_after = {"main", "popup", "shop"}
 
     def try_sell(self, rect: tuple, detections: list) -> list[str]:
         """在农场主页尝试进入仓库并批量出售。"""
@@ -69,4 +70,7 @@ class SellStrategy(BaseStrategy):
         if close:
             self.click(close.x, close.y, "关闭页面", ActionType.CLOSE_POPUP)
             self.sleep(0.3)
+
+    def run_once(self, rect: tuple, detections: list, **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.try_sell(rect, detections))
 

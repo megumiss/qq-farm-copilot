@@ -5,10 +5,12 @@ from loguru import logger
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
 from core.scene_detector import Scene, identify_scene
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 
 
 class FriendStrategy(BaseStrategy):
+    requires_page = {"main", "friend"}
+    expected_page_after = {"main", "friend"}
 
     def try_friend_help(self, rect: tuple, detections: list[DetectResult]) -> list[str]:
         """检测好友求助并进入帮忙"""
@@ -55,10 +57,7 @@ class FriendStrategy(BaseStrategy):
                     break
 
             elif scene == Scene.POPUP:
-                from core.strategies.popup import PopupStrategy
-                ps = PopupStrategy(self.cv_detector)
-                ps.action_executor = self.action_executor
-                ps.handle_popup(dets)
+                self.handle_basic_popup(dets)
                 self.sleep(0.3)
             elif scene == Scene.FARM_OVERVIEW:
                 break
@@ -76,4 +75,7 @@ class FriendStrategy(BaseStrategy):
         """自动同意好友申请（待实现：需要 btn_accept_friend 模板）"""
         # TODO: 检测好友申请弹窗 → 点击同意
         return None
+
+    def run_once(self, rect: tuple, detections: list[DetectResult], **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.try_friend_help(rect, detections))
 

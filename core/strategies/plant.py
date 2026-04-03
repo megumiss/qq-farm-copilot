@@ -1,16 +1,18 @@
 """P2 生产 — 播种 + 购买种子 + 施肥"""
-import time
 import pyautogui
 from loguru import logger
 
 from models.farm_state import ActionType
 from core.cv_detector import DetectResult
 from core.scene_detector import Scene, identify_scene
-from core.strategies.base import BaseStrategy
+from core.strategies.base import BaseStrategy, StrategyResult
 from utils.shop_item_ocr import ShopItemOCR
 
 
 class PlantStrategy(BaseStrategy):
+    requires_page = {"main", "plot_menu", "seed_select", "shop", "buy_confirm", "popup"}
+    expected_page_after = {"main", "plot_menu", "seed_select", "shop", "buy_confirm", "popup"}
+
     def __init__(self, cv_detector):
         super().__init__(cv_detector)
         self.shop_ocr = ShopItemOCR()
@@ -64,23 +66,37 @@ class PlantStrategy(BaseStrategy):
         # 按住种子位置
         seed_abs_x, seed_abs_y = self.action_executor.relative_to_absolute(
             seed_det.x, seed_det.y)
-        pyautogui.moveTo(seed_abs_x, seed_abs_y, duration=0.05)
-        self.sleep(0.1)
-        pyautogui.mouseDown()
-        self.sleep(0.1)
-
-        # 依次拖到每块空地
         planted_count = 0
-        for land in lands:
+        dragging = False
+        try:
             if self.stopped:
-                break
-            abs_x, abs_y = self.action_executor.relative_to_absolute(land.x, land.y)
-            pyautogui.moveTo(abs_x, abs_y, duration=0.1)
-            self.sleep(0.15)
-            planted_count += 1
+                return all_actions
+            pyautogui.moveTo(seed_abs_x, seed_abs_y, duration=0.05)
+            if not self.sleep(0.1):
+                return all_actions
+            if self.stopped:
+                return all_actions
+            pyautogui.mouseDown()
+            dragging = True
+            if not self.sleep(0.1):
+                return all_actions
 
-        # 松开鼠标
-        pyautogui.mouseUp()
+            # 依次拖到每块空地
+            for land in lands:
+                if self.stopped:
+                    break
+                abs_x, abs_y = self.action_executor.relative_to_absolute(land.x, land.y)
+                pyautogui.moveTo(abs_x, abs_y, duration=0.1)
+                if not self.sleep(0.15):
+                    break
+                planted_count += 1
+        finally:
+            if dragging:
+                try:
+                    pyautogui.mouseUp()
+                except Exception:
+                    pass
+
         logger.info(f"播种流程: 拖拽播种完成，共 {planted_count} 块")
         all_actions.append(f"播种{crop_name}×{planted_count}")
 
@@ -150,10 +166,7 @@ class PlantStrategy(BaseStrategy):
             logger.debug(f"播种流程: 等待种子弹窗 ({attempt+1}/2) 场景={scene.value}")
 
             if scene == Scene.POPUP:
-                from core.strategies.popup import PopupStrategy
-                ps = PopupStrategy(self.cv_detector)
-                ps.action_executor = self.action_executor
-                ps.handle_popup(dets)
+                self.handle_basic_popup(dets)
                 continue
 
             if scene == Scene.SHOP_PAGE:
@@ -176,11 +189,7 @@ class PlantStrategy(BaseStrategy):
 
     def _close_shop_and_buy(self, rect, crop_name, actions_done):
         """关闭自动弹出的商店，再手动购买"""
-        from core.strategies.popup import PopupStrategy
-        ps = PopupStrategy(self.cv_detector)
-        ps.action_executor = self.action_executor
-        ps.set_capture_fn(self._capture_fn)
-        ps.close_shop(rect)
+        self.close_shop_page(rect, max_attempts=3)
         buy_result = self._buy_seeds(rect, crop_name)
         if buy_result:
             actions_done.append(buy_result)
@@ -306,10 +315,7 @@ class PlantStrategy(BaseStrategy):
                     return f"购买{crop_name}"
 
             elif scene == Scene.POPUP:
-                from core.strategies.popup import PopupStrategy
-                ps = PopupStrategy(self.cv_detector)
-                ps.action_executor = self.action_executor
-                ps.handle_popup(dets)
+                self.handle_basic_popup(dets)
                 self.sleep(0.3)  # 等待弹窗关闭
                 continue
 
@@ -321,9 +327,8 @@ class PlantStrategy(BaseStrategy):
         return None
 
     def _close_shop(self, rect):
-        from core.strategies.popup import PopupStrategy
-        ps = PopupStrategy(self.cv_detector)
-        ps.action_executor = self.action_executor
-        ps.set_capture_fn(self._capture_fn)
-        ps.close_shop(rect)
+        self.close_shop_page(rect, max_attempts=3)
+
+    def run_once(self, rect: tuple, crop_name: str, **_kwargs) -> StrategyResult:
+        return StrategyResult.from_value(self.plant_all(rect, crop_name))
 
