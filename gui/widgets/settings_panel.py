@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from models.config import AppConfig, PlantMode, WindowPosition, WindowPlatform
+from models.config import AppConfig, PlantMode, WindowPosition, WindowPlatform, EngineMode
 from models.game_data import CROPS, get_crop_names, format_grow_time, get_best_crop_for_level
 
 
@@ -101,6 +101,10 @@ class SettingsPanel(QWidget):
         self._window_position.addItem("左下", WindowPosition.LEFT_BOTTOM.value)
         self._window_position.addItem("右下", WindowPosition.RIGHT_BOTTOM.value)
         mf.addRow("窗口位置:", self._window_position)
+        self._engine_mode = QComboBox()
+        self._engine_mode.addItem("兼容模式(legacy)", EngineMode.LEGACY.value)
+        self._engine_mode.addItem("执行器模式(executor)", EngineMode.EXECUTOR.value)
+        mf.addRow("执行模式:", self._engine_mode)
         row_sched = QHBoxLayout()
         self._farm_interval = QSpinBox()
         self._farm_interval.setRange(1, 120)
@@ -128,6 +132,7 @@ class SettingsPanel(QWidget):
         self._window_platform.currentIndexChanged.connect(self._auto_save)
         self._window_keyword.editingFinished.connect(self._auto_save)
         self._window_position.currentIndexChanged.connect(self._auto_save)
+        self._engine_mode.currentIndexChanged.connect(self._auto_save)
         self._farm_interval.valueChanged.connect(self._auto_save)
         self._friend_interval.valueChanged.connect(self._auto_save)
         for cb in (self._cb_harvest, self._cb_plant, self._cb_water,
@@ -147,6 +152,8 @@ class SettingsPanel(QWidget):
         c.planting.window_platform = WindowPlatform(self._window_platform.currentData())
         c.window_title_keyword = self._window_keyword.text().strip()
         c.planting.window_position = WindowPosition(self._window_position.currentData())
+        c.engine_mode = EngineMode(self._engine_mode.currentData())
+        c.executor.enabled = c.engine_mode == EngineMode.EXECUTOR
         c.schedule.farm_check_minutes = self._farm_interval.value()
         c.schedule.friend_check_minutes = self._friend_interval.value()
         c.features.auto_harvest = self._cb_harvest.isChecked()
@@ -213,6 +220,10 @@ class SettingsPanel(QWidget):
         for i in range(self._window_position.count()):
             if self._window_position.itemData(i) == c.planting.window_position.value:
                 self._window_position.setCurrentIndex(i)
+                break
+        for i in range(self._engine_mode.count()):
+            if self._engine_mode.itemData(i) == c.engine_mode.value:
+                self._engine_mode.setCurrentIndex(i)
                 break
         self._farm_interval.setValue(c.schedule.farm_check_minutes)
         self._friend_interval.setValue(c.schedule.friend_check_minutes)

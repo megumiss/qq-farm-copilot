@@ -18,6 +18,7 @@
 """
 import time
 import threading
+from datetime import datetime
 from enum import Enum
 import cv2
 import numpy as np
@@ -26,7 +27,7 @@ from loguru import logger
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
-from models.config import AppConfig, PlantMode
+from models.config import AppConfig, PlantMode, EngineMode
 from models.farm_state import ActionType
 from models.game_data import get_best_crop_for_level, get_crop_by_name, format_grow_time
 from core.window_manager import WindowManager
@@ -34,6 +35,8 @@ from core.screen_capture import ScreenCapture
 from core.cv_detector import CVDetector, DetectResult
 from core.action_executor import ActionExecutor
 from core.task_scheduler import TaskScheduler
+from core.task_executor import TaskExecutor
+from core.task_registry import TaskItem, TaskResult, TaskSnapshot, build_default_tasks
 from core.scene_detector import Scene, identify_scene, SceneStabilityTracker
 from core.page_graph import PageId
 from core.navigator import Navigator
@@ -135,6 +138,9 @@ class BotEngine(QObject):
         # 调度
         self.scheduler = TaskScheduler()
         self._worker: BotWorker | None = None
+        self._engine_mode: EngineMode = self._resolve_engine_mode(config)
+        self._task_executor: TaskExecutor | None = None
+        self._executor_tasks: dict[str, TaskItem] = {}
 
         self.scheduler.farm_check_triggered.connect(self._on_farm_check)
         self.scheduler.friend_check_triggered.connect(self._on_friend_check)
@@ -149,6 +155,150 @@ class BotEngine(QObject):
             s._stop_requested = False
             s.set_cancel_checker(self._is_cancel_requested)
             s.set_action_hook(self._on_strategy_action)
+
+    def _resolve_engine_mode(self, config: AppConfig) -> EngineMode:
+        mode = getattr(config, "engine_mode", EngineMode.LEGACY)
+        if isinstance(mode, EngineMode):
+            return mode
+        text = str(mode or "").strip().lower()
+        if text == EngineMode.EXECUTOR.value:
+            return EngineMode.EXECUTOR
+        if text == EngineMode.LEGACY.value:
+            return EngineMode.LEGACY
+        if getattr(config, "executor", None) and bool(config.executor.enabled):
+            return EngineMode.EXECUTOR
+        return EngineMode.LEGACY
+
+    def _using_executor_mode(self) -> bool:
+        return self._engine_mode == EngineMode.EXECUTOR
+
+    def _executor_running(self) -> bool:
+        return bool(self._task_executor and self._task_executor.is_running())
+
+    @staticmethod
+    def _task_next_ts(item: TaskItem | None) -> float:
+        if not item or not item.enabled:
+            return 0.0
+        return item.next_run.timestamp()
+
+    def _sync_executor_tasks_from_config(self):
+        if not self._executor_tasks:
+            return
+        default_success = max(1, int(self.config.executor.default_success_interval))
+        default_failure = max(1, int(self.config.executor.default_failure_interval))
+        max_failures = max(1, int(self.config.executor.max_failures))
+        farm_success = max(default_success, int(self.config.schedule.farm_check_minutes) * 60)
+        friend_success = max(default_success, int(self.config.schedule.friend_check_minutes) * 60)
+        friend_enabled = bool(self.config.features.auto_help or self.config.features.auto_steal)
+
+        if self._task_executor:
+            self._task_executor.set_empty_queue_policy(self.config.executor.empty_queue_policy)
+            self._task_executor.update_task(
+                "farm_main",
+                enabled=True,
+                success_interval=farm_success,
+                failure_interval=default_failure,
+                max_failures=max_failures,
+            )
+            self._task_executor.update_task(
+                "friend",
+                enabled=friend_enabled,
+                success_interval=friend_success,
+                failure_interval=max(default_failure, 60),
+                max_failures=max_failures,
+            )
+            if friend_enabled:
+                self._task_executor.task_call("friend", force_call=False)
+            return
+
+        farm_item = self._executor_tasks.get("farm_main")
+        if farm_item:
+            farm_item.enabled = True
+            farm_item.success_interval = farm_success
+            farm_item.failure_interval = default_failure
+            farm_item.max_failures = max_failures
+
+        friend_item = self._executor_tasks.get("friend")
+        if friend_item:
+            friend_item.enabled = friend_enabled
+            friend_item.success_interval = friend_success
+            friend_item.failure_interval = max(default_failure, 60)
+            friend_item.max_failures = max_failures
+            if friend_enabled and friend_item.next_run < datetime.now():
+                friend_item.next_run = datetime.now()
+
+    def _init_executor(self):
+        self._executor_tasks = build_default_tasks(self.config)
+        self._sync_executor_tasks_from_config()
+        self._task_executor = TaskExecutor(
+            tasks=self._executor_tasks,
+            runners={
+                "farm_main": self._run_task_farm_main,
+                "friend": self._run_task_friend,
+            },
+            empty_queue_policy=self.config.executor.empty_queue_policy,
+            on_snapshot=self._on_executor_snapshot,
+            on_task_done=self._on_executor_task_done,
+            on_idle=self._on_executor_idle,
+        )
+        self._task_executor.start()
+
+    def _stop_executor(self):
+        executor = self._task_executor
+        self._task_executor = None
+        if executor:
+            executor.stop(wait_timeout=1.5)
+        self._executor_tasks = {}
+
+    def _run_task_farm_main(self) -> TaskResult:
+        payload = self.check_farm(self._session_id)
+        return TaskResult.from_legacy_dict(payload)
+
+    def _run_task_friend(self) -> TaskResult:
+        payload = self.check_friends(self._session_id)
+        return TaskResult.from_legacy_dict(payload)
+
+    def _on_executor_snapshot(self, snapshot: TaskSnapshot):
+        self.scheduler.update_runtime_metrics(
+            current_task=snapshot.running_task or "--",
+            failure_count=self._runtime_failure_count,
+            running_tasks=1 if snapshot.running_task else 0,
+            pending_tasks=len(snapshot.pending_tasks),
+            waiting_tasks=len(snapshot.waiting_tasks),
+        )
+        self.scheduler.set_next_checks(
+            farm_ts=self._task_next_ts(self._executor_tasks.get("farm_main")),
+            friend_ts=self._task_next_ts(self._executor_tasks.get("friend")),
+        )
+
+    def _on_executor_task_done(self, task_name: str, result: TaskResult):
+        if result.actions:
+            self.log_message.emit(f"[{task_name}] 本轮完成: {', '.join(result.actions)}")
+        if result.success:
+            self._runtime_failure_count = 0
+        else:
+            self._runtime_failure_count += 1
+            if result.error:
+                self.log_message.emit(f"[{task_name}] 操作异常: {result.error}")
+
+        last_result = result.actions[-1] if result.actions else ("ok" if result.success else "failed")
+        self.scheduler.update_runtime_metrics(
+            failure_count=self._runtime_failure_count,
+            last_result=last_result,
+        )
+
+    def _on_executor_idle(self):
+        if self._is_cancel_requested():
+            return
+        if not self.navigator:
+            return
+        rect = self.window_manager.get_capture_rect()
+        if not rect:
+            return
+        try:
+            self.navigator.ensure(rect, PageId.MAIN, timeout=0.8, confirm_wait=0.12)
+        except Exception as exc:
+            logger.debug(f"idle ensure main failed: {exc}")
 
     def _reset_scene_confirm(self):
         self._scene_tracker.reset()
@@ -275,6 +425,8 @@ class BotEngine(QObject):
     def _is_cancel_requested(self, session_id: int | None = None) -> bool:
         if session_id is not None and session_id != self._session_id:
             return True
+        if self._task_executor and self._task_executor.is_stop_requested():
+            return True
         return self._cancel_event.is_set()
 
     def is_session_cancelled(self, session_id: int) -> bool:
@@ -316,6 +468,12 @@ class BotEngine(QObject):
 
     def update_config(self, config: AppConfig):
         self.config = config
+        new_mode = self._resolve_engine_mode(config)
+        if not self._worker_running() and not self._executor_running():
+            self._engine_mode = new_mode
+        elif new_mode != self._engine_mode:
+            self.log_message.emit(f"执行模式将在下次启动时切换为: {new_mode.value}")
+        self._sync_executor_tasks_from_config()
 
     def _resolve_crop_name(self) -> str:
         """根据策略决定种植作物"""
@@ -362,9 +520,11 @@ class BotEngine(QObject):
 
 
     def start(self) -> bool:
-        if self._worker_running():
+        if self._worker_running() or self._executor_running():
             self.log_message.emit("上一轮任务仍在停止中，请稍候再启动")
             return False
+        self._engine_mode = self._resolve_engine_mode(self.config)
+        self.config.executor.enabled = self._engine_mode == EngineMode.EXECUTOR
         self._switch_session(cancelled=False)
         self._runtime_failure_count = 0
         self._clear_expected_states()
@@ -416,25 +576,49 @@ class BotEngine(QObject):
             on_level_up=self._on_level_up,
         )
 
-        farm_ms = self.config.schedule.farm_check_minutes * 60 * 1000
-        friend_ms = self.config.schedule.friend_check_minutes * 60 * 1000
-        self.scheduler.start(farm_ms, friend_ms)
-        self.scheduler.update_runtime_metrics(
-            current_task="farm_main",
-            current_page="unknown",
-            failure_count=self._runtime_failure_count,
-            running_tasks=0,
-            pending_tasks=0,
-            waiting_tasks=1,
+        if self._using_executor_mode():
+            self.scheduler.stop()
+            self.scheduler.force_state("running")
+            self.scheduler.update_runtime_metrics(
+                current_task="--",
+                current_page="unknown",
+                failure_count=self._runtime_failure_count,
+                running_tasks=0,
+                pending_tasks=0,
+                waiting_tasks=0,
+                last_result="--",
+                last_tick_ms="--",
+            )
+            self._init_executor()
+        else:
+            farm_ms = self.config.schedule.farm_check_minutes * 60 * 1000
+            friend_ms = self.config.schedule.friend_check_minutes * 60 * 1000
+            self.scheduler.start(farm_ms, friend_ms)
+            self.scheduler.update_runtime_metrics(
+                current_task="farm_main",
+                current_page="unknown",
+                failure_count=self._runtime_failure_count,
+                running_tasks=0,
+                pending_tasks=0,
+                waiting_tasks=1,
+            )
+
+        self.log_message.emit(
+            f"Bot已启动({self._engine_mode.value}) - 窗口: {window.title} | 模板: {tpl_count}个"
         )
-        self.log_message.emit(f"Bot已启动 - 窗口: {window.title} | 模板: {tpl_count}个")
         return True
 
     def stop(self):
         self._switch_session(cancelled=True)
         self._clear_expected_states()
         self._reset_scene_confirm()
-        self.scheduler.stop()
+
+        if self._using_executor_mode():
+            self._stop_executor()
+            self.scheduler.force_state("idle")
+        else:
+            self.scheduler.stop()
+
         self.scheduler.update_runtime_metrics(
             current_task="--",
             current_page="--",
@@ -442,7 +626,11 @@ class BotEngine(QObject):
             running_tasks=0,
             pending_tasks=0,
             waiting_tasks=0,
+            last_result="--",
+            last_tick_ms="--",
         )
+        self.scheduler.set_next_checks(farm_ts=0.0, friend_ts=0.0)
+
         if self._worker and self._worker.isRunning():
             self._worker.requestInterruption()
             if not self._worker.wait(80):
@@ -452,6 +640,12 @@ class BotEngine(QObject):
         self.log_message.emit("Bot已停止")
 
     def pause(self):
+        if self._using_executor_mode():
+            if self._task_executor:
+                self._task_executor.pause()
+            self.scheduler.force_state("paused")
+            return
+
         self._switch_session(cancelled=True)
         self._clear_expected_states()
         self._reset_scene_confirm()
@@ -460,22 +654,44 @@ class BotEngine(QObject):
         self.scheduler.pause()
 
     def resume(self):
+        if self._using_executor_mode():
+            if self._task_executor:
+                self._task_executor.resume()
+            self.scheduler.force_state("running")
+            return
+
         self._switch_session(cancelled=False)
         self._clear_expected_states()
         self._reset_scene_confirm()
         self.scheduler.resume()
 
     def run_once(self):
+        if self._using_executor_mode():
+            if not self._task_executor or not self._task_executor.is_running():
+                self.log_message.emit("执行器未运行，无法立即执行")
+                return
+            self._task_executor.task_call("farm_main")
+            self._task_executor.resume()
+            return
+
         if self._is_cancel_requested():
             self._switch_session(cancelled=False)
         self._on_farm_check()
 
     def _on_farm_check(self):
+        if self._using_executor_mode():
+            if self._task_executor:
+                self._task_executor.task_call("farm_main")
+            return
         if self._is_cancel_requested():
             return
         self._spawn_worker("farm")
 
     def _on_friend_check(self):
+        if self._using_executor_mode():
+            if self._task_executor and (self.config.features.auto_steal or self.config.features.auto_help):
+                self._task_executor.task_call("friend", force_call=False)
+            return
         if self._is_cancel_requested():
             return
         if not self.config.features.auto_steal and not self.config.features.auto_help:
@@ -483,6 +699,8 @@ class BotEngine(QObject):
         self._spawn_worker("friend")
 
     def _on_task_finished(self, session_id: int, result: dict):
+        if self._using_executor_mode():
+            return
         sender = self.sender()
         if sender is self._worker:
             self._worker = None
@@ -506,6 +724,8 @@ class BotEngine(QObject):
             self.scheduler.set_farm_interval(next_sec)
 
     def _on_task_error(self, session_id: int, error_msg: str):
+        if self._using_executor_mode():
+            return
         sender = self.sender()
         if sender is self._worker:
             self._worker = None
@@ -887,8 +1107,9 @@ class BotEngine(QObject):
         return result
 
     def check_friends(self, session_id: int | None = None) -> dict:
+        friend_interval = max(60, int(self.config.schedule.friend_check_minutes) * 60)
         if self._is_cancel_requested(session_id):
-            return {"success": False, "actions_done": [], "next_check_seconds": 1800, "message": "停止中"}
-        result = {"success": True, "actions_done": [], "next_check_seconds": 1800}
+            return {"success": False, "actions_done": [], "next_check_seconds": friend_interval, "message": "停止中"}
+        result = {"success": True, "actions_done": [], "next_check_seconds": friend_interval}
         logger.info("好友巡查功能开发中...")
         return result

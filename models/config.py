@@ -29,6 +29,11 @@ class WindowPlatform(str, Enum):
     WECHAT = "wechat"
 
 
+class EngineMode(str, Enum):
+    LEGACY = "legacy"
+    EXECUTOR = "executor"
+
+
 class FeaturesConfig(BaseModel):
     auto_harvest: bool = True
     auto_plant: bool = True
@@ -72,6 +77,22 @@ class ScheduleConfig(BaseModel):
     task_check_minutes: int = 60
 
 
+class ExecutorConfig(BaseModel):
+    enabled: bool = False
+    empty_queue_policy: str = "stay"
+    default_success_interval: int = 30
+    default_failure_interval: int = 30
+    max_failures: int = 3
+
+    @field_validator("empty_queue_policy", mode="before")
+    @classmethod
+    def _normalize_empty_queue_policy(cls, value):
+        text = str(value or "stay").strip().lower()
+        if text not in {"stay", "goto_main"}:
+            return "stay"
+        return text
+
+
 class PlantingConfig(BaseModel):
     strategy: PlantMode = PlantMode.BEST_EXP_RATE
     preferred_crop: str = "白萝卜"  # strategy=preferred 时使用
@@ -82,10 +103,12 @@ class PlantingConfig(BaseModel):
 
 class AppConfig(BaseModel):
     window_title_keyword: str = "QQ经典农场"
+    engine_mode: EngineMode = EngineMode.LEGACY
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
+    executor: ExecutorConfig = Field(default_factory=ExecutorConfig)
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
     sell: SellConfig = Field(default_factory=SellConfig)
 

@@ -154,6 +154,29 @@ class TaskScheduler(QObject):
         for key in self._stats:
             self._stats[key] = 0
 
+    def force_state(self, state: BotState | str):
+        target = state
+        if not isinstance(target, BotState):
+            try:
+                target = BotState(str(state))
+            except Exception:
+                target = BotState.IDLE
+        if target == BotState.RUNNING and not self._start_time:
+            self._start_time = time.time()
+        self._set_state(target)
+        self.stats_updated.emit(self.get_stats())
+
+    def set_next_checks(self, *, farm_ts: float | None = None, friend_ts: float | None = None):
+        changed = False
+        if farm_ts is not None and self._next_farm_check != farm_ts:
+            self._next_farm_check = float(farm_ts)
+            changed = True
+        if friend_ts is not None and self._next_friend_check != friend_ts:
+            self._next_friend_check = float(friend_ts)
+            changed = True
+        if changed:
+            self.stats_updated.emit(self.get_stats())
+
     def update_runtime_metrics(self, **kwargs):
         changed = False
         for key in (

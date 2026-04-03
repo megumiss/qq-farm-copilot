@@ -1,10 +1,10 @@
 # TODO - 任务执行器改造（独立）
 
 ## 1. 改造目标与边界
-- [ ] 把“定时器触发 + 大循环扫描”改成“任务队列 + 任务执行器 + 任务级调度”。
-- [ ] 在不破坏现有策略能力的前提下，实现可灰度切换（保留旧 `BotWorker/check_farm` 入口）。
+- [x] 把“定时器触发 + 大循环扫描”改成“任务队列 + 任务执行器 + 任务级调度”。
+- [x] 在不破坏现有策略能力的前提下，实现可灰度切换（保留旧 `BotWorker/check_farm` 入口）。
 - [ ] 统一中断语义：点击、等待、截图、页面确认都可被 `stop_event` 及时打断。
-- [ ] 引入队列可观测性：运行中、待执行、等待中三态可见。
+- [x] 引入队列可观测性：运行中、待执行、等待中三态可见。
 
 ## 2. 当前现状（项目实际代码）
 - 调度层：`core/task_scheduler.py`
@@ -28,52 +28,52 @@
 ## 4. 目标架构与落地点
 
 ### 4.1 任务模型（新增 `core/task_registry.py`）
-- [ ] 定义 `TaskItem`
+- [x] 定义 `TaskItem`
   - `name`, `enabled`, `priority`, `next_run`
   - `success_interval`, `failure_interval`
   - `max_failures`, `failure_count`
-- [ ] 定义 `TaskResult`
+- [x] 定义 `TaskResult`
   - `success`, `actions`, `next_run_seconds`
   - `need_recover`, `error`
-- [ ] 定义 `TaskSnapshot`
+- [x] 定义 `TaskSnapshot`
   - `running_task`, `pending_tasks`, `waiting_tasks`
 
 ### 4.2 队列选择与调度接口（新增 `core/task_queue.py` 或并入 `task_executor.py`）
-- [ ] 任务分类：
+- [x] 任务分类：
   - `next_run <= now` -> pending
   - `next_run > now` -> waiting
-- [ ] 排序规则：
+- [x] 排序规则：
   - pending：priority -> next_run
   - waiting：next_run 升序
-- [ ] 调度接口：
+- [x] 调度接口：
   - `get_next_task(now)`
   - `snapshot(now)`
   - `task_delay(task, seconds|target_time)`
   - `task_call(task, force=True)`
 
 ### 4.3 统一执行循环（新增 `core/task_executor.py`）
-- [ ] 主循环：`select_next_task -> run_task_once -> apply_delay -> update_failure_record`
-- [ ] 空队列策略：
+- [x] 主循环：`select_next_task -> run_task_once -> apply_delay -> update_failure_record`
+- [x] 空队列策略：
   - `stay`
   - `goto_main`
-- [ ] 失败熔断：
+- [x] 失败熔断：
   - 连续失败达到阈值后降级延迟并上报 UI
 - [ ] 停止语义统一：
   - 执行器持有单一 `stop_event`
   - `BaseStrategy.sleep`、`ActionExecutor._sleep_interruptible`、执行器 wait 共用 stop 检查
 
 ### 4.4 与 `BotEngine` 的集成（修改 `core/bot_engine.py`）
-- [ ] 新增模式开关：`engine_mode = legacy|executor`（默认 `legacy`）
-- [ ] `start()` 路由：
+- [x] 新增模式开关：`engine_mode = legacy|executor`（默认 `legacy`）
+- [x] `start()` 路由：
   - `legacy`：沿用 `TaskScheduler + BotWorker`
   - `executor`：启动 `TaskExecutor` 线程
-- [ ] `stop/pause/resume/run_once` 统一语义：
+- [x] `stop/pause/resume/run_once` 统一语义：
   - `run_once` => `task_call('farm_main')`
   - pause 仅暂停取任务，stop 强中断
-- [ ] `stats_updated` 增加队列摘要字段
+- [x] `stats_updated` 增加队列摘要字段
 
 ## 5. 任务迁移顺序（执行器专项）
-- [ ] 第一批任务接入：
+- [x] 第一批任务接入：
   - `farm_main`
   - `friend`
 - [ ] 迁移原则：
@@ -85,12 +85,12 @@
   - `check_farm` 里的“下次检查时间”逻辑迁到任务结果处理层
 
 ## 6. 配置与 UI 对齐
-- [ ] 修改 `models/config.py`：
+- [x] 修改 `models/config.py`：
   - `executor.enabled`
   - `executor.empty_queue_policy`
   - `executor.default_success_interval`
   - `executor.default_failure_interval`
-- [ ] GUI 增强（`gui/widgets/status_panel.py` + 新增 `task_queue_panel.py`）：
+- [x] GUI 增强（`gui/widgets/status_panel.py` + 新增 `task_queue_panel.py`）：
   - 展示 `running / pending / waiting`
   - “立即执行”按钮触发 `task_call('farm_main')`
 
@@ -107,10 +107,10 @@
   - 调度行为不再依赖单一 `farm_interval`
 
 ## 8. 最近可执行项（仅任务执行器）
-- [ ] 建 `core/task_registry.py`（`TaskItem/TaskResult/TaskSnapshot`）
-- [ ] 建 `core/task_executor.py` 最小循环（先接 `farm_main/friend`）
-- [ ] 在 `BotEngine` 增加 `legacy|executor` 模式切换
-- [ ] 在状态页加队列简版展示（running/pending/waiting）
+- [x] 建 `core/task_registry.py`（`TaskItem/TaskResult/TaskSnapshot`）
+- [x] 建 `core/task_executor.py` 最小循环（先接 `farm_main/friend`）
+- [x] 在 `BotEngine` 增加 `legacy|executor` 模式切换
+- [x] 在状态页加队列简版展示（running/pending/waiting）
 
 ## 9. 改造执行步骤（可直接开工）
 1. [ ] 冻结现状与基线：记录当前 `legacy` 路径的行为、耗时与停止响应时间。
