@@ -86,7 +86,7 @@ python tools/template_collector.py
 | `btn_home.png` | 回家按钮 | 好友家园 |
 | `btn_friend_help.png` | 好友求助按钮 | 农场主页 |
 | `btn_expand.png` | 扩建按钮 | 农场主页 |
-| `btn_expand_confirm.png` | 扩建确认按钮 | 扩建弹窗 |
+| `btn_expand_direct_confirm.png` | 扩建确认按钮 | 扩建弹窗 |
 | `icon_levelup.png` | 升级弹窗特征图标 | 升级弹窗 |
 
 种子模板可通过导入工具批量生成：
