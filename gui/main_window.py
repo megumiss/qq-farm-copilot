@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.engine.bot_engine import BotEngine
+from core.engine.bot import BotEngine
 from gui.widgets.feature_panel import FeaturePanel
 from gui.widgets.log_panel import LogPanel
 from gui.widgets.settings_panel import SettingsPanel

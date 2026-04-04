@@ -17,7 +17,7 @@ class TaskFarmReward:
         """执行当前模块主流程并返回结果。"""
         if not features.get('auto_task', False):
             return StepResult()
-        if not self.ui.appear_then_click(TASK_CHECK, offset=(30, 30), interval=0.2, threshold=0.8, static=False):
+        if not self.ui.appear_then_click(TASK_CHECK, offset=(30, 30), interval=1, threshold=0.8, static=False):
             return StepResult()
         self.engine._sleep_interruptible(0.6)
         out = StepResult.from_value(self.engine.task._handle_task_result(rect))

@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from loguru import logger
 from PIL import Image
+
 from utils.template_paths import (
     normalize_template_platform,
     template_scan_roots,

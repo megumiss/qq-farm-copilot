@@ -6,7 +6,7 @@ import time
 
 from loguru import logger
 
-from core.engine.task_registry import TaskResult
+from core.engine.task.registry import TaskResult
 from core.base.step_result import StepResult
 from core.tasks.task_farm_friend import TaskFarmFriend
 from core.tasks.task_farm_harvest import TaskFarmHarvest
@@ -35,7 +35,7 @@ class TaskFarmMain:
 
     def run(self, session_id: int | None = None) -> TaskResult:
         """执行当前模块主流程并返回结果。"""
-        result = TaskResult(success=False, actions=[], next_run_seconds=5, error='')
+        result = TaskResult(success=False, actions=[], next_run_seconds=None, error='')
         if self.engine._is_cancel_requested(session_id):
             result.error = '停止中'
             return result
@@ -155,14 +155,6 @@ class TaskFarmMain:
                 break
         else:
             logger.info(f'达到页面跳转预算上限: {transition_budget}，结束本轮')
-
-        # 根据是否发生播种决定下一轮检查间隔。
-        has_planted = any('播种' in a for a in result.actions)
-        if has_planted:
-            interval = max(1, int(self.engine.config.tasks.farm_main.interval_seconds))
-            result.next_run_seconds = interval
-        else:
-            result.next_run_seconds = 30
 
         result.success = True
         self.engine.screen_capture.cleanup_old_screenshots(0)

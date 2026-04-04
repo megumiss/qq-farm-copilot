@@ -24,14 +24,14 @@ class TaskFarmSell:
         if sold_this_round or not features.get('auto_sell', False):
             return StepResult(), sold_this_round
 
-        if not self.ui.appear_then_click(WAREHOUSE_CHECK, offset=(30, 30), interval=0.2, threshold=0.8, static=False):
+        if not self.ui.appear_then_click(WAREHOUSE_CHECK, offset=(30, 30), interval=1, threshold=0.8, static=False):
             return StepResult(), sold_this_round
         self.engine._sleep_interruptible(0.6)
 
         batch_clicked = False
         for _ in range(5):
             self.ui.device.screenshot()
-            if self.ui.appear_then_click(BTN_BATCH_SELL, offset=(30, 30), interval=0.2, threshold=0.8, static=False):
+            if self.ui.appear_then_click(BTN_BATCH_SELL, offset=(30, 30), interval=1, threshold=0.8, static=False):
                 batch_clicked = True
                 self.engine._sleep_interruptible(0.4)
                 break
@@ -43,7 +43,7 @@ class TaskFarmSell:
 
         for _ in range(5):
             self.ui.device.screenshot()
-            if self.ui.appear_then_click(BTN_CONFIRM, offset=(30, 30), interval=0.2, threshold=0.8, static=False):
+            if self.ui.appear_then_click(BTN_CONFIRM, offset=(30, 30), interval=1, threshold=0.8, static=False):
                 self.engine._record_stat(ActionType.SELL)
                 self.engine._sleep_interruptible(0.4)
                 self._close_page()
@@ -56,7 +56,7 @@ class TaskFarmSell:
     def _close_page(self):
         """执行 `close page` 相关处理。"""
         self.ui.device.screenshot()
-        self.ui.appear_then_click(BTN_CLOSE, offset=(30, 30), interval=0.2, threshold=0.8, static=False)
-        self.ui.appear_then_click(BTN_CLOSE, offset=(30, 30), interval=0.2, threshold=0.8, static=False)
+        self.ui.appear_then_click(BTN_CLOSE, offset=(30, 30), interval=1, threshold=0.8, static=False)
+        self.ui.appear_then_click(BTN_CLOSE, offset=(30, 30), interval=1, threshold=0.8, static=False)
 
 

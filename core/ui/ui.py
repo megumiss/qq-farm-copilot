@@ -6,7 +6,6 @@ from typing import Callable
 
 from loguru import logger
 
-from core.base.button import Button
 from core.base.timer import Timer
 from core.handler.info_handler import InfoHandler
 from core.ui.page import *
@@ -101,16 +100,7 @@ class UI(InfoHandler):
         if interval and not self._button_interval_ready(key, float(interval)):
             return False
 
-        x, y = GOTO_MAIN.location
-
-        button = Button(
-            area=(int(x), int(y), int(x) + 1, int(y) + 1),
-            color=(128, 128, 128),
-            button=(int(x), int(y), int(x) + 1, int(y) + 1),
-            file=None,
-            name='goto_main',
-        )
-        ok = bool(self.device.click(button))
+        ok = bool(self.device.click(GOTO_MAIN))
         if ok and interval:
             self._button_interval_hit(key)
         return ok

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 @dataclass
 class StepResult:
     """封装 `StepResult` 相关的数据与行为。"""
+
     action: str | None = None
     actions: list[str] = field(default_factory=list)
 

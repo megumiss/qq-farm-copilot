@@ -9,7 +9,7 @@ from typing import Callable
 
 from loguru import logger
 
-from core.engine.task_registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
+from core.engine.task.registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
 
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
@@ -147,7 +147,8 @@ class TaskExecutor:
                 pending.append(task)
             else:
                 waiting.append(task)
-        pending.sort(key=lambda t: (t.priority, t.next_run))
+        # 对齐 NIKKE：待执行队列优先看任务优先级。
+        pending.sort(key=lambda t: t.priority)
         waiting.sort(key=lambda t: t.next_run)
         return TaskSnapshot(
             running_task=self._running_task,
@@ -183,18 +184,14 @@ class TaskExecutor:
         now = datetime.now()
         if result.success:
             task.failure_count = 0
-            interval = (
-                int(result.next_run_seconds) if result.next_run_seconds is not None else int(task.success_interval)
-            )
+            interval = int(task.success_interval)
         else:
             task.failure_count += 1
-            interval = (
-                int(result.next_run_seconds) if result.next_run_seconds is not None else int(task.failure_interval)
-            )
-            # 连续失败超过阈值时主动放大重试间隔，避免高频失败刷屏。
-            if task.failure_count >= max(1, int(task.max_failures)):
-                interval = max(interval, int(task.failure_interval) * 3)
+            interval = int(task.failure_interval)
 
+        # 对齐 NIKKE task_delay 语义：任务显式给出下一次延迟时优先使用。
+        if result.next_run_seconds is not None:
+            interval = int(result.next_run_seconds)
         task.next_run = now + timedelta(seconds=max(1, interval))
 
     def _loop(self):

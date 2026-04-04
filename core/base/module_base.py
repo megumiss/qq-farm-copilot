@@ -1,4 +1,4 @@
-"""精简版 NIKKE ModuleBase。"""
+"""ModuleBase。"""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ from typing import Any
 import cv2
 import numpy as np
 
-from core.vision.cv_detector import CVDetector
 from core.base.button import Button
 from core.base.timer import Timer
+from core.vision.cv_detector import CVDetector
 
 
 class ModuleBase:
     """提供按钮识别与点击的基础能力，供 UI/任务模块复用。"""
+
     def __init__(self, config: Any, detector: CVDetector, device):
         """注入配置、检测器与设备对象，并注册统一的按钮匹配入口。"""
         self.config = config
@@ -61,7 +62,7 @@ class ModuleBase:
             )
             search_img = self._crop_like_pillow(image, search_area)
 
-        # 对齐 NIKKE Button.match：直接模板匹配，不走 detector 多尺度分支。
+        # 直接模板匹配
         result = cv2.matchTemplate(button.image, search_img, cv2.TM_CCOEFF_NORMED)
         _, similarity, _, upper_left = cv2.minMaxLoc(result)
         hit = float(similarity) > float(threshold)
@@ -129,10 +130,12 @@ class ModuleBase:
                 return True
         return False
 
-    def appear_then_click_any(self, buttons, **kwargs):
+    def appear_then_click_any(self, buttons, interval=1, **kwargs):
         """依次检测并点击多个按钮，任一成功即返回 `True`。"""
+        params = dict(kwargs)
+        params.setdefault('interval', interval)
         for btn in buttons:
-            if self.appear_then_click(btn, **kwargs):
+            if self.appear_then_click(btn, **params):
                 return True
         return False
 
@@ -152,14 +155,10 @@ class ModuleBase:
         if timer:
             timer.reset()
 
-    def appear(self, button: Button, offset=0, interval=0, threshold=None, static=True) -> bool:
+    def appear(self, button: Button, offset=0, threshold=None, static=True) -> bool:
         """判断按钮是否出现，支持静态区域匹配与全图匹配两种模式。"""
         image = self.device.image
         if image is None:
-            return False
-
-        key = button.name
-        if interval and not self._button_interval_ready(key, float(interval)):
             return False
 
         if offset:
@@ -167,28 +166,36 @@ class ModuleBase:
             t = float(threshold) if threshold is not None else 0.8
             hit = button.match(image, offset=offset, threshold=t, static=static)
         else:
-            # 无 offset 时沿用按钮像素差分判定阈值（与 Button.appear_on 对齐）。
+            # 无 offset 时沿用按钮像素差分判定阈值
             t = float(threshold) if threshold is not None else 20.0
             hit = button.appear_on(image, threshold=t)
 
-        if hit and interval:
-            self._button_interval_hit(key)
         return bool(hit)
 
     def appear_then_click(
-        self, button: Button, offset=0, click_offset=0, interval=0, threshold=None, static=True, screenshot=False
+        self, button: Button, offset=0, click_offset=0, interval=1, threshold=None, static=True, screenshot=False
     ) -> bool:
         """按钮出现后执行点击；支持无模板按钮的直接点击模式。"""
-        # 对无模板按钮（如点击空白处）直接点击，保持 NIKKE 式导航可用。
-        if not button.file:
-            return bool(self.device.click(button, click_offset))
+        key = button.name
+        if interval and not self._button_interval_ready(key, float(interval)):
+            return False
 
-        hit = self.appear(button=button, offset=offset, interval=interval, threshold=threshold, static=static)
+        # 对无模板按钮（如点击空白处）直接点击
+        if not button.file:
+            ok = bool(self.device.click(button, click_offset))
+            if ok and interval:
+                self._button_interval_hit(key)
+            return ok
+
+        hit = self.appear(button=button, offset=offset, threshold=threshold, static=static)
         if not hit:
             return False
         if screenshot:
             self.device.screenshot()
-        return bool(self.device.click(button, click_offset))
+        ok = bool(self.device.click(button, click_offset))
+        if ok and interval:
+            self._button_interval_hit(key)
+        return ok
 
     def interval_reset(self, button):
         """重置一个或一组按钮的点击节流计时器。"""
@@ -200,5 +207,3 @@ class ModuleBase:
         timer = self.interval_timer.get(key)
         if timer:
             timer.reset()
-
-

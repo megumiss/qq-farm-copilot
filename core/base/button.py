@@ -1,4 +1,4 @@
-"""精简版 NIKKE Button。"""
+"""Button。"""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import Callable
 import cv2
 import numpy as np
 from loguru import logger
+
 from utils.template_paths import normalize_template_platform
 
 MatchProvider = Callable[
@@ -21,6 +22,7 @@ MatchProvider = Callable[
 
 class Button:
     """封装 `Button` 相关的数据与行为。"""
+
     _match_provider: MatchProvider | None = None
     _template_platform: str = 'qq'
     _instances: weakref.WeakSet = weakref.WeakSet()
@@ -113,15 +115,14 @@ class Button:
         return str(self.raw_name or '')
 
     def _parse_property(self, value):
-        """解析属性值：字典类型仅按当前平台取值，不在运行时回退。"""
+        """解析属性值：字典类型仅按当前平台取值。"""
         if isinstance(value, dict):
             platform = normalize_template_platform(Button._template_platform)
             if platform in value:
                 return value[platform]
             keys = ','.join(str(k) for k in value.keys())
             raise KeyError(
-                f"Button property missing platform '{platform}' key "
-                f"(name={self.raw_name}, available=[{keys}])"
+                f"Button property missing platform '{platform}' key (name={self.raw_name}, available=[{keys}])"
             )
         return value
 
@@ -142,7 +143,7 @@ class Button:
         return self.name
 
     def ensure_template(self):
-        """按当前平台字段加载模板图片（不做运行时平台回退）。"""
+        """按当前平台字段加载模板图片。"""
         if self._match_init:
             return
         file_raw = self._parse_property(self.raw_file)
@@ -156,7 +157,7 @@ class Button:
             file_path_str = ''
 
         if file_path_str and os.path.exists(file_path_str):
-            # 使用 imdecode 兼容中文路径；与 NIKKE 一样按 area 裁模板区域。
+            # 使用 imdecode 兼容中文路径
             image = cv2.imdecode(np.fromfile(file_path_str, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
             if image is not None:
                 if image.ndim == 2:
@@ -168,7 +169,7 @@ class Button:
 
     @staticmethod
     def _crop_like_pillow(image: np.ndarray, area: tuple[int, int, int, int]) -> np.ndarray:
-        """对齐 NIKKE utils.crop：超出边界部分用黑色补齐。"""
+        """超出边界部分用黑色补齐。"""
         x1, y1, x2, y2 = [int(round(v)) for v in area]
         h, w = image.shape[:2]
 
@@ -185,13 +186,7 @@ class Button:
         cropped = image[y1:y2, x1:x2].copy()
         if top or bottom or left or right:
             cropped = cv2.copyMakeBorder(
-                cropped,
-                top,
-                bottom,
-                left,
-                right,
-                borderType=cv2.BORDER_CONSTANT,
-                value=(0, 0, 0),
+                cropped, top, bottom, left, right, borderType=cv2.BORDER_CONSTANT, value=(0, 0, 0)
             )
         return cropped
 
@@ -200,13 +195,7 @@ class Button:
         if Button._match_provider is None:
             logger.debug(f'Button match provider missing: {self.name}')
             return False
-        hit, area, similarity = Button._match_provider(
-            self,
-            image,
-            offset,
-            float(threshold),
-            bool(static),
-        )
+        hit, area, similarity = Button._match_provider(self, image, offset, float(threshold), bool(static))
         if area is not None:
             self._button_offset = area
         logger.debug(
@@ -219,7 +208,6 @@ class Button:
         return bool(hit)
 
     def match_with_scale(self, image, threshold=0.85, scale_range=(0.9, 1.1), scale_step=0.02):
-        # 精简版保持接口一致，先复用基础 match 行为。
         """匹配 `with_scale` 条件。"""
         _ = scale_range, scale_step
         return self.match(image, offset=30, threshold=threshold, static=False)
@@ -240,11 +228,7 @@ class Button:
         diff = float(np.linalg.norm(bgr.astype(np.float32) - color_bgr))
         hit = diff <= float(threshold)
         logger.debug(
-            'Button: {}, color_diff: {:.3f}, threshold: {:.3f}, hit: {}',
-            self.name,
-            diff,
-            float(threshold),
-            bool(hit),
+            'Button: {}, color_diff: {:.3f}, threshold: {:.3f}, hit: {}', self.name, diff, float(threshold), bool(hit)
         )
         return hit
 
