@@ -17,7 +17,7 @@ import os
 import keyboard
 from PIL import Image
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon, QImage, QPixmap
+from PyQt6.QtGui import QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QGroupBox,
@@ -121,8 +121,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('QQ Farm Vision Bot')
         icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'app_icon.svg')
         self.setWindowIcon(QIcon(icon_path))
-        self.setMinimumSize(960, 680)
-        self.resize(1060, 740)
+        
+        # 动态获取当前屏幕的 DPI 缩放比例
+        ratio = self.devicePixelRatioF()
+        
+        self.setMinimumSize(int(540 / ratio) + 500, int(960 / ratio) + 40)
+        self.resize(int(540 / ratio) + 620, int(960 / ratio) + 80)
         self.setStyleSheet(STYLESHEET)
 
         # 根容器：左右分栏，左窄右宽。
@@ -132,22 +136,18 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        # ========== 左侧：截图预览（窄） ==========
-        preview_card = QFrame()
-        preview_card.setStyleSheet("""
-            QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }
-        """)
-        preview_card.setFixedWidth(320)
-        pv_layout = QVBoxLayout(preview_card)
-        pv_layout.setContentsMargins(6, 6, 6, 6)
+        # ========== 左侧：截图预览 ==========
+        from PyQt6.QtWidgets import QSizePolicy
         self._screenshot_label = QLabel('启动后显示\n实时截图')
         self._screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._screenshot_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        # 保持物理宽度为 540 像素，高度随窗口自由拉伸，使得左右两边永远对齐
+        self._screenshot_label.setFixedWidth(int(540 / ratio))
         self._screenshot_label.setStyleSheet("""
-            QLabel { background-color: #f8fafc; border: 1px dashed #cbd5e1;
-                     border-radius: 8px; color: #94a3b8; font-size: 14px; }
+            QLabel { background-color: #ffffff; border: 1px solid #e2e8f0;
+                     border-radius: 10px; color: #94a3b8; font-size: 14px; }
         """)
-        pv_layout.addWidget(self._screenshot_label)
-        root.addWidget(preview_card)
+        root.addWidget(self._screenshot_label)
 
         # ========== 右侧：控制按钮 + Tab ==========
         # 顶部放运行控制按钮，底部放状态与配置标签页。
@@ -213,8 +213,27 @@ class MainWindow(QMainWindow):
         self._log_panel = LogPanel()
         
         log_group = QGroupBox("运行日志")
+        log_group.setObjectName("logGroup")
+        log_group.setStyleSheet("""
+            QGroupBox#logGroup {
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding: 0px;
+                font-weight: bold;
+                color: #475569;
+                background-color: #f8fafc;
+            }
+            QGroupBox#logGroup::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+            }
+        """)
         log_layout = QVBoxLayout(log_group)
-        log_layout.setContentsMargins(0, 6, 0, 0)
+        # 给标题区和日志正文留出间隔，避免标题被内容区域“贴住”。
+        log_layout.setContentsMargins(8, 14, 8, 8)
+        log_layout.setSpacing(0)
         log_layout.addWidget(self._log_panel)
 
         status_page = QWidget()
@@ -253,12 +272,32 @@ class MainWindow(QMainWindow):
             data = image.tobytes('raw', 'RGB')
             qimg = QImage(data, image.width, image.height, 3 * image.width, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
+            target_size = self._screenshot_label.size()
+            if target_size.width() <= 0 or target_size.height() <= 0:
+                return
+
+            # 先按“填满”缩放，再中心裁剪到控件尺寸，避免上下留白。
             scaled = pixmap.scaled(
-                self._screenshot_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
+                target_size,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            self._screenshot_label.setPixmap(scaled)
+            offset_x = max((scaled.width() - target_size.width()) // 2, 0)
+            offset_y = max((scaled.height() - target_size.height()) // 2, 0)
+            cropped = scaled.copy(offset_x, offset_y, target_size.width(), target_size.height())
+
+            # 再对最终图像做圆角裁剪：图片依然充满，仅圆角重叠部分被遮挡。
+            rounded = QPixmap(target_size)
+            rounded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, target_size.width(), target_size.height(), 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, cropped)
+            painter.end()
+
+            self._screenshot_label.setPixmap(rounded)
         except Exception:
             pass
 

@@ -1,7 +1,7 @@
 """日志面板 - 深色终端风格"""
 
 from PyQt6.QtGui import QTextCursor
-from PyQt6.QtWidgets import QTextEdit
+from PyQt6.QtWidgets import QFrame, QTextEdit
 
 
 class LogPanel(QTextEdit):
@@ -12,14 +12,16 @@ class LogPanel(QTextEdit):
         """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.setReadOnly(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setStyleSheet("""
             QTextEdit {
                 background-color: #f8fafc; color: #1e293b;
                 font-family: 'Cascadia Code', 'Consolas', monospace;
-                font-size: 12px; border: none; padding: 8px;
-                border-radius: 6px;
+                font-size: 12px; border: none; padding: 0px;
+                border-radius: 0px;
             }
         """)
+        self.document().setDocumentMargin(0)
 
     def append_log(self, message: str):
         """向日志面板追加一条日志。"""
