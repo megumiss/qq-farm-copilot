@@ -1,4 +1,4 @@
-"""模板提取为 nklite assets（排除 seed）。
+"""模板提取为 UI assets（排除 seed）。
 
 参考 NIKKE/dev_tools/button_extract.py 的思路：
 - 扫描模板目录
@@ -19,7 +19,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = ROOT / 'templates'
 ALIAS_PATH = ROOT / 'configs' / 'button_aliases.json'
-OUTPUT_PATH = ROOT / 'core' / 'nklite' / 'ui' / 'assets.py'
+OUTPUT_PATH = ROOT / 'core' / 'ui' / 'assets.py'
 OVERRIDE_SUFFIXES = {'AREA', 'COLOR', 'BUTTON'}
 
 

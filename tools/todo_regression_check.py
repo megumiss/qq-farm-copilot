@@ -47,10 +47,12 @@ def check_nklite_pages() -> None:
             links.add((src_page, dest_page))
 
     required = {
+        ("page_unknown", "page_main"),
         ("page_friend", "page_main"),
         ("page_shop", "page_main"),
-        ("page_popup", "page_main"),
-        ("page_buy_confirm", "page_main"),
+        ("page_menu", "page_main"),
+        ("page_task", "page_main"),
+        ("page_warehouse", "page_main"),
     }
     for route in required:
         assert route in links, f"missing page link: {route[0]} -> {route[1]}"

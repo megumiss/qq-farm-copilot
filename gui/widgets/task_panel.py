@@ -163,7 +163,6 @@ class TaskPanel(QWidget):
             return
 
         c = self.config
-        c.executor.enabled = True
         c.executor.empty_queue_policy = str(self._empty_policy.currentData())
         c.executor.max_failures = int(self._max_failures.value())
 

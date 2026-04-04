@@ -34,10 +34,7 @@ from core.tasks.task_farm_reward import TaskFarmReward
 from core.tasks.task_farm_main import TaskFarmMain
 from core.ui.page import (
     GOTO_MAIN,
-    page_friend,
     page_main,
-    page_menu,
-    page_shop,
 )
 from core.ui.ui import UI as NKLiteUI
 from core.platform.screen_capture import ScreenCapture
@@ -140,17 +137,6 @@ class BotEngine(QObject):
         if not isinstance(raw, dict):
             return {}
         return {str(k): bool(v) for k, v in raw.items()}
-
-    def _merged_enabled_features(self) -> dict[str, bool]:
-        merged: dict[str, bool] = {}
-        task_names = list(type(self.config.tasks).model_fields.keys())
-        for task_name in task_names:
-            cfg = getattr(self.config.tasks, task_name, None)
-            if cfg is None or not bool(getattr(cfg, 'enabled', False)):
-                continue
-            for key, value in self.get_task_features(task_name).items():
-                merged[key] = bool(merged.get(key, False) or bool(value))
-        return merged
 
     def _sync_executor_tasks_from_config(self):
         if not self._executor_tasks:
@@ -265,22 +251,13 @@ class BotEngine(QObject):
         self._executor_tasks = {}
 
     def _run_task_farm_main(self, _ctx: TaskContext) -> TaskResult:
-        payload = self.check_farm(self._session_id)
-        return TaskResult.from_legacy_dict(payload)
+        return self.check_farm(self._session_id)
 
     def _run_task_friend(self, _ctx: TaskContext) -> TaskResult:
-        payload = self.check_friends(self._session_id)
-        return TaskResult.from_legacy_dict(payload)
+        return self.check_friends(self._session_id)
 
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:
-        payload = self.check_share(self._session_id)
-        result = TaskResult.from_legacy_dict(payload)
-        cfg = self.config.tasks.share
-        if cfg.trigger == TaskTriggerType.DAILY:
-            result.next_run_seconds = self._seconds_to_next_daily(cfg.daily_time)
-        elif result.next_run_seconds is None:
-            result.next_run_seconds = max(1, int(cfg.interval_seconds))
-        return result
+        return self.check_share(self._session_id)
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):
         if not self._accept_executor_events:
@@ -362,7 +339,6 @@ class BotEngine(QObject):
 
     def update_config(self, config: AppConfig):
         self.config = config
-        self.config.executor.enabled = True
         self._sync_executor_tasks_from_config()
 
     def _resolve_crop_name_quiet(self) -> str:
@@ -439,7 +415,6 @@ class BotEngine(QObject):
         if self._executor_running():
             self.log_message.emit('上一轮任务仍在停止中，请稍候再启动')
             return False
-        self.config.executor.enabled = True
         self._switch_session(cancelled=False)
         self._runtime_failure_count = 0
         self.cv_detector.load_templates()
@@ -613,13 +588,6 @@ class BotEngine(QObject):
         if cv_image is None or image is None:
             return None, [], None
 
-        if template_names is None and categories is None:
-            auto_templates, auto_categories, auto_thresholds = self._detect_plan_for_tick()
-            template_names = auto_templates
-            categories = auto_categories
-            if template_thresholds is None:
-                template_thresholds = auto_thresholds
-
         if template_names is not None:
             detections = self.cv_detector.detect_templates(
                 cv_image,
@@ -635,21 +603,6 @@ class BotEngine(QObject):
             detections = self.cv_detector._nms(detections, iou_threshold=0.5)
         else:
             detections = []
-            for cat in self.cv_detector._templates:
-                if cat in ('seed',):
-                    continue
-                if cat == 'land':
-                    thresh = 0.89
-                elif cat == 'button':
-                    thresh = 0.8
-                else:
-                    thresh = 0.8
-                detections += self.cv_detector.detect_category(cv_image, cat, threshold=thresh)
-            detections = [
-                d
-                for d in detections
-                if d.name != 'btn_shop_close' and not (d.name == 'btn_expand' and d.confidence < 0.85)
-            ]
 
         return cv_image, detections, image
 
@@ -734,92 +687,29 @@ class BotEngine(QObject):
         self._record_stat(ActionType.PLANT)
         return f'播种{crop_name}'
 
-    @staticmethod
-    def _scene_core_templates() -> list[str]:
-        return [
-            'btn_buy_confirm',
-            'btn_buy_max',
-            'btn_shop',
-            'btn_shop_close',
-            'btn_home',
-            'btn_close',
-            'btn_confirm',
-            'btn_claim',
-            'btn_share',
-            'icon_levelup',
-            'land_empty',
-            'land_empty_2',
-            'land_empty_3',
-        ]
-
-    def _main_templates_for_tick(self) -> list[str]:
-        features = self._merged_enabled_features()
-        names = set(self._scene_core_templates())
-        if features.get('auto_harvest', False):
-            names.add('btn_harvest')
-        if features.get('auto_weed', False):
-            names.add('btn_weed')
-        if features.get('auto_bug', False):
-            names.add('btn_bug')
-        if features.get('auto_water', False):
-            names.add('btn_water')
-        if features.get('auto_upgrade', False):
-            names.add('btn_expand')
-        if features.get('auto_task', False):
-            names.add('btn_task')
-        if features.get('auto_help', False):
-            names.add('btn_friend_help')
-        if features.get('auto_sell', False):
-            names.update({'btn_warehouse', 'btn_batch_sell'})
-        return sorted(names)
-
-    def _detect_plan_for_tick(
-        self,
-    ) -> tuple[list[str] | None, list[str] | None, dict[str, float] | None]:
-        thresholds = {
-            'land_empty': 0.89,
-            'land_empty_2': 0.89,
-            'land_empty_3': 0.89,
-        }
-
-        current_page = getattr(getattr(self, 'nk_ui', None), 'ui_current', None)
-
-        if current_page == page_shop:
-            return ['btn_shop_close', 'btn_close', 'btn_confirm', 'btn_claim'], None, None
-
-        if current_page == page_friend:
-            return ['btn_home', 'btn_friend_help', 'btn_water', 'btn_weed', 'btn_bug', 'btn_close'], None, None
-
-        return self._main_templates_for_tick(), None, thresholds
-
     # ============================================================
     # 主循环
     # ============================================================
 
-    def check_farm(self, session_id: int | None = None) -> dict:
+    def check_farm(self, session_id: int | None = None) -> TaskResult:
         if self.nk_task_farm_main is not None:
             return self.nk_task_farm_main.run(session_id=session_id)
-        return {
-            'success': False,
-            'actions_done': [],
-            'next_check_seconds': 5,
-            'message': 'nklite 农场任务未初始化',
-        }
+        return TaskResult(success=False, actions=[], next_run_seconds=5, error='nklite 农场任务未初始化')
 
-    def check_share(self, session_id: int | None = None) -> dict:
+    def check_share(self, session_id: int | None = None) -> TaskResult:
         share_cfg = self.config.tasks.share
-        default_next = max(1, int(share_cfg.interval_seconds))
+        next_seconds = max(1, int(share_cfg.interval_seconds))
         if share_cfg.trigger == TaskTriggerType.DAILY:
-            default_next = self._seconds_to_next_daily(share_cfg.daily_time)
+            next_seconds = self._seconds_to_next_daily(share_cfg.daily_time)
 
         if self._is_cancel_requested(session_id):
-            return {'success': False, 'actions_done': [], 'next_check_seconds': default_next, 'message': '停止中'}
+            return TaskResult(success=False, actions=[], next_run_seconds=next_seconds, error='停止中')
         if not self.nk_ui:
-            return {'success': False, 'actions_done': [], 'next_check_seconds': default_next, 'message': 'UI未初始化'}
+            return TaskResult(success=False, actions=[], next_run_seconds=next_seconds, error='UI未初始化')
 
         rect = self._prepare_window()
         if not rect:
-            return {'success': False, 'actions_done': [], 'next_check_seconds': default_next, 'message': '窗口未找到'}
+            return TaskResult(success=False, actions=[], next_run_seconds=next_seconds, error='窗口未找到')
         if self.nk_device:
             self.nk_device.set_rect(rect)
 
@@ -828,19 +718,14 @@ class BotEngine(QObject):
 
         reward = TaskFarmReward(engine=self, ui=self.nk_ui)
         out = reward.run(rect=rect, features=self.get_task_features('share'))
-        return {
-            'success': True,
-            'actions_done': list(out.actions),
-            'next_check_seconds': default_next,
-        }
+        return TaskResult(success=True, actions=list(out.actions), next_run_seconds=next_seconds, error='')
 
-    def check_friends(self, session_id: int | None = None) -> dict:
+    def check_friends(self, session_id: int | None = None) -> TaskResult:
         friend_interval = max(1, int(self.config.tasks.friend.interval_seconds))
         if self._is_cancel_requested(session_id):
-            return {'success': False, 'actions_done': [], 'next_check_seconds': friend_interval, 'message': '停止中'}
-        result = {'success': True, 'actions_done': [], 'next_check_seconds': friend_interval}
+            return TaskResult(success=False, actions=[], next_run_seconds=friend_interval, error='停止中')
         logger.info('好友巡查功能开发中...')
-        return result
+        return TaskResult(success=True, actions=[], next_run_seconds=friend_interval, error='')
 
 
 

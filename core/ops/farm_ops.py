@@ -25,8 +25,21 @@ class _OpsBase:
     def sleep(self, seconds: float) -> bool:
         return self.engine._sleep_interruptible(seconds)
 
-    def capture(self, rect: tuple[int, int, int, int]):
-        return self.engine._capture_and_detect(rect, save=False)
+    def capture(
+        self,
+        rect: tuple[int, int, int, int],
+        *,
+        template_names: list[str] | None = None,
+        thresholds: dict[str, float] | None = None,
+        template_rois: dict[str, tuple[int, int, int, int]] | None = None,
+    ):
+        return self.engine._capture_and_detect(
+            rect,
+            save=False,
+            template_names=template_names,
+            template_thresholds=thresholds,
+            template_rois=template_rois,
+        )
 
     def click(self, x: int, y: int, desc: str = '', action_type: str = ActionType.NAVIGATE) -> bool:
         if not self.engine.action_executor or self.stopped:
@@ -112,7 +125,16 @@ class ExpandOps(_OpsBase):
         for _ in range(5):
             if self.stopped:
                 return None
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(
+                rect,
+                template_names=[
+                    'btn_expand_direct_confirm',
+                    'btn_expand_confirm',
+                    'btn_close',
+                    'btn_confirm',
+                    'btn_claim',
+                ],
+            )
             if cv_img is None:
                 return None
 
@@ -125,7 +147,10 @@ class ExpandOps(_OpsBase):
                 self.sleep(0.5)
                 self._expand_failed = False
 
-                cv_img2, dets2, _ = self.capture(rect)
+                cv_img2, dets2, _ = self.capture(
+                    rect,
+                    template_names=['btn_close', 'btn_confirm', 'btn_claim'],
+                )
                 if cv_img2 is not None:
                     close = self.find_any(dets2, ['btn_close', 'btn_confirm', 'btn_claim'])
                     if close:
@@ -155,7 +180,10 @@ class TaskOps(_OpsBase):
             if self.stopped:
                 return actions
 
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(
+                rect,
+                template_names=['btn_share', 'btn_claim', 'btn_confirm', 'btn_close'],
+            )
             if cv_img is None:
                 return actions
 
@@ -192,7 +220,18 @@ class FriendOps(_OpsBase):
             if self.stopped:
                 break
 
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(
+                rect,
+                template_names=[
+                    'btn_water',
+                    'btn_weed',
+                    'btn_bug',
+                    'btn_home',
+                    'btn_claim',
+                    'btn_confirm',
+                    'btn_close',
+                ],
+            )
             if cv_img is None:
                 break
 
@@ -244,7 +283,11 @@ class PlantOps(_OpsBase):
     def plant_all(self, rect: tuple[int, int, int, int], crop_name: str) -> list[str]:
         all_actions: list[str] = []
 
-        cv_img, dets, _ = self.capture(rect)
+        cv_img, dets, _ = self.capture(
+            rect,
+            template_names=['land_empty', 'land_empty_2', 'land_empty_3'],
+            thresholds={'land_empty': 0.89, 'land_empty_2': 0.89, 'land_empty_3': 0.89},
+        )
         if cv_img is None:
             return all_actions
         lands = [d for d in dets if d.name.startswith('land_empty')]
@@ -258,7 +301,7 @@ class PlantOps(_OpsBase):
         for _ in range(2):
             if self.stopped:
                 return all_actions
-            cv_img, _dets, _ = self.capture(rect)
+            cv_img, _dets, _ = self.capture(rect, template_names=[])
             if cv_img is None:
                 return all_actions
             seed_dets = self.engine.cv_detector.detect_seed_template(cv_img, crop_name_or_template=crop_name)
@@ -317,7 +360,10 @@ class PlantOps(_OpsBase):
             all_actions.append(f'播种{crop_name}×{planted_count}')
 
         self.sleep(0.5)
-        cv_check, dets_check, _ = self.capture(rect)
+        cv_check, dets_check, _ = self.capture(
+            rect,
+            template_names=['btn_shop_close', 'btn_fertilize_popup'],
+        )
         if cv_check is not None:
             if self.find_by_name(dets_check, 'btn_shop_close'):
                 self._close_shop_and_buy(rect, crop_name, all_actions)
@@ -336,7 +382,7 @@ class PlantOps(_OpsBase):
     def _buy_seeds(self, rect: tuple[int, int, int, int], crop_name: str) -> str | None:
         if self.stopped:
             return None
-        cv_img, dets, _ = self.capture(rect)
+        cv_img, dets, _ = self.capture(rect, template_names=['btn_shop'])
         if cv_img is None:
             return None
 
@@ -351,7 +397,7 @@ class PlantOps(_OpsBase):
         for _ in range(5):
             if self.stopped:
                 return None
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(rect, template_names=['btn_shop_close'])
             if cv_img is None:
                 return None
             if self.find_by_name(dets, 'btn_shop_close'):
@@ -371,7 +417,7 @@ class PlantOps(_OpsBase):
                 matched_item = ocr_match.target
                 break
             self.sleep(0.3)
-            cv_img, _dets, _ = self.capture(rect)
+            cv_img, _dets, _ = self.capture(rect, template_names=[])
             if cv_img is None:
                 return None
             shop_cv = cv_img
@@ -389,7 +435,10 @@ class PlantOps(_OpsBase):
         for _ in range(5):
             if self.stopped:
                 return None
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(
+                rect,
+                template_names=['btn_buy_confirm', 'btn_close', 'btn_confirm', 'btn_claim'],
+            )
             if cv_img is None:
                 return None
 
@@ -413,7 +462,7 @@ class PlantOps(_OpsBase):
 
     def _close_shop(self, rect: tuple[int, int, int, int]):
         for _ in range(3):
-            cv_img, dets, _ = self.capture(rect)
+            cv_img, dets, _ = self.capture(rect, template_names=['btn_shop_close', 'btn_close'])
             if cv_img is None:
                 return
             close_btn = self.find_any(dets, ['btn_shop_close', 'btn_close'])

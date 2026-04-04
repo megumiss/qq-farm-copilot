@@ -6,6 +6,7 @@ import time
 
 from loguru import logger
 
+from core.engine.task_registry import TaskResult
 from core.base.step_result import StepResult
 from core.tasks.task_farm_friend import TaskFarmFriend
 from core.tasks.task_farm_harvest import TaskFarmHarvest
@@ -15,7 +16,6 @@ from core.tasks.task_farm_sell import TaskFarmSell
 from core.ui.page import (
     page_friend,
     page_main,
-    page_menu,
     page_shop,
     page_unknown,
 )
@@ -31,16 +31,16 @@ class TaskFarmMain:
         self.task_reward = TaskFarmReward(engine, ui)
         self.task_friend = TaskFarmFriend(engine, ui)
 
-    def run(self, session_id: int | None = None) -> dict:
-        result = {'success': False, 'actions_done': [], 'next_check_seconds': 5}
+    def run(self, session_id: int | None = None) -> TaskResult:
+        result = TaskResult(success=False, actions=[], next_run_seconds=5, error='')
         if self.engine._is_cancel_requested(session_id):
-            result['message'] = '停止中'
+            result.error = '停止中'
             return result
 
         features = self.engine.get_task_features('farm_main')
         rect = self.engine._prepare_window()
         if not rect:
-            result['message'] = '窗口未找到'
+            result.error = '窗口未找到'
             return result
         self.ui.device.set_rect(rect)
 
@@ -49,7 +49,7 @@ class TaskFarmMain:
 
         patrol_actions = self._run_self_farm_patrol(rect=rect, features=features, session_id=session_id)
         if patrol_actions:
-            result['actions_done'].extend(patrol_actions)
+            result.actions.extend(patrol_actions)
 
         idle_rounds = 0
         max_idle = 3
@@ -67,7 +67,7 @@ class TaskFarmMain:
 
             cv_image, _ = self.engine._capture_frame(rect, save=False)
             if cv_image is None:
-                result['message'] = '截屏失败'
+                result.error = '截屏失败'
                 break
             self.ui.device.set_image(cv_image)
 
@@ -75,18 +75,18 @@ class TaskFarmMain:
             if page == page_unknown:
                 recovered = self.ui.ui_goto(page_main, confirm_wait=0.5, skip_first_screenshot=True)
                 if recovered:
-                    result['actions_done'].append('导航回主界面')
+                    result.actions.append('导航回主界面')
                     if not self.engine._sleep_interruptible(0.2, session_id):
                         break
                     continue
                 self.engine.popup.click_blank(rect)
-                result['actions_done'].append('点击回主按钮')
+                result.actions.append('点击回主按钮')
                 if not self.engine._sleep_interruptible(0.2, session_id):
                     break
                 continue
 
             if self.ui.ui_additional():
-                result['actions_done'].append('处理弹窗')
+                result.actions.append('处理弹窗')
                 if not self.engine._sleep_interruptible(0.2, session_id):
                     break
                 continue
@@ -118,7 +118,7 @@ class TaskFarmMain:
             action_ms = (time.perf_counter() - action_start) * 1000.0
             tick_ms = (time.perf_counter() - tick_start) * 1000.0
 
-            result['actions_done'].extend(dispatch_result.actions)
+            result.actions.extend(dispatch_result.actions)
             action_desc = dispatch_result.action
             logger.info(
                 'task=farm_main page={} action={} detect_ms={:.1f} action_ms={:.1f} tick_ms={:.1f}',
@@ -147,14 +147,14 @@ class TaskFarmMain:
         else:
             logger.info(f'达到页面跳转预算上限: {transition_budget}，结束本轮')
 
-        has_planted = any('播种' in a for a in result.get('actions_done', []))
+        has_planted = any('播种' in a for a in result.actions)
         if has_planted:
             interval = max(1, int(self.engine.config.tasks.farm_main.interval_seconds))
-            result['next_check_seconds'] = interval
+            result.next_run_seconds = interval
         else:
-            result['next_check_seconds'] = 30
+            result.next_run_seconds = 30
 
-        result['success'] = True
+        result.success = True
         self.engine.screen_capture.cleanup_old_screenshots(0)
         return result
 

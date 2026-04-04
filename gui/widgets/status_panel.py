@@ -7,18 +7,6 @@ class StatusPanel(QWidget):
     _PAGE_NAME_MAP = {
         '--': '--',
         'unknown': '未知页面',
-        'farm_overview': '农场主界面',
-        'friend_farm': '好友农场',
-        'plot_menu': '土地菜单',
-        'seed_select': '种子选择',
-        'shop_page': '商店页面',
-        'buy_confirm': '购买确认',
-        'popup': '弹窗',
-        'level_up': '升级弹窗',
-        # 兼容运行态枚举值
-        'main': '农场主界面',
-        'shop': '商店页面',
-        'friend': '好友农场',
     }
 
     def __init__(self, parent=None):

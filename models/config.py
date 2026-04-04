@@ -54,12 +54,6 @@ class ScreenshotConfig(BaseModel):
     max_history_count: int = 50
 
 
-class ScheduleConfig(BaseModel):
-    farm_check_minutes: int = 1
-    friend_check_minutes: int = 30
-    task_check_minutes: int = 60
-
-
 class TaskTriggerType(str, Enum):
     INTERVAL = 'interval'
     DAILY = 'daily'
@@ -152,7 +146,6 @@ class TasksConfig(BaseModel):
 
 
 class ExecutorConfig(BaseModel):
-    enabled: bool = True
     empty_queue_policy: str = 'stay'
     default_success_interval: int = 30
     default_failure_interval: int = 30
@@ -179,7 +172,6 @@ class AppConfig(BaseModel):
     window_title_keyword: str = 'QQ经典农场'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
-    schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     executor: ExecutorConfig = Field(default_factory=ExecutorConfig)
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
@@ -200,18 +192,9 @@ class AppConfig(BaseModel):
     def _resolve_template_path(cls, config_path: str, template_path: str | None = None) -> str:
         if template_path:
             return str(template_path)
-        base_dir = os.path.dirname(os.path.abspath(config_path)) if config_path else os.getcwd()
-        parent_dir = os.path.dirname(base_dir)
-        candidates = [
-            os.path.join(base_dir, 'config.template.json'),
-            os.path.join(base_dir, 'configs', 'config.template.json'),
-            os.path.join(parent_dir, 'configs', 'config.template.json'),
-            os.path.join(parent_dir, 'config.template.json'),
-        ]
-        for item in candidates:
-            if os.path.exists(item):
-                return item
-        return ''
+        _ = config_path
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(project_root, 'configs', 'config.template.json')
 
     @classmethod
     def _deep_merge_dict(cls, base: dict, override: dict) -> dict:

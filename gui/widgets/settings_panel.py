@@ -110,7 +110,6 @@ class SettingsPanel(QWidget):
         c.planting.window_platform = WindowPlatform(self._window_platform.currentData())
         c.window_title_keyword = self._window_keyword.text().strip()
         c.planting.window_position = WindowPosition(self._window_position.currentData())
-        c.executor.enabled = True
         c.save()
         self.config_changed.emit(c)
 

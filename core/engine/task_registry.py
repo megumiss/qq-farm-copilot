@@ -30,16 +30,6 @@ class TaskResult:
     need_recover: bool = False
     error: str = ''
 
-    @classmethod
-    def from_legacy_dict(cls, payload: dict) -> 'TaskResult':
-        return cls(
-            success=bool(payload.get('success', False)),
-            actions=list(payload.get('actions_done', [])),
-            next_run_seconds=payload.get('next_check_seconds'),
-            need_recover=bool(payload.get('need_recover', False)),
-            error=str(payload.get('message', '')),
-        )
-
 
 @dataclass
 class TaskSnapshot:

@@ -11,11 +11,6 @@
     "save_history": true,
     "max_history_count": 50
   },
-  "schedule": {
-    "farm_check_minutes": 1,
-    "friend_check_minutes": 30,
-    "task_check_minutes": 60
-  },
   "tasks": {
     "farm_main": {
       "enabled": true,
@@ -58,7 +53,6 @@
     }
   },
   "executor": {
-    "enabled": true,
     "empty_queue_policy": "stay",
     "default_success_interval": 30,
     "default_failure_interval": 30,
