@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class TaskItem:
+    """封装 `TaskItem` 任务的执行入口与步骤。"""
     name: str
     enabled: bool
     priority: int
@@ -24,6 +25,7 @@ class TaskItem:
 
 @dataclass
 class TaskResult:
+    """封装 `TaskResult` 任务的执行入口与步骤。"""
     success: bool
     actions: list[str] = field(default_factory=list)
     next_run_seconds: int | None = None
@@ -33,6 +35,7 @@ class TaskResult:
 
 @dataclass
 class TaskSnapshot:
+    """封装 `TaskSnapshot` 任务的执行入口与步骤。"""
     running_task: str | None
     pending_tasks: list[TaskItem]
     waiting_tasks: list[TaskItem]
@@ -40,11 +43,13 @@ class TaskSnapshot:
 
 @dataclass
 class TaskContext:
+    """封装 `TaskContext` 任务的执行入口与步骤。"""
     task_name: str
     started_at: datetime
 
 
 def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
+    """构建 `default tasks` 结构。"""
     now = datetime.now()
     default_success = max(1, int(config.executor.default_success_interval))
     default_failure = max(1, int(config.executor.default_failure_interval))

@@ -18,6 +18,7 @@ IdleHook = Callable[[], None]
 
 
 class TaskExecutor:
+    """通用任务执行器：维护任务队列并在后台线程中按优先级调度。"""
     def __init__(
         self,
         tasks: dict[str, TaskItem],
@@ -28,6 +29,7 @@ class TaskExecutor:
         on_task_done: TaskDoneHook | None = None,
         on_idle: IdleHook | None = None,
     ):
+        """注入任务定义、执行回调和事件钩子，准备调度线程状态。"""
         self._tasks = tasks
         self._runners = runners
         self._empty_queue_policy = str(empty_queue_policy or 'stay')
@@ -43,6 +45,7 @@ class TaskExecutor:
         self._last_idle_at = 0.0
 
     def start(self):
+        """启动执行线程；若已在运行则忽略重复启动。"""
         with self._lock:
             if self._thread and self._thread.is_alive():
                 return
@@ -56,6 +59,7 @@ class TaskExecutor:
             self._thread.start()
 
     def stop(self, wait_timeout: float = 1.0):
+        """请求停止执行线程，并在超时时间内等待线程退出。"""
         self._stop_event.set()
         self._pause_event.clear()
         th = self._thread
@@ -63,22 +67,28 @@ class TaskExecutor:
             th.join(timeout=max(0.1, float(wait_timeout)))
 
     def pause(self):
+        """暂停调度循环（线程仍存活，仅停止取任务）。"""
         self._pause_event.set()
 
     def resume(self):
+        """恢复调度循环。"""
         self._pause_event.clear()
 
     def is_running(self) -> bool:
+        """返回执行线程是否仍然存活。"""
         return bool(self._thread and self._thread.is_alive())
 
     def is_stop_requested(self) -> bool:
+        """返回是否已收到停止请求。"""
         return self._stop_event.is_set()
 
     def set_empty_queue_policy(self, policy: str):
+        """设置空队列时策略（如 `stay` 或 `goto_main`）。"""
         with self._lock:
             self._empty_queue_policy = str(policy or 'stay')
 
     def update_task(self, name: str, **kwargs):
+        """按字段增量更新某个任务配置。"""
         with self._lock:
             task = self._tasks.get(name)
             if not task:
@@ -88,6 +98,7 @@ class TaskExecutor:
                     setattr(task, key, value)
 
     def snapshot(self, now: datetime | None = None) -> TaskSnapshot:
+        """生成当前调度快照（运行中、待执行、等待中）。"""
         with self._lock:
             return self._snapshot_locked(now or datetime.now())
 
@@ -98,6 +109,7 @@ class TaskExecutor:
         seconds: int | None = None,
         target_time: datetime | None = None,
     ) -> bool:
+        """延后任务执行时间，支持相对秒数或绝对时间。"""
         with self._lock:
             item = self._tasks.get(task)
             if not item:
@@ -113,6 +125,7 @@ class TaskExecutor:
             return True
 
     def task_call(self, task: str, force_call: bool = True) -> bool:
+        """将任务立即放入可执行队列（可选强制启用任务）。"""
         with self._lock:
             item = self._tasks.get(task)
             if not item:
@@ -124,6 +137,7 @@ class TaskExecutor:
             return True
 
     def _snapshot_locked(self, now: datetime) -> TaskSnapshot:
+        """在持锁状态下构建任务快照，避免并发读写不一致。"""
         pending: list[TaskItem] = []
         waiting: list[TaskItem] = []
         for task in self._tasks.values():
@@ -143,6 +157,7 @@ class TaskExecutor:
 
     @staticmethod
     def _clone_item(item: TaskItem) -> TaskItem:
+        """拷贝任务对象，用于快照输出避免外部改写内部状态。"""
         return TaskItem(
             name=item.name,
             enabled=item.enabled,
@@ -155,6 +170,7 @@ class TaskExecutor:
         )
 
     def _emit_snapshot(self):
+        """触发快照回调，向上层同步调度状态。"""
         if not self._on_snapshot:
             return
         try:
@@ -163,6 +179,7 @@ class TaskExecutor:
             logger.debug(f'snapshot hook error: {exc}')
 
     def _apply_task_result(self, task: TaskItem, result: TaskResult):
+        """根据任务结果更新失败次数与下一次执行时间。"""
         now = datetime.now()
         if result.success:
             task.failure_count = 0
@@ -174,20 +191,24 @@ class TaskExecutor:
             interval = (
                 int(result.next_run_seconds) if result.next_run_seconds is not None else int(task.failure_interval)
             )
+            # 连续失败超过阈值时主动放大重试间隔，避免高频失败刷屏。
             if task.failure_count >= max(1, int(task.max_failures)):
                 interval = max(interval, int(task.failure_interval) * 3)
 
         task.next_run = now + timedelta(seconds=max(1, interval))
 
     def _loop(self):
+        """执行器主循环：挑选任务、执行任务、回写结果并推送快照。"""
         self._emit_snapshot()
         while not self._stop_event.is_set():
+            # 暂停态只保活线程，不调度任务。
             if self._pause_event.is_set():
                 time.sleep(0.08)
                 continue
 
             now = datetime.now()
             with self._lock:
+                # 每轮重新计算 pending/waiting，并选出一个可执行任务。
                 snap = self._snapshot_locked(now)
                 task = snap.pending_tasks[0] if snap.pending_tasks else None
                 if task:
@@ -198,6 +219,7 @@ class TaskExecutor:
             self._emit_snapshot()
 
             if not task:
+                # 空队列时可执行 idle hook（例如回主界面），并短暂休眠。
                 if self._empty_queue_policy == 'goto_main' and self._on_idle and time.time() - self._last_idle_at > 2.0:
                     self._last_idle_at = time.time()
                     try:
@@ -209,6 +231,7 @@ class TaskExecutor:
 
             runner = self._runners.get(task.name)
             if not runner:
+                # 缺少 runner 视为失败任务，写回失败间隔后继续循环。
                 with self._lock:
                     item = self._tasks.get(task.name)
                     if item:
@@ -224,6 +247,7 @@ class TaskExecutor:
                 continue
 
             try:
+                # 调用任务回调；异常统一转为失败结果，避免线程退出。
                 result = runner(TaskContext(task_name=task.name, started_at=datetime.now()))
                 if not isinstance(result, TaskResult):
                     result = TaskResult(

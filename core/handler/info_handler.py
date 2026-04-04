@@ -9,6 +9,7 @@ from core.base.module_base import ModuleBase
 
 
 def _btn(name: str, area: tuple[int, int, int, int]):
+    """执行 `btn` 相关处理。"""
     return Button(
         area=area,
         color=(128, 128, 128),
@@ -33,7 +34,9 @@ BTN_SHOP_CLOSE = _btn('btn_shop_close', (297, 0, 540, 336))
 
 
 class InfoHandler(ModuleBase):
+    """封装 `InfoHandler` 相关的数据与行为。"""
     def handle_level_up(self):
+        """执行 `handle level up` 相关处理。"""
         if not self.appear(ICON_LEVELUP, offset=(30, 30), threshold=0.76, static=False):
             return False
         return self.appear_then_click_any(
@@ -45,6 +48,7 @@ class InfoHandler(ModuleBase):
         )
 
     def handle_share_reward(self):
+        """执行 `handle share reward` 相关处理。"""
         if not self.appear(BTN_SHARE, offset=(30, 30), threshold=0.8, static=False):
             return False
         if not self.device.click(BTN_SHARE):
@@ -55,6 +59,7 @@ class InfoHandler(ModuleBase):
         return True
 
     def handle_reward(self, interval=0.2):
+        """执行 `handle reward` 相关处理。"""
         if self.handle_share_reward():
             return True
         return self.appear_then_click_any(
@@ -66,15 +71,19 @@ class InfoHandler(ModuleBase):
         )
 
     def handle_announcement(self):
+        """执行 `handle announcement` 相关处理。"""
         return self.appear_then_click(BTN_CLOSE, offset=(30, 30), interval=0.2, threshold=0.8, static=False)
 
     def handle_login_reward(self):
+        """执行 `handle login reward` 相关处理。"""
         return False
 
     def handle_system_error(self):
+        """执行 `handle system error` 相关处理。"""
         return False
 
     def handle_shop_residual(self):
+        """执行 `handle shop residual` 相关处理。"""
         return self.appear_then_click(BTN_SHOP_CLOSE, offset=(30, 30), interval=0.2, threshold=0.8, static=False)
 
 

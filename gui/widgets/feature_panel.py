@@ -15,6 +15,7 @@ from models.config import AppConfig
 
 
 class FeaturePanel(QWidget):
+    """承载 `FeaturePanel` 相关界面控件与交互逻辑。"""
     config_changed = pyqtSignal(object)
 
     TASK_TITLE_MAP = {
@@ -39,6 +40,7 @@ class FeaturePanel(QWidget):
     }
 
     def __init__(self, config: AppConfig, parent=None):
+        """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.config = config
         self._loading = True
@@ -49,6 +51,7 @@ class FeaturePanel(QWidget):
         self._loading = False
 
     def _init_ui(self):
+        """初始化 `ui` 相关状态或界面。"""
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(10)
@@ -79,6 +82,7 @@ class FeaturePanel(QWidget):
         root.addStretch()
 
     def _build_task_group(self, task_name: str, feature_map: dict[str, bool]) -> QGroupBox:
+        """构建 `task_group` 对应的结构或组件。"""
         title = self.TASK_TITLE_MAP.get(task_name, f'{task_name}任务')
         group = QGroupBox(title)
         form = QFormLayout()
@@ -91,10 +95,12 @@ class FeaturePanel(QWidget):
         return group
 
     def _connect_auto_save(self):
+        """绑定 `auto_save` 相关信号或回调。"""
         for cb in self._feature_boxes.values():
             cb.toggled.connect(self._auto_save)
 
     def _auto_save(self):
+        """执行 `auto save` 相关处理。"""
         if self._loading:
             return
         c = self.config
@@ -109,6 +115,7 @@ class FeaturePanel(QWidget):
         self.config_changed.emit(c)
 
     def _load_config(self):
+        """加载 `config` 相关数据。"""
         c = self.config
         for (task_name, feature_name), cb in self._feature_boxes.items():
             task_cfg = getattr(c.tasks, task_name, None)

@@ -16,6 +16,7 @@ _log_signal = LogSignal()
 
 
 def get_log_signal() -> LogSignal:
+    """获取 `log_signal` 信息。"""
     return _log_signal
 
 

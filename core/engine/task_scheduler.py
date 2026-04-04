@@ -10,6 +10,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 
 class BotState(str, Enum):
+    """封装 `BotState` 相关的数据与行为。"""
     IDLE = 'idle'
     RUNNING = 'running'
     PAUSED = 'paused'
@@ -26,6 +27,7 @@ class TaskScheduler(QObject):
     stats_updated = pyqtSignal(dict)
 
     def __init__(self):
+        """初始化对象并准备运行所需状态。"""
         super().__init__()
         self._state = BotState.IDLE
         self._start_time: float = 0.0
@@ -54,23 +56,28 @@ class TaskScheduler(QObject):
 
     @property
     def state(self) -> BotState:
+        """执行 `state` 相关处理。"""
         return self._state
 
     def _set_state(self, state: BotState):
+        """设置 `state` 参数。"""
         self._state = state
         self.state_changed.emit(state.value)
 
     def stop(self):
+        """停止当前模块并释放运行状态。"""
         self._set_state(BotState.IDLE)
         self.stats_updated.emit(self.get_stats())
 
     def record_action(self, action_type: str, count: int = 1):
+        """执行 `record action` 相关处理。"""
         if action_type in self._stats:
             self._stats[action_type] += count
         self._stats['total_actions'] += count
         self.stats_updated.emit(self.get_stats())
 
     def get_stats(self) -> dict:
+        """获取 `stats` 信息。"""
         elapsed = time.time() - self._start_time if self._start_time else 0
         hours = int(elapsed // 3600)
         minutes = int((elapsed % 3600) // 60)
@@ -88,11 +95,13 @@ class TaskScheduler(QObject):
         }
 
     def reset_stats(self):
+        """执行 `reset stats` 相关处理。"""
         for key in self._stats:
             self._stats[key] = 0
         self.stats_updated.emit(self.get_stats())
 
     def force_state(self, state: BotState | str):
+        """执行 `force state` 相关处理。"""
         target = state
         if not isinstance(target, BotState):
             try:
@@ -105,6 +114,7 @@ class TaskScheduler(QObject):
         self.stats_updated.emit(self.get_stats())
 
     def set_next_checks(self, *, farm_ts: float | None = None, friend_ts: float | None = None):
+        """设置 `next_checks` 参数。"""
         changed = False
         if farm_ts is not None and self._next_farm_check != farm_ts:
             self._next_farm_check = float(farm_ts)
@@ -116,6 +126,7 @@ class TaskScheduler(QObject):
             self.stats_updated.emit(self.get_stats())
 
     def update_runtime_metrics(self, **kwargs):
+        """更新 `runtime_metrics` 状态。"""
         changed = False
         for key in (
             'current_page',

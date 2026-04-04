@@ -54,6 +54,7 @@ from models.game_data import get_best_crop_for_level
 
 
 class BotEngine(QObject):
+    """封装 `BotEngine` 相关的数据与行为。"""
     log_message = pyqtSignal(str)
     screenshot_updated = pyqtSignal(object)
     state_changed = pyqtSignal(str)
@@ -61,6 +62,7 @@ class BotEngine(QObject):
     detection_result = pyqtSignal(object)
 
     def __init__(self, config: AppConfig):
+        """初始化对象并准备运行所需状态。"""
         super().__init__()
         self.config = config
         self._session_id = 0
@@ -97,10 +99,12 @@ class BotEngine(QObject):
         self.scheduler.stats_updated.connect(self.stats_updated.emit)
 
     def _executor_running(self) -> bool:
+        """判断执行器线程是否仍在运行。"""
         return bool(self._task_executor and self._task_executor.is_running())
 
     @staticmethod
     def _seconds_to_next_daily(daily_time: str, now: datetime | None = None) -> int:
+        """计算距离下一次每日触发时间的秒数。"""
         current = now or datetime.now()
         text = str(daily_time or '04:00')
         try:
@@ -115,11 +119,13 @@ class BotEngine(QObject):
 
     @staticmethod
     def _task_next_ts(item: TaskItem | None) -> float:
+        """读取任务的下一次执行时间戳（禁用任务返回 0）。"""
         if not item or not item.enabled:
             return 0.0
         return item.next_run.timestamp()
 
     def _task_seconds_by_trigger(self, task_name: str, now: datetime | None = None) -> int:
+        """按任务触发类型返回下次调度间隔秒数。"""
         current = now or datetime.now()
         tasks_cfg = self.config.tasks
         cfg = getattr(tasks_cfg, task_name, None)
@@ -130,6 +136,7 @@ class BotEngine(QObject):
         return max(1, int(cfg.interval_seconds))
 
     def get_task_features(self, task_name: str) -> dict[str, bool]:
+        """获取 `task_features` 信息。"""
         cfg = getattr(self.config.tasks, task_name, None)
         if cfg is None:
             return {}
@@ -139,8 +146,10 @@ class BotEngine(QObject):
         return {str(k): bool(v) for k, v in raw.items()}
 
     def _sync_executor_tasks_from_config(self):
+        """将当前配置同步到执行器任务项（启停、间隔、失败参数）。"""
         if not self._executor_tasks:
             return
+        # 统一按当前配置计算每个任务的启停状态与执行间隔。
         default_success = max(1, int(self.config.executor.default_success_interval))
         default_failure = max(1, int(self.config.executor.default_failure_interval))
         max_failures = max(1, int(self.config.executor.max_failures))
@@ -168,6 +177,7 @@ class BotEngine(QObject):
         )
 
         if self._task_executor:
+            # 执行器已启动：直接热更新运行中的任务参数。
             self._task_executor.set_empty_queue_policy(self.config.executor.empty_queue_policy)
             self._task_executor.update_task(
                 'farm_main',
@@ -197,6 +207,7 @@ class BotEngine(QObject):
                 self._task_executor.task_call('share', force_call=False)
             return
 
+        # 执行器未启动：仅更新本地任务快照，等待 _init_executor 使用。
         farm_item = self._executor_tasks.get('farm_main')
         if farm_item:
             farm_item.enabled = farm_enabled
@@ -225,6 +236,7 @@ class BotEngine(QObject):
                 share_item.next_run = now
 
     def _init_executor(self):
+        """创建并启动统一任务执行器。"""
         self._executor_tasks = build_default_tasks(self.config)
         self._sync_executor_tasks_from_config()
         self._accept_executor_events = True
@@ -243,6 +255,7 @@ class BotEngine(QObject):
         self._task_executor.start()
 
     def _stop_executor(self):
+        """停止执行器并清空执行器持有的任务快照。"""
         self._accept_executor_events = False
         executor = self._task_executor
         self._task_executor = None
@@ -251,15 +264,19 @@ class BotEngine(QObject):
         self._executor_tasks = {}
 
     def _run_task_farm_main(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_farm_main` 子流程。"""
         return self.check_farm(self._session_id)
 
     def _run_task_friend(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_friend` 子流程。"""
         return self.check_friends(self._session_id)
 
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_share` 子流程。"""
         return self.check_share(self._session_id)
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):
+        """接收执行器快照并更新 GUI 统计面板。"""
         if not self._accept_executor_events:
             return
         self.scheduler.update_runtime_metrics(
@@ -275,6 +292,7 @@ class BotEngine(QObject):
         )
 
     def _on_executor_task_done(self, task_name: str, result: TaskResult):
+        """处理任务完成事件并更新运行统计。"""
         if not self._accept_executor_events:
             return
         if result.actions:
@@ -293,6 +311,7 @@ class BotEngine(QObject):
         )
 
     def _on_executor_idle(self):
+        """执行器空闲时触发：按策略尝试回主界面。"""
         if not self._accept_executor_events:
             return
         if self._is_cancel_requested():
@@ -316,6 +335,7 @@ class BotEngine(QObject):
         return self._session_id
 
     def _is_cancel_requested(self, session_id: int | None = None) -> bool:
+        """判断是否满足 `cancel_requested` 条件。"""
         if session_id is not None and session_id != self._session_id:
             return True
         if self._task_executor and self._task_executor.is_stop_requested():
@@ -323,9 +343,11 @@ class BotEngine(QObject):
         return self._cancel_event.is_set()
 
     def is_session_cancelled(self, session_id: int) -> bool:
+        """对外暴露：判断指定会话是否已取消。"""
         return self._is_cancel_requested(session_id)
 
     def _sleep_interruptible(self, seconds: float, session_id: int | None = None, interval: float = 0.02) -> bool:
+        """可中断睡眠：检测到取消请求时提前返回 False。"""
         if seconds <= 0:
             return not self._is_cancel_requested(session_id)
         end_at = time.perf_counter() + seconds
@@ -338,6 +360,7 @@ class BotEngine(QObject):
             time.sleep(min(interval, remain))
 
     def update_config(self, config: AppConfig):
+        """更新配置并将变更同步到执行器。"""
         self.config = config
         self._sync_executor_tasks_from_config()
 
@@ -403,18 +426,22 @@ class BotEngine(QObject):
         return x, y
 
     def resolve_live_click_point(self, x: int, y: int) -> tuple[int, int]:
+        """将逻辑点击坐标映射到当前截图坐标系。"""
         rect = None
         if self.nk_device is not None:
             rect = getattr(self.nk_device, 'rect', None)
         return self.resolve_capture_point(int(x), int(y), rect=rect)
 
     def _resolve_goto_main_point(self, rect: tuple[int, int, int, int] | None = None) -> tuple[int, int]:
+        """计算“回主按钮”在当前截图中的点击坐标。"""
         return self.resolve_capture_point(*GOTO_MAIN.location, rect=rect)
 
     def start(self) -> bool:
+        """启动当前模块的主流程。"""
         if self._executor_running():
             self.log_message.emit('上一轮任务仍在停止中，请稍候再启动')
             return False
+        # [启动阶段] 重置运行会话与计数器。
         self._switch_session(cancelled=False)
         self._runtime_failure_count = 0
         self.cv_detector.load_templates()
@@ -428,6 +455,7 @@ class BotEngine(QObject):
             self.log_message.emit('未找到QQ农场窗口，请先打开微信小程序中的QQ农场')
             return False
 
+        # [窗口阶段] 调整窗口尺寸与位置，确保截图区域稳定。
         pos = getattr(self.config.planting, 'window_position', 'left_center')
         pos_value = pos.value if hasattr(pos, 'value') else str(pos)
         platform = getattr(self.config.planting, 'window_platform', 'qq')
@@ -448,6 +476,7 @@ class BotEngine(QObject):
             delay_max=self.config.safety.random_delay_max,
             click_offset=self.config.safety.click_offset_range,
         )
+        # [适配层阶段] 构建 nklite 设备/UI/任务对象，供执行器回调使用。
         self.action_executor.set_cancel_checker(self._is_cancel_requested)
         self.nk_device = NKLiteDevice(
             screenshot_fn=self._nklite_screenshot,
@@ -483,6 +512,7 @@ class BotEngine(QObject):
         return True
 
     def stop(self):
+        """停止当前模块并释放运行状态。"""
         self._switch_session(cancelled=True)
         self._stop_executor()
         self.nk_task_farm_main = None
@@ -507,6 +537,7 @@ class BotEngine(QObject):
         self.log_message.emit('Bot已停止')
 
     def pause(self):
+        """暂停当前模块执行。"""
         if self._task_executor:
             self._task_executor.pause()
         self.scheduler.force_state('paused')
@@ -514,6 +545,7 @@ class BotEngine(QObject):
         self.stats_updated.emit(self.scheduler.get_stats())
 
     def resume(self):
+        """恢复当前模块执行。"""
         if self._task_executor:
             self._task_executor.resume()
         self.scheduler.force_state('running')
@@ -521,6 +553,7 @@ class BotEngine(QObject):
         self.stats_updated.emit(self.scheduler.get_stats())
 
     def run_once(self):
+        """立即触发一次 `farm_main` 任务执行。"""
         if not self._task_executor or not self._task_executor.is_running():
             self.log_message.emit('执行器未运行，无法立即执行')
             return
@@ -532,6 +565,7 @@ class BotEngine(QObject):
     # ============================================================
 
     def _prepare_window(self) -> tuple | None:
+        """刷新并激活窗口，返回当前有效截图区域。"""
         window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
         if not window:
             return None
@@ -561,6 +595,7 @@ class BotEngine(QObject):
         prefix: str = 'farm',
         save: bool = True,
     ) -> tuple[np.ndarray | None, PILImage.Image | None]:
+        """执行一次截图并转换为 OpenCV 图像，同时推送 GUI 预览。"""
         if save:
             image, _ = self.screen_capture.capture_and_save(rect, prefix)
         else:
@@ -584,10 +619,12 @@ class BotEngine(QObject):
         template_rois: dict[str, tuple[int, int, int, int]] | None = None,
         save: bool = True,
     ) -> tuple[np.ndarray | None, list[DetectResult], PILImage.Image | None]:
+        """截图并按指定模板/类别执行识别。"""
         cv_image, image = self._capture_frame(rect, prefix=prefix, save=save)
         if cv_image is None or image is None:
             return None, [], None
 
+        # 优先按模板名精确识别，避免全量模板扫描。
         if template_names is not None:
             detections = self.cv_detector.detect_templates(
                 cv_image,
@@ -597,20 +634,24 @@ class BotEngine(QObject):
                 roi_map=template_rois,
             )
         elif categories is not None:
+            # 仅在调用方显式要求分类识别时启用。
             detections = []
             for cat in categories:
                 detections += self.cv_detector.detect_category(cv_image, cat, threshold=0.8)
             detections = self.cv_detector._nms(detections, iou_threshold=0.5)
         else:
+            # 不再保留兜底全量识别，空列表交由上层决定下一步。
             detections = []
 
         return cv_image, detections, image
 
     def _nklite_screenshot(self, rect: tuple[int, int, int, int]) -> np.ndarray | None:
+        """nklite 设备截图回调。"""
         cv_image, _ = self._capture_frame(rect, save=False)
         return cv_image
 
     def _nklite_click(self, x: int, y: int, desc: str) -> bool:
+        """nklite 点击回调：统一封装为 ActionExecutor 行为。"""
         if not self.action_executor:
             return False
         rel_x, rel_y = self.resolve_live_click_point(int(x), int(y))
@@ -624,9 +665,11 @@ class BotEngine(QObject):
         return bool(result.success)
 
     def _nklite_sleep(self, seconds: float) -> bool:
+        """nklite 睡眠回调：复用可中断睡眠。"""
         return self._sleep_interruptible(seconds)
 
     def _emit_annotated(self, cv_image: np.ndarray, detections: list[DetectResult]):
+        """将识别结果绘制为标注图并推送到界面。"""
         if detections:
             annotated = self.cv_detector.draw_results(cv_image, detections)
             annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
@@ -634,6 +677,7 @@ class BotEngine(QObject):
             self.detection_result.emit(annotated_pil)
 
     def _record_stat(self, action_type: str):
+        """将动作类型映射到统计项并累加。"""
         type_map = {
             ActionType.HARVEST: 'harvest',
             ActionType.PLANT: 'plant',
@@ -679,6 +723,7 @@ class BotEngine(QObject):
         return self.cv_detector._nms(merged, iou_threshold=0.5)
 
     def _handle_seed_select_scene(self, detections: list[DetectResult]) -> str | None:
+        """处理种子选择场景：命中目标种子后执行点击播种。"""
         crop_name = self._resolve_crop_name()
         seed = self.popup.find_by_name(detections, f'seed_{crop_name}')
         if not seed:
@@ -692,11 +737,13 @@ class BotEngine(QObject):
     # ============================================================
 
     def check_farm(self, session_id: int | None = None) -> TaskResult:
+        """农场任务入口：转发到 `TaskFarmMain`。"""
         if self.nk_task_farm_main is not None:
             return self.nk_task_farm_main.run(session_id=session_id)
         return TaskResult(success=False, actions=[], next_run_seconds=5, error='nklite 农场任务未初始化')
 
     def check_share(self, session_id: int | None = None) -> TaskResult:
+        """分享任务入口：执行奖励领取并返回下一次调度时间。"""
         share_cfg = self.config.tasks.share
         next_seconds = max(1, int(share_cfg.interval_seconds))
         if share_cfg.trigger == TaskTriggerType.DAILY:
@@ -721,6 +768,7 @@ class BotEngine(QObject):
         return TaskResult(success=True, actions=list(out.actions), next_run_seconds=next_seconds, error='')
 
     def check_friends(self, session_id: int | None = None) -> TaskResult:
+        """好友任务入口（当前仍为占位实现）。"""
         friend_interval = max(1, int(self.config.tasks.friend.interval_seconds))
         if self._is_cancel_requested(session_id):
             return TaskResult(success=False, actions=[], next_run_seconds=friend_interval, error='停止中')

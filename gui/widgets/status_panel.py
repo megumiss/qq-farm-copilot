@@ -4,17 +4,20 @@ from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidg
 
 
 class StatusPanel(QWidget):
+    """承载 `StatusPanel` 相关界面控件与交互逻辑。"""
     _PAGE_NAME_MAP = {
         '--': '--',
         'unknown': '未知页面',
     }
 
     def __init__(self, parent=None):
+        """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self._labels = {}
         self._init_ui()
 
     def _init_ui(self):
+        """初始化 `ui` 相关状态或界面。"""
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 10, 10, 10)
         outer.setSpacing(0)
@@ -49,6 +52,7 @@ class StatusPanel(QWidget):
         outer.addStretch()
 
     def _add_cell(self, grid: QGridLayout, row: int, col: int, label_text: str, key: str, default: str):
+        """执行 `add cell` 相关处理。"""
         container = QHBoxLayout()
         container.setSpacing(3)
         container.setContentsMargins(0, 0, 0, 0)
@@ -66,12 +70,14 @@ class StatusPanel(QWidget):
 
     @classmethod
     def _localize_page(cls, raw_page) -> str:
+        """执行 `localize page` 相关处理。"""
         text = str(raw_page or '--').strip()
         if not text:
             return '--'
         return cls._PAGE_NAME_MAP.get(text, text)
 
     def update_stats(self, stats: dict):
+        """更新 `stats` 状态。"""
         state = stats.get('state', 'idle')
         state_map = {
             'idle': ('● 未启动', '#94a3b8'),

@@ -14,6 +14,7 @@ pyautogui.FAILSAFE = True  # 鼠标移到左上角可紧急停止
 
 
 class ActionExecutor:
+    """负责 `ActionExecutor` 的任务执行与状态推进。"""
     def __init__(
         self,
         window_rect: tuple[int, int, int, int],
@@ -21,6 +22,7 @@ class ActionExecutor:
         delay_max: float = 2.0,
         click_offset: int = 5,
     ):
+        """初始化对象并准备运行所需状态。"""
         self._window_left = window_rect[0]
         self._window_top = window_rect[1]
         self._window_width = window_rect[2]
@@ -31,12 +33,15 @@ class ActionExecutor:
         self._cancel_checker = None
 
     def set_cancel_checker(self, fn):
+        """设置 `cancel_checker` 参数。"""
         self._cancel_checker = fn
 
     def _is_cancelled(self) -> bool:
+        """判断是否满足 `cancelled` 条件。"""
         return bool(self._cancel_checker and self._cancel_checker())
 
     def _sleep_interruptible(self, seconds: float, interval: float = 0.01) -> bool:
+        """执行 `sleep interruptible` 相关处理。"""
         if seconds <= 0:
             return not self._is_cancelled()
         end_at = time.perf_counter() + seconds
@@ -49,6 +54,7 @@ class ActionExecutor:
             time.sleep(min(interval, remain))
 
     def update_window_rect(self, rect: tuple[int, int, int, int]):
+        """更新 `window_rect` 状态。"""
         self._window_left, self._window_top = rect[0], rect[1]
         self._window_width, self._window_height = rect[2], rect[3]
 

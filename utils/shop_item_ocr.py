@@ -19,6 +19,7 @@ from utils.ocr_utils import OCRItem, OCRTool
 
 @dataclass
 class ShopCard:
+    """封装 `ShopCard` 相关的数据与行为。"""
     x: int
     y: int
     w: int
@@ -27,19 +28,23 @@ class ShopCard:
 
     @property
     def x2(self) -> int:
+        """返回右边界坐标。"""
         return self.x + self.w
 
     @property
     def y2(self) -> int:
+        """返回下边界坐标。"""
         return self.y + self.h
 
     @property
     def center(self) -> tuple[int, int]:
+        """返回中心点坐标。"""
         return self.x + self.w // 2, self.y + self.h // 2
 
 
 @dataclass
 class ShopItem:
+    """封装 `ShopItem` 相关的数据与行为。"""
     name: str
     raw_name: str
     ocr_score: float
@@ -51,6 +56,7 @@ class ShopItem:
 
 @dataclass
 class ShopItemMatch:
+    """封装 `ShopItemMatch` 相关的数据与行为。"""
     target: ShopItem | None
     best: ShopItem | None
     best_similarity: float
@@ -58,9 +64,11 @@ class ShopItemMatch:
 
 
 class ShopItemOCR:
+    """封装 `ShopItemOCR` 相关的数据与行为。"""
     _shared_ocr: OCRTool | None = None
 
     def __init__(self, vocab: list[str] | None = None):
+        """初始化对象并准备运行所需状态。"""
         if ShopItemOCR._shared_ocr is None:
             ShopItemOCR._shared_ocr = OCRTool()
         self.ocr = ShopItemOCR._shared_ocr
@@ -70,16 +78,19 @@ class ShopItemOCR:
 
     @staticmethod
     def _clean_text(text: str) -> str:
+        """执行 `clean text` 相关处理。"""
         return re.sub(r'[^\u4e00-\u9fffA-Za-z0-9（）()]+', '', text).strip()
 
     @staticmethod
     def _norm_name(text: str) -> str:
+        """执行 `norm name` 相关处理。"""
         t = ShopItemOCR._clean_text(text)
         t = t.replace('（', '(').replace('）', ')')
         return t
 
     @staticmethod
     def _iou(a: ShopCard, b: ShopCard) -> float:
+        """执行 `iou` 相关处理。"""
         x1 = max(a.x, b.x)
         y1 = max(a.y, b.y)
         x2 = min(a.x2, b.x2)
@@ -92,6 +103,7 @@ class ShopItemOCR:
 
     @staticmethod
     def detect_shop_cards(img_bgr: np.ndarray) -> list[ShopCard]:
+        """检测 `shop_cards` 并输出识别结果。"""
         gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         edge = cv2.Canny(blur, 50, 150)
@@ -118,21 +130,25 @@ class ShopItemOCR:
 
     @staticmethod
     def _point_in_card(x: float, y: float, c: ShopCard) -> bool:
+        """执行 `point in card` 相关处理。"""
         return c.x <= x <= c.x2 and c.y <= y <= c.y2
 
     @staticmethod
     def _item_center(ocr_item: OCRItem) -> tuple[float, float]:
+        """执行 `item center` 相关处理。"""
         xs = [p[0] for p in ocr_item.box]
         ys = [p[1] for p in ocr_item.box]
         return sum(xs) / len(xs), sum(ys) / len(ys)
 
     @staticmethod
     def _item_bbox(ocr_item: OCRItem) -> tuple[int, int, int, int]:
+        """执行 `item bbox` 相关处理。"""
         xs = [p[0] for p in ocr_item.box]
         ys = [p[1] for p in ocr_item.box]
         return int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))
 
     def _resolve_name(self, text: str) -> tuple[str, float]:
+        """解析并计算 `name` 的最终结果。"""
         raw = self._norm_name(text)
         if not raw:
             return '', 0.0
@@ -156,6 +172,7 @@ class ShopItemOCR:
         return raw, best_score
 
     def _pick_card_items(self, all_items: list[OCRItem], card: ShopCard) -> list[OCRItem]:
+        """执行 `pick card items` 相关处理。"""
         out: list[OCRItem] = []
         for it in all_items:
             cx, cy = self._item_center(it)
@@ -165,6 +182,7 @@ class ShopItemOCR:
 
     def _parse_card_name(self, card_items: list[OCRItem]) -> tuple[str, str, float, float]:
         # name, raw_name, ocr_score, vocab_similarity
+        """解析 `card_name` 并返回结构化结果。"""
         names: list[tuple[str, str, float, float]] = []
         for it in card_items:
             raw = self._norm_name(it.text)
@@ -187,6 +205,7 @@ class ShopItemOCR:
         return names[0]
 
     def detect_items(self, img_bgr: np.ndarray) -> list[ShopItem]:
+        """检测 `items` 并输出识别结果。"""
         cards = self.detect_shop_cards(img_bgr)
         all_items = self.ocr.detect(img_bgr, scale=1.4, alpha=1.15, beta=0.0)
         if not all_items:
@@ -243,6 +262,7 @@ class ShopItemOCR:
         target_name: str,
         min_similarity: float = 0.70,
     ) -> ShopItemMatch:
+        """执行 `find item` 相关处理。"""
         parsed = self.detect_items(img_bgr)
         if not parsed:
             return ShopItemMatch(target=None, best=None, best_similarity=0.0, parsed_items=[])

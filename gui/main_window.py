@@ -75,6 +75,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 
 
 def _card(widget: QWidget = None) -> QFrame:
+    """创建统一卡片容器，并可选包裹一个子控件。"""
     card = QFrame()
     card.setStyleSheet("""
         QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }
@@ -87,6 +88,7 @@ def _card(widget: QWidget = None) -> QFrame:
 
 
 def _make_btn(text: str, color: str, hover: str) -> QPushButton:
+    """创建统一样式的操作按钮。"""
     btn = QPushButton(text)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setFixedHeight(36)
@@ -102,7 +104,9 @@ def _make_btn(text: str, color: str, hover: str) -> QPushButton:
 
 
 class MainWindow(QMainWindow):
+    """主窗口：组合预览、日志、任务面板并驱动 BotEngine。"""
     def __init__(self, config: AppConfig):
+        """初始化主窗口与引擎，并注册全局热键。"""
         super().__init__()
         self.config = config
         self.engine = BotEngine(config)
@@ -112,6 +116,7 @@ class MainWindow(QMainWindow):
         keyboard.add_hotkey('F10', self._on_stop)
 
     def _init_ui(self):
+        """构建主界面布局：左侧截图预览，右侧控制区和标签页。"""
         self.setWindowTitle('QQ Farm Vision Bot')
         icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'app_icon.svg')
         self.setWindowIcon(QIcon(icon_path))
@@ -119,6 +124,7 @@ class MainWindow(QMainWindow):
         self.resize(1060, 740)
         self.setStyleSheet(STYLESHEET)
 
+        # 根容器：左右分栏，左窄右宽。
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
@@ -143,6 +149,7 @@ class MainWindow(QMainWindow):
         root.addWidget(preview_card)
 
         # ========== 右侧：控制按钮 + Tab ==========
+        # 顶部放运行控制按钮，底部放状态与配置标签页。
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -167,6 +174,7 @@ class MainWindow(QMainWindow):
         right_layout.addLayout(btn_row)
 
         # Tab：状态 + 设置
+        # 标签页顺序按“运行信息 -> 调度 -> 任务设置 -> 程序设置”组织。
         tabs = QTabWidget()
         tabs.setStyleSheet("""
             QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; top: -1px; }
@@ -198,6 +206,7 @@ class MainWindow(QMainWindow):
         root.addWidget(right, 1)
 
     def _connect_signals(self):
+        """连接引擎信号与各面板更新逻辑。"""
         self.engine.log_message.connect(self._log_panel.append_log)
         self.engine.screenshot_updated.connect(self._update_screenshot)
         self.engine.detection_result.connect(self._update_screenshot)
@@ -209,6 +218,7 @@ class MainWindow(QMainWindow):
         self._feature_panel.config_changed.connect(self._on_config_changed)
 
     def _update_screenshot(self, image: Image.Image):
+        """将 PIL 图像转为 QPixmap 并按预览区尺寸缩放显示。"""
         try:
             image = image.convert('RGB')
             data = image.tobytes('raw', 'RGB')
@@ -224,12 +234,14 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_start(self):
+        """点击“开始”后启动引擎并更新按钮可用状态。"""
         if self.engine.start():
             self._btn_start.setEnabled(False)
             self._btn_pause.setEnabled(True)
             self._btn_stop.setEnabled(True)
 
     def _on_pause(self):
+        """在暂停/恢复之间切换执行状态。"""
         if self._btn_pause.text() == '暂停':
             self.engine.pause()
             self._btn_pause.setText('恢复')
@@ -238,6 +250,7 @@ class MainWindow(QMainWindow):
             self._btn_pause.setText('暂停')
 
     def _on_stop(self):
+        """停止引擎并立即刷新界面状态。"""
         self.engine.stop()
         self._btn_start.setEnabled(True)
         self._btn_pause.setEnabled(False)
@@ -247,16 +260,20 @@ class MainWindow(QMainWindow):
         self._status_panel.update_stats(self.engine.scheduler.get_stats())
 
     def _on_run_once(self):
+        """触发一次立即执行。"""
         self.engine.run_once()
 
     def _on_state_changed(self, state: str):
+        """状态变化时刷新状态统计。"""
         self._status_panel.update_stats(self.engine.scheduler.get_stats())
 
     def _on_config_changed(self, config: AppConfig):
+        """接收子面板配置变更并同步到引擎。"""
         self.config = config
         self.engine.update_config(config)
 
     def closeEvent(self, event):
+        """窗口关闭时执行收尾清理。"""
         self.engine.stop()
         super().closeEvent(event)
 

@@ -32,6 +32,7 @@ HEADER = """from core.base.button import Button
 
 @dataclass
 class Item:
+    """封装 `Item` 相关的数据与行为。"""
     name: str
     file_rel: str
     area: tuple[int, int, int, int]
@@ -42,6 +43,7 @@ class Item:
 
 @dataclass
 class SourceBundle:
+    """封装 `SourceBundle` 相关的数据与行为。"""
     base: Path | None = None
     area: Path | None = None
     color: Path | None = None
@@ -49,6 +51,7 @@ class SourceBundle:
 
 
 def load_aliases() -> dict[str, str]:
+    """加载 `aliases` 数据。"""
     if not ALIAS_PATH.exists():
         return {}
     data = json.loads(ALIAS_PATH.read_text(encoding='utf-8'))
@@ -61,6 +64,7 @@ def load_aliases() -> dict[str, str]:
 
 
 def extract_bbox_and_color(image_path: Path) -> tuple[tuple[int, int, int, int], tuple[int, int, int]]:
+    """执行 `extract bbox and color` 相关处理。"""
     img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
     if img is None:
         return (0, 0, 1, 1), (128, 128, 128)
@@ -93,6 +97,7 @@ def extract_bbox_and_color(image_path: Path) -> tuple[tuple[int, int, int, int],
 
 
 def image_wh(image_path: Path) -> tuple[int, int] | None:
+    """执行 `image wh` 相关处理。"""
     img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
     if img is None:
         return None
@@ -101,6 +106,7 @@ def image_wh(image_path: Path) -> tuple[int, int] | None:
 
 
 def to_const_name(template_name: str) -> str:
+    """将 `const name` 转换为目标格式。"""
     if template_name.startswith('btn_'):
         return 'BTN_' + template_name[4:].upper()
     if template_name.startswith('icon_'):
@@ -112,6 +118,7 @@ def to_const_name(template_name: str) -> str:
 
 
 def iter_template_files() -> list[Path]:
+    """遍历并返回 `template files` 列表。"""
     out: list[Path] = []
     for p in TEMPLATES_DIR.rglob('*.png'):
         rel = p.relative_to(TEMPLATES_DIR).as_posix()
@@ -122,6 +129,7 @@ def iter_template_files() -> list[Path]:
 
 
 def parse_template_name(path: Path) -> tuple[str, str]:
+    """解析 `template_name` 内容。"""
     stem = path.stem
     if '.' not in stem:
         return stem, 'BASE'
@@ -133,6 +141,7 @@ def parse_template_name(path: Path) -> tuple[str, str]:
 
 
 def collect_sources() -> dict[str, SourceBundle]:
+    """执行 `collect sources` 相关处理。"""
     bundles: dict[str, SourceBundle] = {}
     for path in iter_template_files():
         name, kind = parse_template_name(path)
@@ -153,6 +162,7 @@ def collect_sources() -> dict[str, SourceBundle]:
 
 
 def build_items() -> list[Item]:
+    """构建 `items` 结构。"""
     alias_by_name = load_aliases()
     bundles = collect_sources()
     items: list[Item] = []
@@ -199,6 +209,7 @@ def build_items() -> list[Item]:
 
 
 def render(items: list[Item]) -> str:
+    """执行 `render` 相关处理。"""
     lines = [HEADER.rstrip(), '']
     rendered = {}
     for item in items:
@@ -228,6 +239,7 @@ def render(items: list[Item]) -> str:
 
 
 def main():
+    """程序主入口。"""
     items = build_items()
     text = render(items)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

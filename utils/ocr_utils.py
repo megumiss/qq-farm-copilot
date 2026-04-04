@@ -35,10 +35,12 @@ class OCRTool:
     """
 
     def __init__(self):
+        """初始化对象并准备运行所需状态。"""
         self._ocr = RapidOCR()
 
     @staticmethod
     def _to_bgr(image: str | Path | Image.Image | np.ndarray) -> np.ndarray:
+        """将 `bgr` 转换为目标格式。"""
         if isinstance(image, (str, Path)):
             path = Path(image)
             arr = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_UNCHANGED)
@@ -68,6 +70,7 @@ class OCRTool:
 
     @staticmethod
     def _clip_region(region: tuple[int, int, int, int], w: int, h: int) -> tuple[int, int, int, int]:
+        """执行 `clip region` 相关处理。"""
         x1, y1, x2, y2 = region
         x1 = max(0, min(x1, w - 1))
         y1 = max(0, min(y1, h - 1))

@@ -18,9 +18,11 @@ GOTO_MAIN = Button(
 
 
 class Page:
+    """封装 `Page` 相关的数据与行为。"""
     parent = None
 
     def __init__(self, check_button, cn_name: str = ''):
+        """初始化对象并准备运行所需状态。"""
         self.check_button = check_button
         self.links = {}
         (_filename, _line, _function, text) = traceback.extract_stack()[-2]
@@ -28,15 +30,19 @@ class Page:
         self.cn_name = cn_name or self.name
 
     def __eq__(self, other):
+        """定义对象相等比较逻辑。"""
         return self.name == other.name
 
     def __hash__(self):
+        """定义对象哈希值，支持集合与字典键。"""
         return hash(self.name)
 
     def __str__(self):
+        """返回对象的可读字符串表示。"""
         return self.name
 
     def link(self, button, destination):
+        """执行 `link` 相关处理。"""
         self.links[destination] = button
 
 

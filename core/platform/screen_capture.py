@@ -11,7 +11,9 @@ from utils.image_utils import save_screenshot
 
 
 class ScreenCapture:
+    """封装 `ScreenCapture` 相关的数据与行为。"""
     def __init__(self, save_dir: str = 'screenshots'):
+        """初始化对象并准备运行所需状态。"""
         self._save_dir = save_dir
         os.makedirs(save_dir, exist_ok=True)
 

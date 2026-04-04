@@ -12,6 +12,7 @@ from loguru import logger
 
 @dataclass
 class WindowInfo:
+    """封装 `WindowInfo` 相关的数据与行为。"""
     hwnd: int
     title: str
     left: int
@@ -21,6 +22,7 @@ class WindowInfo:
 
 
 class MONITORINFO(ctypes.Structure):
+    """封装 `MONITORINFO` 相关的数据与行为。"""
     _fields_ = [
         ('cbSize', ctypes.wintypes.DWORD),
         ('rcMonitor', ctypes.wintypes.RECT),
@@ -30,6 +32,7 @@ class MONITORINFO(ctypes.Structure):
 
 
 class WindowManager:
+    """封装 `WindowManager` 相关的数据与行为。"""
     TARGET_CLIENT_WIDTH = 540
     TARGET_CLIENT_HEIGHT = 960
     _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +44,7 @@ class WindowManager:
     _GWL_EXSTYLE = -20
 
     def __init__(self):
+        """初始化对象并准备运行所需状态。"""
         self._enable_dpi_awareness()
         self._cached_window: WindowInfo | None = None
         self._nonclient_config = self._load_nonclient_config()
@@ -80,6 +84,7 @@ class WindowManager:
 
     @staticmethod
     def _get_window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+        """获取 `window rect` 信息。"""
         rect = ctypes.wintypes.RECT()
         ok = ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
         if not ok:
@@ -88,6 +93,7 @@ class WindowManager:
 
     @staticmethod
     def _get_window_outer_size(hwnd: int) -> tuple[int, int] | None:
+        """获取 `window outer size` 信息。"""
         rect = WindowManager._get_window_rect(hwnd)
         if not rect:
             return None
@@ -95,6 +101,7 @@ class WindowManager:
 
     @staticmethod
     def _get_client_size(hwnd: int) -> tuple[int, int] | None:
+        """获取 `client size` 信息。"""
         rect = ctypes.wintypes.RECT()
         ok = ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(rect))
         if not ok:
@@ -149,6 +156,7 @@ class WindowManager:
             return None
 
     def _get_work_area_for_window(self, hwnd: int) -> ctypes.wintypes.RECT | None:
+        """获取 `work area for window` 信息。"""
         user32 = ctypes.windll.user32
         monitor = 0
         try:
@@ -174,6 +182,7 @@ class WindowManager:
         return work_area
 
     def _set_window_outer_rect(self, hwnd: int, x: int, y: int, width: int, height: int) -> tuple[bool, str]:
+        """设置 `window outer rect` 参数。"""
         user32 = ctypes.windll.user32
         ok = bool(
             user32.SetWindowPos(
@@ -379,6 +388,7 @@ class WindowManager:
         return (w.left, w.top, w.width, w.height)
 
     def is_capture_rect_client(self) -> bool:
+        """判断是否满足 `capture rect client` 条件。"""
         return bool(self._last_capture_rect_is_client)
 
     def activate_window(self) -> bool:
@@ -436,7 +446,13 @@ class WindowManager:
         return x, y
 
     def resize_window(self, position: str = 'left_center', platform: str = 'qq') -> bool:
-        """设置窗口分辨率与位置。"""
+        """按平台规则将窗口调整到目标尺寸并放置到指定位置。
+
+        核心目标：
+        - 保证最终客户区可稳定用于 540x960 模板识别。
+        - 在 QQ/微信两种窗口模型下使用不同的外框计算公式。
+        - 输出详细误差日志，便于排查 DPI/边框差异导致的偏移问题。
+        """
         if not self._cached_window:
             return False
         try:
@@ -444,6 +460,7 @@ class WindowManager:
             base_width = self.TARGET_CLIENT_WIDTH
             base_height = self.TARGET_CLIENT_HEIGHT
 
+            # 1) 读取当前窗口缩放与非客户区参数（边框/标题栏）。
             scale_percent = self._get_window_scale_percent(hwnd)
             border_width, title_height, matched_scale = self._get_nonclient_metrics(platform, scale_percent)
             platform_key = (platform or '').strip().lower()
@@ -461,6 +478,7 @@ class WindowManager:
             nonclient_w = max(0, int(before_outer[0] - before_client[0]))
             nonclient_h = max(0, int(before_outer[1] - before_client[1]))
 
+            # 2) 依据平台差异计算“目标外框尺寸”。
             # 目标物理尺寸（target_physical_w/h）
             # 1) 微信: 540 x (960 + border + title)
             # 2) QQ  : (540 + border*2) x (960 + border*2 + title)
@@ -487,6 +505,7 @@ class WindowManager:
                 height_add = int(border_width * 2 + title_height)
                 formula_desc = 'QQ公式: 最终外框=目标物理尺寸'
 
+            # 3) 计算目标放置坐标（工作区内，避免遮挡任务栏）。
             work_area = self._get_work_area_for_window(hwnd)
             if not work_area:
                 logger.error('调整窗口大小失败: 无法获取工作区')
@@ -503,6 +522,7 @@ class WindowManager:
                 f'非客户区={nonclient_w}x{nonclient_h} 位置={position} 目标坐标=({pos_x},{pos_y})'
             )
 
+            # 4) 尝试应用窗口外框尺寸与位置。
             ok, apply_method = self._set_window_outer_rect(
                 hwnd=hwnd,
                 x=pos_x,
@@ -516,6 +536,7 @@ class WindowManager:
 
             resize_msg = f'单次应用完成; 目标外框={target_outer_w}x{target_outer_h}; 应用={apply_method}'
 
+            # 5) 回读最终尺寸，计算客户区/外框误差并更新缓存。
             final_rect = self._get_window_rect(hwnd)
             final_client = self._get_client_size(hwnd)
             if final_rect:
@@ -577,6 +598,7 @@ class WindowManager:
                 f'实际客户区={actual_client_text}'
             )
 
+            # 6) 输出最终结论：误差不为 0 记 warning，否则记 info。
             if judge_err_w != 0 or judge_err_h != 0:
                 logger.warning(
                     f'窗口调整完成但{judged_by}存在偏差: '

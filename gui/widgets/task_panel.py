@@ -21,6 +21,13 @@ from models.config import AppConfig, TaskTriggerType
 
 
 class TaskPanel(QWidget):
+    """任务调度配置面板。
+
+    
+    - 根据 `tasks` 配置动态生成任务调度表单。
+    - 维护执行器策略（空队列策略、最大连续失败）。
+    - 用户修改后自动写回 `config.json` 并发出 `config_changed` 信号。
+    """
     config_changed = pyqtSignal(object)
 
     TASK_TITLE_MAP = {
@@ -30,6 +37,7 @@ class TaskPanel(QWidget):
     }
 
     def __init__(self, config: AppConfig, parent=None):
+        """初始化任务调度面板并加载配置。"""
         super().__init__(parent)
         self.config = config
         self._loading = True
@@ -42,6 +50,13 @@ class TaskPanel(QWidget):
         self._loading = False
 
     def _init_ui(self):
+        """构建面板主布局并按任务配置生成卡片。
+
+        规则：
+        - 每个任务一张卡片（自动识别 interval/daily）。
+        - 额外附加一张“执行器”卡片。
+        - 卡片按两列排布并做同一行高度对齐。
+        """
         root = QGridLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(10)
@@ -66,6 +81,13 @@ class TaskPanel(QWidget):
         self._align_cards_in_rows()
 
     def _build_task_group(self, task_name: str, trigger: TaskTriggerType) -> QGroupBox:
+        """构建单个任务的配置卡片。
+
+        
+        - 固定提供任务开关。
+        - `INTERVAL` 任务显示“执行间隔(秒)”。
+        - `DAILY` 任务显示“每日执行时间 + 下次执行提示”。
+        """
         title = self.TASK_TITLE_MAP.get(task_name, f'{task_name}任务')
         group = QGroupBox(title)
         form = QFormLayout()
@@ -119,6 +141,12 @@ class TaskPanel(QWidget):
         return group
 
     def _build_executor_group(self) -> QGroupBox:
+        """构建执行器全局配置卡片。
+
+        
+        - 配置空队列策略（停留/回主界面）。
+        - 配置最大连续失败次数（影响失败退避策略）。
+        """
         group = QGroupBox('执行器')
         form = QFormLayout()
         self._empty_policy = QComboBox()
@@ -132,6 +160,7 @@ class TaskPanel(QWidget):
         return group
 
     def _align_cards_in_rows(self):
+        """统一同一行卡片的最小高度，避免两列错位。"""
         row_heights: dict[int, int] = {}
         for idx, card in enumerate(self._cards):
             row = idx // 2
@@ -141,6 +170,7 @@ class TaskPanel(QWidget):
             card.setMinimumHeight(row_heights[row])
 
     def _connect_auto_save(self):
+        """绑定所有表单控件的变更事件到自动保存。"""
         for task_name in self._task_order:
             widgets = self._task_widgets.get(task_name, {})
             enabled = widgets.get('enabled')
@@ -159,6 +189,13 @@ class TaskPanel(QWidget):
         self._max_failures.valueChanged.connect(self._auto_save)
 
     def _auto_save(self):
+        """将当前面板值回写到配置对象并落盘。
+
+        行为：
+        - 更新 executor 全局策略。
+        - 更新每个任务的 enabled/trigger/interval/daily_time。
+        - 保存后发出 `config_changed`，驱动引擎热更新。
+        """
         if self._loading:
             return
 
@@ -190,6 +227,7 @@ class TaskPanel(QWidget):
         self.config_changed.emit(c)
 
     def _refresh_daily_next_text(self, task_name: str):
+        """刷新每日任务的“下次执行”文案（今天/明天 + 时间）。"""
         widgets = self._task_widgets.get(task_name, {})
         enabled = widgets.get('enabled')
         daily_time = widgets.get('daily_time')
@@ -211,6 +249,7 @@ class TaskPanel(QWidget):
         next_label.setText(f'{day_hint} {target:%m-%d %H:%M}')
 
     def _load_config(self):
+        """从配置对象加载初始值到界面控件。"""
         c = self.config
 
         for task_name in self._task_order:

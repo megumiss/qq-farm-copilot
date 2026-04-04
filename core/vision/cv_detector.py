@@ -24,6 +24,7 @@ class DetectResult:
 
     @property
     def center(self) -> tuple[int, int]:
+        """返回中心点坐标。"""
         return self.x, self.y
 
     @property
@@ -49,6 +50,7 @@ class CVDetector:
     SEED_DETECT_ROI: tuple[int, int, int, int] = (40, 500, 490, 920)
 
     def __init__(self, templates_dir: str = 'templates'):
+        """初始化对象并准备运行所需状态。"""
         self._templates_dir = templates_dir
         self._templates: dict[str, list[dict]] = {}  # category -> [{name, image, mask}]
         self._templates_by_name: dict[str, dict] = {}
@@ -206,16 +208,18 @@ class CVDetector:
         thresholds: dict[str, float] | None = None,
         roi_map: dict[str, tuple[int, int, int, int]] | None = None,
     ) -> list[DetectResult]:
-        """按模板名批量识别，避免全类别扫描。"""
+        """按模板名执行精确识别，避免全量模板扫描。"""
         if not self._loaded:
             self.load_templates()
 
         if not template_names:
             return []
 
+        # 预先生成灰度图，减少单模板匹配时的重复转换开销。
         results: list[DetectResult] = []
         gray_screen = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
         seen: set[str] = set()
+        # 按调用方传入顺序逐个模板匹配（重复模板会被去重）。
         for name in template_names:
             name = str(name or '').strip()
             if not name or name in seen:
@@ -234,6 +238,7 @@ class CVDetector:
             threshold = float(thresholds.get(name, default_threshold) if thresholds else default_threshold)
             roi = roi_map.get(name) if roi_map else None
             if roi is not None:
+                # ROI 匹配：在局部区域搜索，再将命中坐标映射回全图。
                 x1, y1, x2, y2 = [int(v) for v in roi]
                 sh, sw = screenshot.shape[:2]
                 x1 = max(0, min(x1, sw - 1))
@@ -256,6 +261,7 @@ class CVDetector:
                     m.y += y1
                     m.extra['roi'] = (x1, y1, x2, y2)
             else:
+                # 全图匹配：直接在整张截图搜索模板。
                 matches, best_score = self._match_template_with_best(screenshot, gray_screen, tpl, threshold)
             self._log_template_probe(
                 template_name=name,
@@ -265,6 +271,7 @@ class CVDetector:
             )
             results.extend(matches)
 
+        # 汇总后做 NMS 去重，返回稳定结果集合。
         results = self._nms(results, iou_threshold=0.5)
         results.sort(key=lambda r: r.confidence, reverse=True)
         return results
@@ -276,14 +283,17 @@ class CVDetector:
         threshold: float = 0.6,
         roi: tuple[int, int, int, int] | None = None,
     ) -> list[DetectResult]:
-        """Seed 专用识别：
-        - 固定参数：color + tpl_interp=AREA + mask_interp=NEAREST
-        - 默认范围：SEED_DETECT_ROI
-        - 缩放策略：先 0.75，若无命中再尝试 0.70/0.80
+        """执行种子模板专用识别，保持既有 Seed 匹配策略不变。
+
+        关键约束：
+        - 仅在 Seed ROI 内匹配，避免全屏误检；
+        - 优先 0.75 缩放，只有首轮无命中才回退 0.70/0.80；
+        - 模板含 alpha 时使用 mask，插值策略保持 NIKKE 对齐。
         """
         if not self._loaded:
             self.load_templates()
 
+        # 支持传入“作物名”或“完整模板名（seed_xxx）”两种形式。
         if crop_name_or_template.startswith('seed_'):
             template_name = crop_name_or_template
         else:
@@ -307,6 +317,7 @@ class CVDetector:
             )
             return []
 
+        # 先将 ROI 夹紧到截图边界，避免越界切片。
         h, w = screenshot.shape[:2]
         x1, y1, x2, y2 = roi if roi is not None else self.SEED_DETECT_ROI
         x1 = max(0, min(int(x1), w - 1))
@@ -324,6 +335,7 @@ class CVDetector:
             return []
 
         def _run_scales(scales: list[float]) -> tuple[list[DetectResult], float]:
+            """在给定缩放列表上匹配并返回命中结果与最佳分数。"""
             results: list[DetectResult] = []
             best_score = 0.0
             tpl_img = tpl['image']
@@ -334,9 +346,11 @@ class CVDetector:
             for scale in scales:
                 new_w = int(tw * scale)
                 new_h = int(th * scale)
+                # 跳过过小模板或超过 ROI 的模板尺寸。
                 if new_w < 10 or new_h < 10 or new_w >= rw or new_h >= rh:
                     continue
 
+                # Seed 识别固定插值：模板 AREA，mask NEAREST（与 NIKKE 一致）。
                 resized_tpl = cv2.resize(tpl_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 resized_mask = None
                 if tpl_mask is not None:
@@ -350,6 +364,7 @@ class CVDetector:
 
                 finite = np.isfinite(match_result)
                 if not finite.all():
+                    # NaN/Inf 统一置为 -1，防止被阈值命中。
                     match_result = np.where(finite, match_result, -1.0)
                     finite = np.isfinite(match_result)
 
@@ -361,6 +376,7 @@ class CVDetector:
                 locations = np.where(match_result >= threshold)
                 for pt_y, pt_x in zip(*locations):
                     confidence = float(match_result[pt_y, pt_x])
+                    # ROI 坐标回映射到整图坐标系，供点击流程直接使用。
                     center_x = x1 + pt_x + new_w // 2
                     center_y = y1 + pt_y + new_h // 2
                     results.append(
@@ -404,6 +420,7 @@ class CVDetector:
     def _log_template_probe(self, template_name: str, threshold: float, best_score: float, hit_count: int) -> None:
         # if not self._probe_log_enabled:
         #     return
+        """输出模板识别调试日志。"""
         logger.debug(
             '模板识别: 模板={}, 阈值={:.3f}, 最大分数={:.3f}, 命中数={}',
             template_name,
@@ -422,7 +439,7 @@ class CVDetector:
     def _match_template_with_best(
         self, screenshot: np.ndarray, gray_screen: np.ndarray, tpl: dict, threshold: float
     ) -> tuple[list[DetectResult], float]:
-        """对单个模板执行多尺度匹配，并返回最佳分数（不受阈值限制）。"""
+        """执行单模板多尺度匹配，并返回命中列表与尺度内最高分。"""
         results = []
         best_score = 0.0
         tpl_img = tpl['image']
@@ -440,6 +457,7 @@ class CVDetector:
         for scale in scales:
             new_w = int(tw * scale)
             new_h = int(th * scale)
+            # 尺寸非法（过小/超界）直接跳过该尺度。
             if new_w >= sw or new_h >= sh or new_w < 10 or new_h < 10:
                 continue
 
@@ -470,6 +488,7 @@ class CVDetector:
             # 找到所有超过阈值的匹配位置
             locations = np.where(match_result >= threshold)
             if locations[0].size > max_hits:
+                # 候选过多时只保留分数最高的一批，降低后续 NMS 负担。
                 scores = match_result[locations]
                 top_idx = np.argpartition(scores, -max_hits)[-max_hits:]
                 pt_ys = locations[0][top_idx]

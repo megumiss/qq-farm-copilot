@@ -33,7 +33,9 @@ MAX_DISPLAY_HEIGHT = 800
 
 
 class TemplateCollector:
+    """封装 `TemplateCollector` 相关的数据与行为。"""
     def __init__(self):
+        """初始化对象并准备运行所需状态。"""
         self.wm = WindowManager()
         self.sc = ScreenCapture()
         self.templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
@@ -47,6 +49,7 @@ class TemplateCollector:
         self._known_prefixes = {'btn', 'icon', 'crop', 'ui', 'land', 'seed'}
 
     def _resolve_save_path(self, name: str) -> str:
+        """解析并计算 `save_path` 的最终结果。"""
         prefix = (name.split('_')[0] if '_' in name else name).lower()
         subdir = prefix if prefix in self._known_prefixes else 'unknown'
         save_dir = os.path.join(self.templates_dir, subdir)
@@ -54,6 +57,7 @@ class TemplateCollector:
         return os.path.join(save_dir, f'{name}.png')
 
     def capture_game_window(self, keyword: str = 'QQ经典农场') -> np.ndarray | None:
+        """执行截图流程并返回图像结果。"""
         window = self.wm.find_window(keyword)
         if not window:
             print(f"未找到包含 '{keyword}' 的窗口")
@@ -100,6 +104,7 @@ class TemplateCollector:
         return ox, oy
 
     def _mouse_callback(self, event, x, y, flags, param):
+        """执行 `mouse callback` 相关处理。"""
         if event == cv2.EVENT_LBUTTONDOWN:
             self._drawing = True
             self._start_point = (x, y)
@@ -119,6 +124,7 @@ class TemplateCollector:
             self._end_point = (x, y)
 
     def run(self):
+        """执行当前模块主流程并返回结果。"""
         print('=' * 50)
         print('  QQ农场模板采集工具')
         print('=' * 50)

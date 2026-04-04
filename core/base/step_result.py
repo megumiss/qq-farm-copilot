@@ -7,11 +7,13 @@ from dataclasses import dataclass, field
 
 @dataclass
 class StepResult:
+    """封装 `StepResult` 相关的数据与行为。"""
     action: str | None = None
     actions: list[str] = field(default_factory=list)
 
     @classmethod
     def from_value(cls, value) -> 'StepResult':
+        """执行 `from value` 相关处理。"""
         if isinstance(value, StepResult):
             return value
         if value is None:

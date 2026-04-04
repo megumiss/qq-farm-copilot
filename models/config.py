@@ -9,15 +9,18 @@ from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 
 class PlantMode(str, Enum):
+    """封装 `PlantMode` 相关的数据与行为。"""
     PREFERRED = 'preferred'  # 用户手动指定作物
     BEST_EXP_RATE = 'best_exp_rate'  # 当前等级下单位时间经验最高
 
 
 class SellMode(str, Enum):
+    """封装 `SellMode` 相关的数据与行为。"""
     BATCH_ALL = 'batch_all'  # 批量全部出售
 
 
 class WindowPosition(str, Enum):
+    """封装 `WindowPosition` 相关的数据与行为。"""
     LEFT_CENTER = 'left_center'
     CENTER = 'center'
     RIGHT_CENTER = 'right_center'
@@ -28,20 +31,24 @@ class WindowPosition(str, Enum):
 
 
 class WindowPlatform(str, Enum):
+    """封装 `WindowPlatform` 相关的数据与行为。"""
     QQ = 'qq'
     WECHAT = 'wechat'
 
 
 class SellConfig(BaseModel):
+    """定义 `SellConfig` 的配置数据结构与默认值。"""
     mode: SellMode = SellMode.BATCH_ALL
 
     @field_validator('mode', mode='before')
     @classmethod
     def _force_batch_mode(cls, _value):
+        """执行 `force batch mode` 相关处理。"""
         return SellMode.BATCH_ALL
 
 
 class SafetyConfig(BaseModel):
+    """定义 `SafetyConfig` 的配置数据结构与默认值。"""
     random_delay_min: float = 0.1
     random_delay_max: float = 0.3
     click_offset_range: int = 5
@@ -49,17 +56,20 @@ class SafetyConfig(BaseModel):
 
 
 class ScreenshotConfig(BaseModel):
+    """定义 `ScreenshotConfig` 的配置数据结构与默认值。"""
     quality: int = 80
     save_history: bool = True
     max_history_count: int = 50
 
 
 class TaskTriggerType(str, Enum):
+    """封装 `TaskTriggerType` 任务的执行入口与步骤。"""
     INTERVAL = 'interval'
     DAILY = 'daily'
 
 
 class TaskScheduleItemConfig(BaseModel):
+    """定义 `TaskScheduleItemConfig` 的配置数据结构与默认值。"""
     enabled: bool = True
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
@@ -70,16 +80,19 @@ class TaskScheduleItemConfig(BaseModel):
     @field_validator('interval_seconds', mode='before')
     @classmethod
     def _normalize_interval(cls, value):
+        """规范化 `interval` 输入值。"""
         return max(1, int(value))
 
     @field_validator('failure_interval_seconds', mode='before')
     @classmethod
     def _normalize_failure_interval(cls, value):
+        """规范化 `failure_interval` 输入值。"""
         return max(1, int(value))
 
     @field_validator('daily_time', mode='before')
     @classmethod
     def _normalize_daily_time(cls, value):
+        """规范化 `daily_time` 输入值。"""
         text = str(value or '04:00').strip()
         if not re.match(r'^\d{2}:\d{2}$', text):
             return '04:00'
@@ -92,12 +105,14 @@ class TaskScheduleItemConfig(BaseModel):
     @field_validator('features', mode='before')
     @classmethod
     def _normalize_features(cls, value):
+        """规范化 `features` 输入值。"""
         if not isinstance(value, dict):
             return {}
         return {str(k): bool(v) for k, v in value.items()}
 
 
 class TasksConfig(BaseModel):
+    """定义 `TasksConfig` 的配置数据结构与默认值。"""
     farm_main: TaskScheduleItemConfig = Field(
         default_factory=lambda: TaskScheduleItemConfig(
             enabled=True,
@@ -146,6 +161,7 @@ class TasksConfig(BaseModel):
 
 
 class ExecutorConfig(BaseModel):
+    """定义 `ExecutorConfig` 的配置数据结构与默认值。"""
     empty_queue_policy: str = 'stay'
     default_success_interval: int = 30
     default_failure_interval: int = 30
@@ -154,6 +170,7 @@ class ExecutorConfig(BaseModel):
     @field_validator('empty_queue_policy', mode='before')
     @classmethod
     def _normalize_empty_queue_policy(cls, value):
+        """规范化 `empty_queue_policy` 输入值。"""
         text = str(value or 'stay').strip().lower()
         if text not in {'stay', 'goto_main'}:
             return 'stay'
@@ -161,6 +178,7 @@ class ExecutorConfig(BaseModel):
 
 
 class PlantingConfig(BaseModel):
+    """定义 `PlantingConfig` 的配置数据结构与默认值。"""
     strategy: PlantMode = PlantMode.BEST_EXP_RATE
     preferred_crop: str = '白萝卜'  # strategy=preferred 时使用
     player_level: int = 10
@@ -169,6 +187,7 @@ class PlantingConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
+    """定义 `AppConfig` 的配置数据结构与默认值。"""
     window_title_keyword: str = 'QQ经典农场'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
@@ -182,6 +201,7 @@ class AppConfig(BaseModel):
 
     @staticmethod
     def _read_json_file(path: str) -> dict:
+        """读取 JSON 文件并返回字典对象。"""
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         if isinstance(data, dict):
@@ -190,6 +210,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def _resolve_template_path(cls, config_path: str, template_path: str | None = None) -> str:
+        """解析并计算 `template_path` 的最终结果。"""
         if template_path:
             return str(template_path)
         _ = config_path
@@ -198,6 +219,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def _deep_merge_dict(cls, base: dict, override: dict) -> dict:
+        """递归合并两层字典配置。"""
         out = dict(base)
         for key, value in (override or {}).items():
             if key in out and isinstance(out[key], dict) and isinstance(value, dict):
@@ -208,6 +230,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def load(cls, path: str = 'configs/config.json', template_path: str | None = None) -> 'AppConfig':
+        """从配置文件加载并构建配置对象。"""
         template_file = cls._resolve_template_path(path, template_path)
         template_data: dict = {}
         if template_file and os.path.exists(template_file):
@@ -230,6 +253,7 @@ class AppConfig(BaseModel):
         return config
 
     def save(self, path: str | None = None):
+        """将当前配置对象写回文件。"""
         p = path or self._config_path or 'configs/config.json'
         os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
         with open(p, 'w', encoding='utf-8') as f:

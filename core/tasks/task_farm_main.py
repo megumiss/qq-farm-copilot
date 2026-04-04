@@ -22,7 +22,9 @@ from core.ui.page import (
 
 
 class TaskFarmMain:
+    """封装 `TaskFarmMain` 任务的执行入口与步骤。"""
     def __init__(self, engine, ui):
+        """初始化对象并准备运行所需状态。"""
         self.engine = engine
         self.ui = ui
         self.task_harvest = TaskFarmHarvest(engine, ui)
@@ -32,11 +34,13 @@ class TaskFarmMain:
         self.task_friend = TaskFarmFriend(engine, ui)
 
     def run(self, session_id: int | None = None) -> TaskResult:
+        """执行当前模块主流程并返回结果。"""
         result = TaskResult(success=False, actions=[], next_run_seconds=5, error='')
         if self.engine._is_cancel_requested(session_id):
             result.error = '停止中'
             return result
 
+        # [准备阶段] 同步窗口与 UI 状态，确保从主界面开始执行。
         features = self.engine.get_task_features('farm_main')
         rect = self.engine._prepare_window()
         if not rect:
@@ -47,6 +51,7 @@ class TaskFarmMain:
         self.engine._clear_screen(rect, session_id)
         self.ui.ui_ensure(page_main, confirm_wait=0.5)
 
+        # [巡查阶段] 先做自家农场维护（收获/除草/除虫/浇水）。
         patrol_actions = self._run_self_farm_patrol(rect=rect, features=features, session_id=session_id)
         if patrol_actions:
             result.actions.extend(patrol_actions)
@@ -57,6 +62,7 @@ class TaskFarmMain:
         tick = 0
         transition_budget = max(30, int(self.engine.config.safety.max_actions_per_round) * 3)
 
+        # [主循环阶段] 按页面识别结果驱动任务分发，直到达到预算或进入空闲。
         while tick < transition_budget:
             if self.engine._is_cancel_requested(session_id):
                 logger.info('收到停止/暂停信号，中断当前操作')
@@ -73,6 +79,7 @@ class TaskFarmMain:
 
             page = self.ui.ui_get_current_page(skip_first_screenshot=True, timeout=0.9)
             if page == page_unknown:
+                # 未知页面优先尝试导航回主，否则点击固定回主点。
                 recovered = self.ui.ui_goto(page_main, confirm_wait=0.5, skip_first_screenshot=True)
                 if recovered:
                     result.actions.append('导航回主界面')
@@ -86,6 +93,7 @@ class TaskFarmMain:
                 continue
 
             if self.ui.ui_additional():
+                # 弹窗处理命中后立即进入下一轮，避免污染当前页面判断。
                 result.actions.append('处理弹窗')
                 if not self.engine._sleep_interruptible(0.2, session_id):
                     break
@@ -133,6 +141,7 @@ class TaskFarmMain:
                 last_tick_ms=f'{tick_ms:.1f}ms',
             )
 
+            # 连续空转时先点一次回主，再在上限处提前结束本轮。
             if action_desc:
                 idle_rounds = 0
             else:
@@ -147,6 +156,7 @@ class TaskFarmMain:
         else:
             logger.info(f'达到页面跳转预算上限: {transition_budget}，结束本轮')
 
+        # 根据是否发生播种决定下一轮检查间隔。
         has_planted = any('播种' in a for a in result.actions)
         if has_planted:
             interval = max(1, int(self.engine.config.tasks.farm_main.interval_seconds))
@@ -164,6 +174,7 @@ class TaskFarmMain:
         features: dict,
         sold_this_round: bool,
     ) -> tuple[StepResult, bool]:
+        """执行 `main_tasks` 子流程。"""
         out = self.task_plant.run(rect=rect, features=features)
         if out.action:
             return out, sold_this_round
@@ -230,6 +241,7 @@ class TaskFarmMain:
         return actions
 
     def _run_page_specific(self, page, rect: tuple[int, int, int, int]) -> StepResult:
+        """执行 `page_specific` 子流程。"""
         if page == page_friend:
             return StepResult.from_value(self.engine.friend._help_in_friend_farm(rect))
         return StepResult()

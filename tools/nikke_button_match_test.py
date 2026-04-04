@@ -19,10 +19,12 @@ import numpy as np
 
 
 def _imread(path: Path) -> np.ndarray | None:
+    """执行 `imread` 相关处理。"""
     return cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_COLOR)
 
 
 def _iter_templates(templates_dir: Path) -> list[Path]:
+    """遍历并返回 `templates` 列表。"""
     exts = {".png", ".jpg", ".jpeg"}
     items = [p for p in templates_dir.rglob("*") if p.is_file() and p.suffix.lower() in exts]
     items.sort()
@@ -30,12 +32,14 @@ def _iter_templates(templates_dir: Path) -> list[Path]:
 
 
 def _iter_screenshots(shots_dir: Path) -> list[Path]:
+    """遍历并返回 `screenshots` 列表。"""
     items = [p for p in shots_dir.glob("*.png") if p.is_file()]
     items.sort()
     return items
 
 
 def _draw_hits(image: np.ndarray, hits: list[dict]) -> np.ndarray:
+    """执行 `draw hits` 相关处理。"""
     out = image.copy()
     for h in hits:
         x1, y1, x2, y2 = h["bbox"]
@@ -45,6 +49,7 @@ def _draw_hits(image: np.ndarray, hits: list[dict]) -> np.ndarray:
 
 
 def _save_image(path: Path, image: np.ndarray) -> None:
+    """保存 `image` 相关数据。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     ok, buf = cv2.imencode(".png", image)
     if ok:
@@ -52,6 +57,7 @@ def _save_image(path: Path, image: np.ndarray) -> None:
 
 
 def main() -> int:
+    """程序主入口。"""
     parser = argparse.ArgumentParser(description="Batch test by NIKKE Button.match")
     parser.add_argument("--threshold", type=float, default=0.8)
     parser.add_argument("--only-540x960", action="store_true")

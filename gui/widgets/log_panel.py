@@ -5,9 +5,11 @@ from PyQt6.QtWidgets import QTextEdit
 
 
 class LogPanel(QTextEdit):
+    """承载 `LogPanel` 相关界面控件与交互逻辑。"""
     MAX_LINES = 500
 
     def __init__(self, parent=None):
+        """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.setReadOnly(True)
         self.setStyleSheet("""
@@ -19,6 +21,7 @@ class LogPanel(QTextEdit):
         """)
 
     def append_log(self, message: str):
+        """向日志面板追加一条日志。"""
         if 'ERROR' in message or '\u2717' in message:
             color = '#dc2626'
         elif 'WARNING' in message:

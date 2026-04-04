@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 
 
 def check_legacy_removed() -> None:
+    """检查 `legacy_removed` 并返回结果。"""
     removed = [
         "core/scene_detector.py",
         "core/navigator.py",
@@ -24,6 +25,7 @@ def check_legacy_removed() -> None:
 
 
 def check_nklite_pages() -> None:
+    """检查 `nklite_pages` 并返回结果。"""
     src = Path("core/ui/page.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     links: set[tuple[str, str]] = set()
@@ -59,6 +61,7 @@ def check_nklite_pages() -> None:
 
 
 def check_nklite_tasks() -> None:
+    """检查 `nklite_tasks` 并返回结果。"""
     task_files = [
         "core/tasks/task_farm_harvest.py",
         "core/tasks/task_farm_plant.py",
@@ -77,6 +80,7 @@ def check_nklite_tasks() -> None:
 
 
 def check_engine_tokens() -> None:
+    """检查 `engine_tokens` 并返回结果。"""
     bot_engine = Path("core/engine/bot_engine.py").read_text(encoding="utf-8")
 
     task_main = Path("core/tasks/task_farm_main.py").read_text(encoding="utf-8")
@@ -89,6 +93,7 @@ def check_engine_tokens() -> None:
 
 
 def main() -> None:
+    """程序主入口。"""
     check_legacy_removed()
     check_nklite_pages()
     check_nklite_tasks()
