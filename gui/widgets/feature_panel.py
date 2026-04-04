@@ -86,7 +86,7 @@ class FeaturePanel(QWidget):
         title = self.TASK_TITLE_MAP.get(task_name, f'{task_name}任务')
         group = QGroupBox(title)
         form = QFormLayout()
-        form.setContentsMargins(0, 6, 0, 0)
+        form.setContentsMargins(0, 0, 0, 4)
         form.setSpacing(10)
         for feature_name in feature_map.keys():
             label = self.FEATURE_LABEL_MAP.get(feature_name, feature_name)

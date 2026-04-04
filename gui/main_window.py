@@ -135,6 +135,13 @@ class MainWindow(QMainWindow):
         self.resize(int(540 / ratio) + 620, 100)
         self.setStyleSheet(STYLESHEET)
 
+        # 居中显示窗口
+        screen = self.screen().availableGeometry()
+        size = self.geometry()
+        x = (screen.width() - size.width()) // 2
+        y = (screen.height() - size.height()) // 2
+        self.move(x, y)
+
         # 根容器：左右分栏，左窄右宽。
         central = QWidget()
         self.setCentralWidget(central)
@@ -358,6 +365,19 @@ class MainWindow(QMainWindow):
         """接收子面板配置变更并同步到引擎。"""
         self.config = config
         self.engine.update_config(config)
+
+    def showEvent(self, event):
+        """窗口显示时确保居中。
+        由于高度自适应，必须在显示瞬间（尺寸确定后）进行二次居中校验。
+        """
+        super().showEvent(event)
+        if not hasattr(self, '_centered'):
+            screen = self.screen().availableGeometry()
+            size = self.frameGeometry()
+            x = (screen.width() - size.width()) // 2
+            y = (screen.height() - size.height()) // 2
+            self.move(x, y)
+            self._centered = True
 
     def closeEvent(self, event):
         """窗口关闭时执行收尾清理。"""

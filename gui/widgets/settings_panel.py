@@ -41,7 +41,7 @@ class SettingsPanel(QWidget):
         # 等级与策略在同一行，便于联动查看“可种作物”和“推荐作物”。
         plant_group = QGroupBox('种植')
         pf = QFormLayout()
-        pf.setContentsMargins(0, 6, 0, 0)
+        pf.setContentsMargins(0, 0, 0, 4)
         pf.setSpacing(10)
 
         row_level = QHBoxLayout()
@@ -75,7 +75,7 @@ class SettingsPanel(QWidget):
         # 窗口平台/关键词/位置统一归类为“运行环境”参数。
         misc_group = QGroupBox('其他')
         mf = QFormLayout()
-        mf.setContentsMargins(0, 6, 0, 0)
+        mf.setContentsMargins(0, 0, 0, 4)
         mf.setSpacing(10)
         self._window_platform = QComboBox()
         self._window_platform.addItem('QQ', WindowPlatform.QQ.value)

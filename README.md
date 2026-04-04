@@ -160,8 +160,7 @@ qq-farm-auto/
 │   └── widgets/
 │       ├── log_panel.py        # 日志面板
 │       ├── status_panel.py     # 状态统计面板
-│       ├── settings_panel.py   # 设置面板
-│       └── sell_panel.py       # 出售设置面板
+│       └── settings_panel.py   # 设置面板
 │
 ├── models/                     # 数据模型
 │   ├── config.py               # 配置模型（Pydantic + Enum）

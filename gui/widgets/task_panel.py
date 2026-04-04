@@ -151,7 +151,10 @@ class TaskPanel(QWidget):
         - 配置最大连续失败次数（影响失败退避策略）。
         """
         group = QGroupBox('执行器')
+        group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
         form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 4)
+        form.setSpacing(10)
         self._empty_policy = QComboBox()
         self._empty_policy.addItem('空队列停留', 'stay')
         self._empty_policy.addItem('空队列回主界面', 'goto_main')
