@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from core.base.timer import Timer
-from core.exceptions import GamePageUnknownError
-from tasks.info_handler import InfoHandler
+from core.exceptions import GamePageUnknownError, TaskRetryCurrentError
+from core.ui.assets import BTN_LOGIN_AGAIN
 from core.ui.page import *
+from tasks.info_handler import InfoHandler
 
 if TYPE_CHECKING:
     from core.platform.device import Device
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 class UI(InfoHandler):
     """封装 `UI` 相关的数据与行为。"""
+
     ui_pages = [
         page_unknown,
         page_main,
@@ -70,6 +72,8 @@ class UI(InfoHandler):
                     return page
 
             logger.info('未识别到页面')
+            # 处理“重新登录”按钮
+            self._handle_login_again_retry()
             # 未知页面先尝试固定坐标回主，再尝试弹窗处理，最后按超时退出。
             if self._click_goto_main(interval=2.0):
                 deadline.reset()
@@ -151,7 +155,8 @@ class UI(InfoHandler):
             if clicked:
                 continue
 
-            # 跳转失败时优先处理全局弹窗，再判断是否超时。
+            # 处理“重新登录”按钮
+            self._handle_login_again_retry()
             if self.ui_additional():
                 continue
 
@@ -171,12 +176,16 @@ class UI(InfoHandler):
         """统一处理全局弹窗；任一处理命中即返回 True。"""
         if self.handle_click_close():
             return True
-        if self.handle_reward():
-            return True
         if self.handle_announcement():
             return True
         if self.handle_login_repeat():
             return True
+        return False
+
+    def _handle_login_again_retry(self) -> bool:
+        """命中“重新登录”先点击，再重试当前任务。"""
+        if self.appear_then_click(BTN_LOGIN_AGAIN, offset=30, interval=1, static=False):
+            raise TaskRetryCurrentError('login again handled, retry current task')
         return False
 
     def ui_goto_main(self):
@@ -201,5 +210,3 @@ class UI(InfoHandler):
                     overall_timer.start()
                 if overall_timer.reached():
                     return True
-
-

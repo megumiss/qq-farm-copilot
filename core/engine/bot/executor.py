@@ -17,7 +17,7 @@ from core.engine.task.registry import (
     TaskResult,
     TaskSnapshot,
 )
-from core.exceptions import GamePageUnknownError, LoginRepeatError
+from core.exceptions import GamePageUnknownError, LoginRepeatError, TaskRetryCurrentError
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import TaskTriggerType
 from tasks.farm_main import TaskFarmMain
@@ -427,6 +427,13 @@ class BotExecutorMixin:
                 logger.error(f'异常截图已保存: {folder}')
             except Exception as save_exc:
                 logger.debug(f'save error screenshots failed: {save_exc}')
+
+        if isinstance(exc, TaskRetryCurrentError):
+            self._task_error_type_names[task_name] = type(exc).__name__
+            # 点击修复类异常：1 秒后重跑当前任务，不进入人工接管。
+            self._task_error_delay_overrides[task_name] = 1
+            logger.warning(f'[{self._task_display_name(task_name)}] 触发重试: {type(exc).__name__}，1s后重跑当前任务')
+            return
 
         self._task_error_type_names[task_name] = type(exc).__name__
 

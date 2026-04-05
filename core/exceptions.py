@@ -9,3 +9,7 @@ class GamePageUnknownError(RuntimeError):
 
 class LoginRepeatError(RuntimeError):
     """QQ重复登录。"""
+
+
+class TaskRetryCurrentError(RuntimeError):
+    """微信重新登录"""

@@ -10,6 +10,7 @@ from typing import Callable
 
 from loguru import logger
 
+from core.exceptions import TaskRetryCurrentError
 from core.engine.task.registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
 
 TaskRunner = Callable[[TaskContext], TaskResult]
@@ -247,7 +248,10 @@ class TaskExecutor:
                         error=f'runner returned invalid result: {type(result)}',
                     )
             except Exception as exc:
-                logger.exception(f'task `{task.name}` crashed: {exc}')
+                if isinstance(exc, TaskRetryCurrentError):
+                    logger.warning(f'task `{task.name}` retry requested: {exc}')
+                else:
+                    logger.exception(f'task `{task.name}` crashed: {exc}')
                 if self._on_task_error:
                     try:
                         self._on_task_error(task.name, exc, traceback.format_exc())
