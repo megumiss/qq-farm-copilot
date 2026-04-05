@@ -130,9 +130,9 @@ class MainWindow(QMainWindow):
         ratio = self.devicePixelRatioF()
         
         # 不再写死窗口高度，仅限制最小宽度保证左右两侧能放得下
-        self.setMinimumWidth(int(540 / ratio) + 500)
+        self.setMinimumWidth(int(540 / ratio) + 550)
         # 设置一个合理的初始宽度，高度交由系统和内部内容自适应撑开
-        self.resize(int(540 / ratio) + 620, 100)
+        self.resize(int(540 / ratio) + 670, 100)
         self.setStyleSheet(STYLESHEET)
 
         # 居中显示窗口

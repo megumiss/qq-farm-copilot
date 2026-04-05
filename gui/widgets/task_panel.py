@@ -41,9 +41,10 @@ class TaskPanel(QWidget):
         self._enabled_text = str(panel_labels.get('enabled', 'Enable'))
         self._daily_time_label = str(panel_labels.get('daily_time_label', 'Daily time:'))
         self._next_run_label = str(panel_labels.get('next_run_label', 'Next run:'))
-        self._daily_hint = str(panel_labels.get('daily_hint', '24h'))
         self._interval_label = str(panel_labels.get('interval_label', 'Interval:'))
-        self._interval_suffix = str(panel_labels.get('interval_suffix', ' s'))
+        self._interval_unit_second = str(panel_labels.get('interval_unit_second', '秒'))
+        self._interval_unit_minute = str(panel_labels.get('interval_unit_minute', '分钟'))
+        self._interval_unit_hour = str(panel_labels.get('interval_unit_hour', '小时'))
         self._executor_group_title = str(panel_labels.get('executor_group_title', 'Executor'))
         self._policy_label = str(panel_labels.get('policy_label', 'Empty queue policy:'))
         self._policy_stay = str(panel_labels.get('policy_stay', 'Stay'))
@@ -100,7 +101,7 @@ class TaskPanel(QWidget):
 
         
         - 固定提供任务开关。
-        - `INTERVAL` 任务显示“执行间隔(秒)”。
+        - `INTERVAL` 任务显示“执行间隔（秒/分钟/小时）”。
         - `DAILY` 任务显示“每日执行时间 + 下次执行提示”。
         """
         title = self._task_title_map.get(task_name, f'{task_name}{self._task_title_suffix}')
@@ -131,8 +132,6 @@ class TaskPanel(QWidget):
                 "}"
                 "QTimeEdit:focus { border-color: #2563eb; }"
             )
-            hint = QLabel(self._daily_hint)
-            hint.setStyleSheet("color: #94a3b8;")
             next_label = QLabel('--')
 
             row_widget = QWidget()
@@ -140,7 +139,6 @@ class TaskPanel(QWidget):
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(8)
             row_layout.addWidget(time_edit)
-            row_layout.addWidget(hint)
             row_layout.addStretch()
 
             form.addRow(self._daily_time_label, row_widget)
@@ -148,11 +146,24 @@ class TaskPanel(QWidget):
             widgets['daily_time'] = time_edit
             widgets['next_label'] = next_label
         else:
-            interval = QSpinBox()
-            interval.setRange(1, 86400)
-            interval.setSuffix(self._interval_suffix)
-            form.addRow(self._interval_label, interval)
-            widgets['interval_seconds'] = interval
+            interval_value = QSpinBox()
+            interval_value.setRange(1, 999999)
+            interval_unit = QComboBox()
+            interval_unit.addItem(self._interval_unit_second, 1)
+            interval_unit.addItem(self._interval_unit_minute, 60)
+            interval_unit.addItem(self._interval_unit_hour, 3600)
+
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            row_layout.addWidget(interval_value)
+            row_layout.addWidget(interval_unit)
+            row_layout.addStretch()
+
+            form.addRow(self._interval_label, row_widget)
+            widgets['interval_value'] = interval_value
+            widgets['interval_unit'] = interval_unit
 
         group.setLayout(form)
         self._task_widgets[task_name] = widgets
@@ -198,9 +209,13 @@ class TaskPanel(QWidget):
             if isinstance(enabled, QCheckBox):
                 enabled.toggled.connect(self._auto_save)
 
-            interval = widgets.get('interval_seconds')
-            if isinstance(interval, QSpinBox):
-                interval.valueChanged.connect(self._auto_save)
+            interval_value = widgets.get('interval_value')
+            if isinstance(interval_value, QSpinBox):
+                interval_value.valueChanged.connect(self._auto_save)
+
+            interval_unit = widgets.get('interval_unit')
+            if isinstance(interval_unit, QComboBox):
+                interval_unit.currentIndexChanged.connect(self._auto_save)
 
             daily_time = widgets.get('daily_time')
             if isinstance(daily_time, QTimeEdit):
@@ -233,10 +248,12 @@ class TaskPanel(QWidget):
             if isinstance(enabled, QCheckBox):
                 task_cfg.enabled = bool(enabled.isChecked())
 
-            interval = widgets.get('interval_seconds')
-            if isinstance(interval, QSpinBox):
+            interval_value = widgets.get('interval_value')
+            interval_unit = widgets.get('interval_unit')
+            if isinstance(interval_value, QSpinBox) and isinstance(interval_unit, QComboBox):
                 task_cfg.trigger = TaskTriggerType.INTERVAL
-                task_cfg.interval_seconds = int(interval.value())
+                unit_factor = int(interval_unit.currentData() or 1)
+                task_cfg.interval_seconds = max(1, int(interval_value.value()) * max(1, unit_factor))
 
             daily_time = widgets.get('daily_time')
             if isinstance(daily_time, QTimeEdit):
@@ -282,9 +299,13 @@ class TaskPanel(QWidget):
             if isinstance(enabled, QCheckBox):
                 enabled.setChecked(bool(task_cfg.enabled))
 
-            interval = widgets.get('interval_seconds')
-            if isinstance(interval, QSpinBox):
-                interval.setValue(max(1, int(task_cfg.interval_seconds)))
+            interval_value = widgets.get('interval_value')
+            interval_unit = widgets.get('interval_unit')
+            if isinstance(interval_value, QSpinBox) and isinstance(interval_unit, QComboBox):
+                seconds = max(1, int(task_cfg.interval_seconds))
+                display_value, unit_factor = self._split_interval_for_display(seconds)
+                self._set_combo_data(interval_unit, unit_factor)
+                interval_value.setValue(display_value)
 
             daily_time = widgets.get('daily_time')
             if isinstance(daily_time, QTimeEdit):
@@ -300,3 +321,22 @@ class TaskPanel(QWidget):
                 self._empty_policy.setCurrentIndex(i)
                 break
         self._max_failures.setValue(max(1, int(c.executor.max_failures)))
+
+    @staticmethod
+    def _split_interval_for_display(seconds: int) -> tuple[int, int]:
+        """将秒数拆分为界面可读的值与单位。"""
+        value = max(1, int(seconds))
+        if value % 3600 == 0:
+            return value // 3600, 3600
+        if value % 60 == 0:
+            return value // 60, 60
+        return value, 1
+
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, data: int):
+        """按 itemData 选中下拉项。"""
+        target = int(data)
+        for idx in range(combo.count()):
+            if int(combo.itemData(idx) or 0) == target:
+                combo.setCurrentIndex(idx)
+                return
