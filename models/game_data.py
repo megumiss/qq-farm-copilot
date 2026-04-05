@@ -9,11 +9,11 @@ from pathlib import Path
 def _parse_grow_phases_seconds(grow_phases: str) -> list[int]:
     """Parse `种子:30;发芽:30;成熟:0;` into [30, 30, 0]."""
     phases: list[int] = []
-    for part in (grow_phases or "").split(";"):
+    for part in (grow_phases or '').split(';'):
         part = part.strip()
-        if not part or ":" not in part:
+        if not part or ':' not in part:
             continue
-        _, sec_str = part.split(":", 1)
+        _, sec_str = part.split(':', 1)
         sec_str = sec_str.strip()
         try:
             sec = int(float(sec_str))
@@ -50,27 +50,27 @@ def _load_crops_from_plant_json() -> list[tuple]:
     Tuple format:
       (name, seed_id, land_level_need, grow_time_seconds, exp, fruit_count)
     """
-    plant_path = Path(__file__).resolve().parent / "Plant.json"
-    data = json.loads(plant_path.read_text(encoding="utf-8"))
+    plant_path = Path(__file__).resolve().parent / 'Plant.json'
+    data = json.loads(plant_path.read_text(encoding='utf-8'))
 
     crops: list[tuple] = []
     for item in data:
-        name = str(item.get("name", "")).strip()
+        name = str(item.get('name', '')).strip()
         if not name:
             continue
 
-        seed_id = int(item.get("seed_id", 0))
-        land_level_need = int(item.get("land_level_need", 0))
-        seasons = int(item.get("seasons", 1))
-        grow_phases = str(item.get("grow_phases", ""))
+        seed_id = int(item.get('seed_id', 0))
+        land_level_need = int(item.get('land_level_need', 0))
+        seasons = int(item.get('seasons', 1))
+        grow_phases = str(item.get('grow_phases', ''))
         grow_time = _calc_grow_time_seconds(grow_phases, seasons)
 
-        exp = int(item.get("exp", 0))
+        exp = int(item.get('exp', 0))
         if seasons == 2:
             exp *= 2
 
-        fruit = item.get("fruit", {}) or {}
-        fruit_count = int(fruit.get("count", 0))
+        fruit = item.get('fruit', {}) or {}
+        fruit_count = int(fruit.get('count', 0))
 
         crops.append((name, seed_id, land_level_need, grow_time, exp, fruit_count))
 
@@ -111,7 +111,6 @@ def get_best_crop_for_level(level: int) -> tuple | None:
     return max(available, key=lambda c: c[4] / c[3])
 
 
-
 def get_crop_index_in_list(name: str, level: int) -> int:
     """获取指定作物在当前等级可种列表中的位置索引（从0开始）
 
@@ -129,12 +128,12 @@ def get_crop_index_in_list(name: str, level: int) -> int:
 def format_grow_time(seconds: int) -> str:
     """格式化生长时间"""
     if seconds < 60:
-        return f"{seconds}秒"
+        return f'{seconds}秒'
     if seconds < 3600:
-        return f"{seconds // 60}分钟"
+        return f'{seconds // 60}分钟'
     hours = seconds // 3600
     mins = (seconds % 3600) // 60
-    return f"{hours}小时{mins}分" if mins else f"{hours}小时"
+    return f'{hours}小时{mins}分' if mins else f'{hours}小时'
 
 
 def get_crop_display_info() -> list[str]:
@@ -142,5 +141,5 @@ def get_crop_display_info() -> list[str]:
     items = []
     for name, _, level, grow_time, exp, _ in CROPS:
         time_str = format_grow_time(grow_time)
-        items.append(f"{name} (Lv{level}, {time_str}, {exp}经验)")
+        items.append(f'{name} (Lv{level}, {time_str}, {exp}经验)')
     return items

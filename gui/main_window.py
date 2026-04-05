@@ -11,21 +11,33 @@
   TextDim:    #94a3b8
   Border:     #e2e8f0
 """
-import keyboard
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QTabWidget,
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QImage
-from PIL import Image
 
-from models.config import AppConfig
-from core.bot_engine import BotEngine
+import os
+import time
+
+import keyboard
+from PIL import Image
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon, QImage, QPainter, QPainterPath, QPixmap
+from PyQt6.QtWidgets import (
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from core.engine.bot import BotEngine
+from gui.widgets.feature_panel import FeaturePanel
 from gui.widgets.log_panel import LogPanel
-from gui.widgets.status_panel import StatusPanel
 from gui.widgets.settings_panel import SettingsPanel
-from gui.widgets.sell_panel import SellPanel
+from gui.widgets.status_panel import StatusPanel
+from gui.widgets.task_panel import TaskPanel
+from models.config import AppConfig
 from utils.logger import get_log_signal
 
 STYLESHEET = """
@@ -34,7 +46,7 @@ QWidget { color: #1e293b; font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-se
 QGroupBox {
     border: 1px solid #e2e8f0; border-radius: 8px;
     margin-top: 12px; padding: 14px 10px 8px 10px;
-    font-weight: bold; color: #2563eb; background-color: #ffffff;
+    font-weight: bold; color: #475569; background-color: #ffffff;
 }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }
 QCheckBox { spacing: 6px; color: #1e293b; }
@@ -65,6 +77,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 
 
 def _card(widget: QWidget = None) -> QFrame:
+    """创建统一卡片容器，并可选包裹一个子控件。"""
     card = QFrame()
     card.setStyleSheet("""
         QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }
@@ -77,6 +90,7 @@ def _card(widget: QWidget = None) -> QFrame:
 
 
 def _make_btn(text: str, color: str, hover: str) -> QPushButton:
+    """创建统一样式的操作按钮。"""
     btn = QPushButton(text)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setFixedHeight(36)
@@ -92,45 +106,66 @@ def _make_btn(text: str, color: str, hover: str) -> QPushButton:
 
 
 class MainWindow(QMainWindow):
+    """主窗口：组合预览、日志、任务面板并驱动 BotEngine。"""
+
     def __init__(self, config: AppConfig):
+        """初始化主窗口与引擎，并注册全局热键。"""
         super().__init__()
         self.config = config
         self.engine = BotEngine(config)
+        self._last_screenshot: Image.Image | None = None
+        self._last_screenshot_time = 0.0
         self._init_ui()
         self._connect_signals()
-        keyboard.add_hotkey("F9", self._on_pause)
-        keyboard.add_hotkey("F10", self._on_stop)
+        keyboard.add_hotkey('F9', self._on_pause)
+        keyboard.add_hotkey('F10', self._on_stop)
 
     def _init_ui(self):
-        self.setWindowTitle("QQ Farm Vision Bot")
-        self.setMinimumSize(960, 680)
-        self.resize(1060, 740)
+        """构建主界面布局：左侧截图预览，右侧控制区和标签页。"""
+        self.setWindowTitle('QQ Farm Copilot')
+        icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'app_icon.svg')
+        self.setWindowIcon(QIcon(icon_path))
+
+        # 动态获取当前屏幕的 DPI 缩放比例
+        ratio = self.devicePixelRatioF()
+        
+        # 不再写死窗口高度，仅限制最小宽度保证左右两侧能放得下
+        self.setMinimumWidth(int(540 / ratio) + 500)
+        # 设置一个合理的初始宽度，高度交由系统和内部内容自适应撑开
+        self.resize(int(540 / ratio) + 620, 100)
         self.setStyleSheet(STYLESHEET)
 
+        # 居中显示窗口
+        screen = self.screen().availableGeometry()
+        size = self.geometry()
+        x = (screen.width() - size.width()) // 2
+        y = (screen.height() - size.height()) // 2
+        self.move(x, y)
+
+        # 根容器：左右分栏，左窄右宽。
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        # ========== 左侧：截图预览（窄） ==========
-        preview_card = QFrame()
-        preview_card.setStyleSheet("""
-            QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }
-        """)
-        preview_card.setFixedWidth(320)
-        pv_layout = QVBoxLayout(preview_card)
-        pv_layout.setContentsMargins(6, 6, 6, 6)
-        self._screenshot_label = QLabel("启动后显示\n实时截图")
+        # ========== 左侧：截图预览 ==========
+        from PyQt6.QtWidgets import QSizePolicy
+
+        self._screenshot_label = QLabel('启动后显示\n实时截图')
         self._screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._screenshot_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        # 保持物理宽度
+        self._screenshot_label.setFixedWidth(int(540 / ratio))
+        self._screenshot_label.setFixedHeight(int(960 / ratio))
         self._screenshot_label.setStyleSheet("""
-            QLabel { background-color: #f8fafc; border: 1px dashed #cbd5e1;
-                     border-radius: 8px; color: #94a3b8; font-size: 14px; }
+            QLabel { background-color: #ffffff; border: 1px solid #e2e8f0;
+                     border-radius: 10px; color: #94a3b8; font-size: 14px; }
         """)
-        pv_layout.addWidget(self._screenshot_label)
-        root.addWidget(preview_card)
+        root.addWidget(self._screenshot_label)
 
         # ========== 右侧：控制按钮 + Tab ==========
+        # 顶部放运行控制按钮，底部放状态与配置标签页。
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -139,10 +174,10 @@ class MainWindow(QMainWindow):
         # 控制按钮
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
-        self._btn_start = _make_btn("开始", "#16a34a", "#15803d")
-        self._btn_pause = _make_btn("暂停", "#d97706", "#b45309")
-        self._btn_stop = _make_btn("停止", "#dc2626", "#b91c1c")
-        self._btn_run_once = _make_btn("立即执行", "#2563eb", "#1d4ed8")
+        self._btn_start = _make_btn('开始', '#16a34a', '#15803d')
+        self._btn_pause = _make_btn('暂停', '#d97706', '#b45309')
+        self._btn_stop = _make_btn('停止', '#dc2626', '#b91c1c')
+        self._btn_run_once = _make_btn('立即执行', '#2563eb', '#1d4ed8')
         self._btn_pause.setEnabled(False)
         self._btn_stop.setEnabled(False)
         self._btn_start.clicked.connect(self._on_start)
@@ -155,35 +190,86 @@ class MainWindow(QMainWindow):
         right_layout.addLayout(btn_row)
 
         # Tab：状态 + 设置
+        # 标签页顺序按“运行信息 -> 调度 -> 任务设置 -> 程序设置”组织。
         tabs = QTabWidget()
         tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; top: -1px; }
-            QTabBar::tab {
-                background: #f1f5f9; color: #64748b; padding: 6px 18px;
-                border-top-left-radius: 8px; border-top-right-radius: 8px;
-                margin-right: 2px; border: 1px solid #e2e8f0; border-bottom: none;
+            QTabWidget::pane {
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                border-top-left-radius: 0px;
+                background: #ffffff;
+                top: -1px;
             }
-            QTabBar::tab:selected { background: #ffffff; color: #2563eb; font-weight: bold; }
-            QTabBar::tab:hover { background: #e2e8f0; }
+            QTabBar::tab {
+                background: #f1f5f9;
+                color: #64748b;
+                padding: 8px 20px;
+                border: 1px solid #e2e8f0;
+                border-bottom: 1px solid #e2e8f0;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: #ffffff;
+                color: #2563eb;
+                font-weight: bold;
+                border-bottom-color: #ffffff;
+            }
+            QTabBar::tab:!selected {
+                margin-top: 4px;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #e2e8f0;
+                color: #1e293b;
+            }
         """)
         self._status_panel = StatusPanel()
         self._log_panel = LogPanel()
+
+        log_group = QGroupBox('运行日志')
+        log_group.setObjectName('logGroup')
+        log_group.setStyleSheet("""
+            QGroupBox#logGroup {
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding: 0px;
+                font-weight: bold;
+                color: #475569;
+                background-color: #f8fafc;
+            }
+            QGroupBox#logGroup::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+            }
+        """)
+        log_layout = QVBoxLayout(log_group)
+        # 给标题区和日志正文留出间隔，避免标题被内容区域“贴住”。
+        log_layout.setContentsMargins(8, 14, 8, 8)
+        log_layout.setSpacing(0)
+        log_layout.addWidget(self._log_panel)
+
         status_page = QWidget()
         status_layout = QVBoxLayout(status_page)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-        status_layout.setSpacing(8)
-        status_layout.addWidget(self._status_panel)
-        status_layout.addWidget(_card(self._log_panel), 1)
-        tabs.addTab(status_page, "状态")
+        status_layout.setContentsMargins(10, 10, 10, 10)
+        status_layout.setSpacing(10)
+        status_layout.addWidget(self._status_panel, 0, Qt.AlignmentFlag.AlignTop)
+        status_layout.addWidget(log_group, 1)
+        tabs.addTab(status_page, '状态')
+        self._task_panel = TaskPanel(self.config)
+        tabs.addTab(self._task_panel, '任务调度')
+        self._feature_panel = FeaturePanel(self.config)
+        tabs.addTab(self._feature_panel, '任务设置')
         self._settings_panel = SettingsPanel(self.config)
-        tabs.addTab(self._settings_panel, "设置")
-        self._sell_panel = SellPanel(self.config)
-        tabs.addTab(self._sell_panel, "出售")
+        tabs.addTab(self._settings_panel, '设置')
         right_layout.addWidget(tabs)
 
         root.addWidget(right, 1)
 
     def _connect_signals(self):
+        """连接引擎信号与各面板更新逻辑。"""
         self.engine.log_message.connect(self._log_panel.append_log)
         self.engine.screenshot_updated.connect(self._update_screenshot)
         self.engine.detection_result.connect(self._update_screenshot)
@@ -191,54 +277,115 @@ class MainWindow(QMainWindow):
         self.engine.stats_updated.connect(self._status_panel.update_stats)
         get_log_signal().new_log.connect(self._log_panel.append_log)
         self._settings_panel.config_changed.connect(self._on_config_changed)
-        self._sell_panel.config_changed.connect(self._on_config_changed)
+        self._task_panel.config_changed.connect(self._on_config_changed)
+        self._feature_panel.config_changed.connect(self._on_config_changed)
 
-    def _update_screenshot(self, image: Image.Image):
+    def _update_screenshot(self, image: Image.Image, force: bool = False):
+        """将 PIL 图像转为 QPixmap 并按预览区尺寸缩放显示。
+        为避免高频截图导致界面卡顿，限制刷新率为最高 1 fps。
+        """
+        now = time.time()
+        if not force and now - self._last_screenshot_time < 1.0:
+            return
+        self._last_screenshot_time = now
+
         try:
-            image = image.convert("RGB")
-            data = image.tobytes("raw", "RGB")
-            qimg = QImage(data, image.width, image.height,
-                          3 * image.width, QImage.Format.Format_RGB888)
+            self._last_screenshot = image.copy()
+            image = image.convert('RGB')
+            data = image.tobytes('raw', 'RGB')
+            qimg = QImage(data, image.width, image.height, 3 * image.width, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
-            scaled = pixmap.scaled(
-                self._screenshot_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation)
-            self._screenshot_label.setPixmap(scaled)
+            target_size = self._screenshot_label.size()
+            if target_size.width() <= 0 or target_size.height() <= 0:
+                return
+
+            # 优先按宽度缩放并裁剪上下，避免左右被裁。
+            scaled_w = pixmap.scaledToWidth(target_size.width(), Qt.TransformationMode.SmoothTransformation)
+            if scaled_w.height() >= target_size.height():
+                offset_y = (scaled_w.height() - target_size.height()) // 2
+                cropped = scaled_w.copy(0, offset_y, target_size.width(), target_size.height())
+            else:
+                # 目标区域偏“高”时，保持宽度完整，仅做纵向拉伸补齐，避免左右被裁。
+                cropped = scaled_w.scaled(
+                    target_size,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+
+            # 再对最终图像做圆角裁剪：图片依然充满，仅圆角重叠部分被遮挡。
+            rounded = QPixmap(target_size)
+            rounded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, target_size.width(), target_size.height(), 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, cropped)
+            painter.end()
+
+            self._screenshot_label.setPixmap(rounded)
         except Exception:
             pass
 
     def _on_start(self):
+        """点击“开始”后启动引擎并更新按钮可用状态。"""
         if self.engine.start():
             self._btn_start.setEnabled(False)
             self._btn_pause.setEnabled(True)
             self._btn_stop.setEnabled(True)
 
     def _on_pause(self):
-        if self._btn_pause.text() == "暂停":
+        """在暂停/恢复之间切换执行状态。"""
+        if self._btn_pause.text() == '暂停':
             self.engine.pause()
-            self._btn_pause.setText("恢复")
+            self._btn_pause.setText('恢复')
         else:
             self.engine.resume()
-            self._btn_pause.setText("暂停")
+            self._btn_pause.setText('暂停')
 
     def _on_stop(self):
+        """停止引擎并立即刷新界面状态。"""
         self.engine.stop()
         self._btn_start.setEnabled(True)
         self._btn_pause.setEnabled(False)
         self._btn_stop.setEnabled(False)
-        self._btn_pause.setText("暂停")
+        self._btn_pause.setText('暂停')
+        # 兜底刷新状态，避免线程信号时序导致面板停留在旧状态。
+        self._status_panel.update_stats(self.engine.scheduler.get_stats())
 
     def _on_run_once(self):
+        """触发一次立即执行。"""
         self.engine.run_once()
 
     def _on_state_changed(self, state: str):
+        """状态变化时刷新状态统计。"""
         self._status_panel.update_stats(self.engine.scheduler.get_stats())
 
     def _on_config_changed(self, config: AppConfig):
+        """接收子面板配置变更并同步到引擎。"""
         self.config = config
         self.engine.update_config(config)
 
+    def showEvent(self, event):
+        """窗口显示时确保居中。
+        由于高度自适应，必须在显示瞬间（尺寸确定后）进行二次居中校验。
+        """
+        super().showEvent(event)
+        if not hasattr(self, '_centered'):
+            screen = self.screen().availableGeometry()
+            size = self.frameGeometry()
+            x = (screen.width() - size.width()) // 2
+            y = (screen.height() - size.height()) // 2
+            self.move(x, y)
+            self._centered = True
+
     def closeEvent(self, event):
+        """窗口关闭时执行收尾清理。"""
         self.engine.stop()
         super().closeEvent(event)
+
+    def resizeEvent(self, event):
+        """窗口尺寸变化时重绘当前预览。"""
+        super().resizeEvent(event)
+        if self._last_screenshot is not None:
+            self._update_screenshot(self._last_screenshot, force=True)

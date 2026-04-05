@@ -1,0 +1,73 @@
+{
+  "window_title_keyword": "QQ经典农场",
+  "safety": {
+    "random_delay_min": 0.1,
+    "random_delay_max": 0.3,
+    "click_offset_range": 5,
+    "max_actions_per_round": 20
+  },
+  "screenshot": {
+    "quality": 80,
+    "save_history": true,
+    "max_history_count": 50
+  },
+  "tasks": {
+    "farm_main": {
+      "enabled": true,
+      "priority": 10,
+      "trigger": "interval",
+      "interval_seconds": 60,
+      "daily_time": "04:00",
+      "failure_interval_seconds": 30,
+      "features": {
+        "auto_harvest": true,
+        "auto_plant": true,
+        "auto_weed": true,
+        "auto_water": true,
+        "auto_bug": true,
+        "auto_sell": true,
+        "auto_upgrade": true,
+        "auto_fertilize": false
+      }
+    },
+    "friend": {
+      "enabled": true,
+      "priority": 20,
+      "trigger": "interval",
+      "interval_seconds": 1800,
+      "daily_time": "04:00",
+      "failure_interval_seconds": 60,
+      "features": {
+        "auto_help": true,
+        "auto_steal": false
+      }
+    },
+    "share": {
+      "enabled": true,
+      "priority": 30,
+      "trigger": "daily",
+      "interval_seconds": 86400,
+      "daily_time": "04:00",
+      "failure_interval_seconds": 300,
+      "features": {
+        "auto_task": true
+      }
+    }
+  },
+  "executor": {
+    "empty_queue_policy": "stay",
+    "default_success_interval": 30,
+    "default_failure_interval": 30,
+    "max_failures": 3
+  },
+  "planting": {
+    "strategy": "best_exp_rate",
+    "preferred_crop": "白萝卜",
+    "player_level": 10,
+    "window_platform": "qq",
+    "window_position": "left_center"
+  },
+  "sell": {
+    "mode": "batch_all"
+  }
+}

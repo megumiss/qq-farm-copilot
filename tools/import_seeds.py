@@ -2,6 +2,7 @@
 import os
 import re
 import shutil
+
 from PIL import Image
 
 # 源目录
@@ -15,6 +16,7 @@ DST_DIR = os.path.join(os.path.dirname(os.path.dirname(
 
 
 def main():
+    """程序主入口。"""
     if not os.path.exists(SRC_DIR):
         print(f"源目录不存在: {SRC_DIR}")
         return

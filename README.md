@@ -1,4 +1,4 @@
-# QQ Farm Vision Bot
+# QQ Farm Copilot
 
 基于 OpenCV 视觉识别的 QQ 经典农场（微信小程序）自动化工具。纯本地运行，不依赖游戏接口，零封号风险。
 
@@ -48,8 +48,8 @@
 ## 安装
 
 ```bash
-git clone https://github.com/Z7ANN/qq-farm-auto.git
-cd qq-farm-auto
+git clone https://github.com/Z7ANN/qq-farm-copilot.git
+cd qq-farm-copilot
 pip install -r requirements.txt
 ```
 
@@ -103,11 +103,12 @@ python main.py
 
 ### 3. 配置
 
-GUI 右侧三个标签页：
+GUI 右侧四个标签页：
 
 - 状态：运行状态、操作统计、下次检查时间
-- 设置：玩家等级、种植策略（自动最优/手动指定）、功能开关、检查间隔
-- 出售：当前仅支持批量出售
+- 任务调度：任务启停、执行间隔、每日任务时间
+- 任务设置：各任务内部动作开关
+- 设置：玩家等级、种植策略、窗口与平台参数
 
 所有设置修改后实时生效，无需手动保存。
 
@@ -128,9 +129,11 @@ GUI 右侧三个标签页：
 ## 项目结构
 
 ```
-qq-farm-auto/
+qq-farm-copilot/
 ├── main.py                     # 程序入口
-├── config.json                 # 运行时配置（自动生成）
+├── configs/
+│   ├── config.template.json    # 默认模板配置
+│   └── config.json             # 运行时用户配置（自动生成）
 ├── templates/                  # 模板图片（用户采集 + 种子导入）
 │
 ├── core/                       # 核心引擎
@@ -157,8 +160,7 @@ qq-farm-auto/
 │   └── widgets/
 │       ├── log_panel.py        # 日志面板
 │       ├── status_panel.py     # 状态统计面板
-│       ├── settings_panel.py   # 设置面板
-│       └── sell_panel.py       # 出售设置面板
+│       └── settings_panel.py   # 设置面板
 │
 ├── models/                     # 数据模型
 │   ├── config.py               # 配置模型（Pydantic + Enum）
