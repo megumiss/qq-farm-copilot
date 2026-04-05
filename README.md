@@ -1,4 +1,4 @@
-# QQ Farm Vision Bot
+# QQ Farm Copilot
 
 基于 OpenCV 视觉识别的 QQ 经典农场（微信小程序）自动化工具。纯本地运行，不依赖游戏接口，零封号风险。
 
@@ -48,8 +48,8 @@
 ## 安装
 
 ```bash
-git clone https://github.com/Z7ANN/qq-farm-auto.git
-cd qq-farm-auto
+git clone https://github.com/Z7ANN/qq-farm-copilot.git
+cd qq-farm-copilot
 pip install -r requirements.txt
 ```
 
@@ -129,7 +129,7 @@ GUI 右侧四个标签页：
 ## 项目结构
 
 ```
-qq-farm-auto/
+qq-farm-copilot/
 ├── main.py                     # 程序入口
 ├── configs/
 │   ├── config.template.json    # 默认模板配置

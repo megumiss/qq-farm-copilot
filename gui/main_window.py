@@ -122,7 +122,7 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self):
         """构建主界面布局：左侧截图预览，右侧控制区和标签页。"""
-        self.setWindowTitle('QQ Farm Vision Bot')
+        self.setWindowTitle('QQ Farm Copilot')
         icon_path = os.path.join(os.path.dirname(__file__), 'icons', 'app_icon.svg')
         self.setWindowIcon(QIcon(icon_path))
 

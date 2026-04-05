@@ -1,4 +1,4 @@
-"""QQ农场自动化助手 - 程序入口"""
+"""QQ Farm Copilot - 程序入口"""
 
 import os
 import sys
