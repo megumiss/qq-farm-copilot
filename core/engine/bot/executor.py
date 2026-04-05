@@ -23,6 +23,13 @@ from models.config import TaskTriggerType
 class BotExecutorMixin:
     """Bot 执行器与调度相关逻辑。"""
 
+    def _reset_device_runtime_guards(self):
+        """任务开始前重置设备卡死/点击守卫记录。"""
+        if not self.device:
+            return
+        self.device.stuck_record_clear()
+        self.device.click_record_clear()
+
     def _get_task_cfg(self, task_name: str):
         """按任务名读取调度配置。"""
         tasks_cfg = getattr(self.config, 'tasks', None)
@@ -240,6 +247,7 @@ class BotExecutorMixin:
         """执行 `task_farm_main` 子流程。"""
         if self.ui is None:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
+        self._reset_device_runtime_guards()
         task = TaskFarmMain(engine=self, ui=self.ui)
         return task.run(session_id=self._session_id)
 
@@ -247,6 +255,7 @@ class BotExecutorMixin:
         """执行 `task_friend` 子流程。"""
         if self.ui is None:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
+        self._reset_device_runtime_guards()
         task = TaskFriend(engine=self, ui=self.ui)
         return task.run(session_id=self._session_id)
 
@@ -254,6 +263,7 @@ class BotExecutorMixin:
         """执行 `task_share` 子流程。"""
         if self.ui is None:
             return TaskResult(success=False, actions=[], next_run_seconds=5, error='UI未初始化')
+        self._reset_device_runtime_guards()
         task = TaskShare(engine=self, ui=self.ui)
         return task.run(session_id=self._session_id)
 

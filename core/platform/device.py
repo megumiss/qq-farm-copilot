@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import time
+from collections import deque
 from typing import Any
 
 import numpy as np
+from loguru import logger
 from PIL import Image as PILImage
 
 from core.base.button import Button
 from models.farm_state import Action, ActionType
+
+
+class DeviceStuckError(RuntimeError):
+    """设备长时间无有效操作，判定卡死。"""
+
+
+class DeviceTooManyClickError(RuntimeError):
+    """短时间重复点击同类目标过多。"""
 
 
 class Device:
@@ -20,6 +31,10 @@ class Device:
         self.rect: tuple[int, int, int, int] | None = None
         self.image: np.ndarray | None = None
         self.preview_image: PILImage.Image | None = None
+        self.detect_record: set[str] = set()
+        self.click_record = deque(maxlen=15)
+        self.stuck_long_wait_list = {'login_check', 'pause'}
+        self._stuck_started_at = time.perf_counter()
 
     def set_rect(self, rect: tuple[int, int, int, int]):
         """设置 `rect` 参数。"""
@@ -29,6 +44,7 @@ class Device:
         self, rect: tuple[int, int, int, int] | None = None, *, prefix: str = 'farm', save: bool = False
     ) -> np.ndarray | None:
         """执行一次截图并更新 `image/preview_image`。"""
+        self.stuck_record_check()
         if rect is not None:
             self.rect = rect
         if self.rect is None:
@@ -86,6 +102,7 @@ class Device:
             return False
         if self.engine._is_cancel_requested():
             return False
+        self._handle_control_check(desc)
 
         rel_x, rel_y = self.engine.resolve_live_click_point(int(x), int(y))
         action = Action(
@@ -143,17 +160,70 @@ class Device:
         """执行 `sleep` 相关处理。"""
         return self.engine._sleep_interruptible(float(seconds))
 
-    def stuck_record_add(self, _button):
-        """执行 `stuck record add` 相关处理。"""
+    def _handle_control_check(self, marker: str | None):
+        """点击命中时重置卡死计时，并检查点击风暴。"""
+        self.stuck_record_clear()
+        self.click_record_add(marker)
+        self.click_record_check()
+
+    def click_record_check(self):
+        """检查点击历史，避免循环疯狂点击。"""
+        if not self.click_record:
+            return False
+        count: dict[str, int] = {}
+        for key in self.click_record:
+            count[key] = count.get(key, 0) + 1
+        sorted_counts = sorted(count.items(), key=lambda item: item[1], reverse=True)
+        if sorted_counts[0][1] >= 12:
+            logger.warning(f'Too many click for one target: {sorted_counts[0][0]}')
+            logger.warning(f'History click: {[str(prev) for prev in self.click_record]}')
+            self.click_record_clear()
+            raise DeviceTooManyClickError(f'too many click for `{sorted_counts[0][0]}`')
+        if len(sorted_counts) >= 2 and sorted_counts[0][1] >= 6 and sorted_counts[1][1] >= 6:
+            logger.warning(f'Too many click between two targets: {sorted_counts[0][0]}, {sorted_counts[1][0]}')
+            logger.warning(f'History click: {[str(prev) for prev in self.click_record]}')
+            self.click_record_clear()
+            raise DeviceTooManyClickError(f'too many click between `{sorted_counts[0][0]}` and `{sorted_counts[1][0]}`')
+        return False
+
+    def click_record_add(self, marker: str | None):
+        """记录一次点击目标。"""
+        text = str(marker or '').strip() or 'point_click'
+        self.click_record.append(text)
+
+    def stuck_record_check(self):
+        """检查是否长时间无有效点击。"""
+        if self.engine._is_cancel_requested():
+            return False
+        elapsed = time.perf_counter() - self._stuck_started_at
+        if elapsed < 360.0:
+            return False
+        if elapsed < 480.0:
+            for button in self.stuck_long_wait_list:
+                if button in self.detect_record:
+                    return False
+        logger.warning('Wait too long')
+        logger.warning(f'Waiting for {sorted(self.detect_record)}')
+        self.stuck_record_clear()
+        if self.app_is_running():
+            raise DeviceStuckError('wait too long')
+        raise DeviceStuckError('app is not running')
+
+    def stuck_record_add(self, button):
+        """记录一次“尝试识别但未点击”的按钮。"""
+        if button is None:
+            return None
+        self.detect_record.add(str(button))
         return None
 
     def stuck_record_clear(self):
-        """执行 `stuck record clear` 相关处理。"""
-        return None
+        """清空待识别记录并重置卡死计时。"""
+        self.detect_record = set()
+        self._stuck_started_at = time.perf_counter()
 
     def click_record_clear(self):
-        """执行点击动作并返回是否成功。"""
-        return None
+        """清空点击历史。"""
+        self.click_record.clear()
 
     def app_is_running(self) -> bool:
         """执行 `app is running` 相关处理。"""
@@ -162,5 +232,3 @@ class Device:
     def get_orientation(self):
         """获取 `orientation` 信息。"""
         return 0
-
-

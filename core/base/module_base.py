@@ -160,6 +160,7 @@ class ModuleBase:
 
     def appear(self, button: Button, offset=0, threshold=None, static=True) -> bool:
         """判断按钮是否出现，支持静态区域匹配与全图匹配两种模式。"""
+        self.device.stuck_record_add(button)
         image = self.device.image
         if image is None:
             return False
