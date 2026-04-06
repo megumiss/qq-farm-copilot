@@ -21,6 +21,7 @@ from core.exceptions import GamePageUnknownError, LoginRepeatError, TaskRetryCur
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import TaskTriggerType
 from tasks.friend import TaskFriend
+from tasks.gift import TaskGift
 from tasks.main import TaskMain
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
@@ -35,22 +36,32 @@ class BotExecutorMixin:
     def _task_title_map() -> dict[str, str]:
         """读取任务中文标题映射。"""
         ensure_user_configs()
-        labels_path = resolve_config_file('ui_labels.json', prefer_user=True)
-        if not labels_path.exists():
-            return {}
-        try:
-            data = json.loads(labels_path.read_text(encoding='utf-8'))
-        except Exception:
-            return {}
-        if not isinstance(data, dict):
-            return {}
-        panel = data.get('task_panel', {})
-        if not isinstance(panel, dict):
-            return {}
-        titles = panel.get('task_titles', {})
-        if not isinstance(titles, dict):
-            return {}
-        return {str(k): str(v) for k, v in titles.items()}
+        bundled_path = resolve_config_file('ui_labels.json', prefer_user=False)
+        user_path = resolve_config_file('ui_labels.json', prefer_user=True)
+
+        def _read_titles(path) -> dict[str, str]:
+            if not path.exists():
+                return {}
+            try:
+                data = json.loads(path.read_text(encoding='utf-8'))
+            except Exception:
+                return {}
+            if not isinstance(data, dict):
+                return {}
+            panel = data.get('task_panel', {})
+            if not isinstance(panel, dict):
+                return {}
+            titles = panel.get('task_titles', {})
+            if not isinstance(titles, dict):
+                return {}
+            return {str(k): str(v) for k, v in titles.items()}
+
+        base = _read_titles(bundled_path)
+        override = _read_titles(user_path)
+        if not base:
+            return override
+        base.update(override)
+        return base
 
     def _task_display_name(self, task_name: str) -> str:
         """获取任务显示名称（优先中文标题）。"""
@@ -350,6 +361,15 @@ class BotExecutorMixin:
             return err or TaskResult(success=False, actions=[], error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskSell(engine=self, ui=self.ui)
+        return task.run(rect=rect)
+
+    def _run_task_gift(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_gift` 子流程。"""
+        rect, err = self._prepare_task_scene('gift')
+        if err is not None or rect is None:
+            return err or TaskResult(success=False, actions=[], error='窗口未找到')
+        self._reset_device_runtime_guards()
+        task = TaskGift(engine=self, ui=self.ui)
         return task.run(rect=rect)
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):

@@ -54,6 +54,15 @@
         "auto_task": true
       }
     },
+    "gift": {
+      "enabled": true,
+      "priority": 35,
+      "trigger": "daily",
+      "interval_seconds": 86400,
+      "daily_time": "00:00",
+      "failure_interval_seconds": 300,
+      "features": {}
+    },
     "sell": {
       "enabled": true,
       "priority": 40,
