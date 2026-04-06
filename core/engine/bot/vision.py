@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image as PILImage
 
 from core.vision.cv_detector import DetectResult
+from models.config import RunMode, resolve_effective_run_mode
 from models.farm_state import Action, ActionType
 
 
@@ -20,13 +21,16 @@ class BotVisionMixin:
         window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
         if not window:
             return None
-        self.window_manager.activate_window()
-        time.sleep(0.3)
+        effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
+        if effective_mode == RunMode.FOREGROUND:
+            self.window_manager.activate_window()
+            time.sleep(0.3)
         rect = self.window_manager.get_capture_rect()
         if not rect:
             rect = (window.left, window.top, window.width, window.height)
         if self.action_executor:
             self.action_executor.update_window_rect(rect)
+            self.action_executor.update_window_handle(window.hwnd)
         if self.device:
             self.device.set_rect(rect)
         return rect

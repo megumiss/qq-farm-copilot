@@ -14,7 +14,7 @@ from core.platform.screen_capture import ScreenCapture
 from core.platform.window_manager import WindowManager
 from core.ui.ui import UI
 from core.vision.cv_detector import CVDetector
-from models.config import AppConfig
+from models.config import AppConfig, resolve_effective_run_mode
 from utils.template_paths import DEFAULT_TEMPLATE_PLATFORM, normalize_template_platform
 
 
@@ -29,7 +29,8 @@ class BotInitMixin:
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()
-        self.screen_capture = ScreenCapture()
+        effective_mode = resolve_effective_run_mode(config.safety.run_mode, config.planting.window_platform)
+        self.screen_capture = ScreenCapture(run_mode=effective_mode)
 
         # [2] 图像识别层
         # 非 seed 模板识别改走 assets，detector 仅保留 seed 识别并固定默认平台。

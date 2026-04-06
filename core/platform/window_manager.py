@@ -363,6 +363,12 @@ class WindowManager:
         w = self._cached_window
         return (w.left, w.top, w.width, w.height)
 
+    def get_window_handle(self) -> int | None:
+        """获取当前缓存窗口句柄。"""
+        if not self._cached_window:
+            return None
+        return int(self._cached_window.hwnd)
+
     def get_capture_rect(self) -> tuple[int, int, int, int] | None:
         """获取截图区域，优先客户区，失败时回退整窗。"""
         if not self._cached_window:

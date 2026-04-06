@@ -4,7 +4,8 @@
     "random_delay_min": 0.1,
     "random_delay_max": 0.3,
     "click_offset_range": 5,
-    "max_actions_per_round": 20
+    "max_actions_per_round": 20,
+    "run_mode": "background"
   },
   "screenshot": {
     "quality": 80,
