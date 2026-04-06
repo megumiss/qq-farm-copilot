@@ -36,6 +36,8 @@ class Button:
         self.raw_name = name
 
         self._button_offset: tuple[int, int, int, int] | None = None
+        self._last_score: float = 0.0
+        self._last_metric: str = 'similarity'
         self._match_init = False
         self.image: np.ndarray | None = None
         Button._instances.add(self)
@@ -196,15 +198,11 @@ class Button:
             logger.debug(f'Button match provider missing: {self.name}')
             return False
         hit, area, similarity = Button._match_provider(self, image, offset, float(threshold), bool(static))
+        self._last_score = float(similarity)
+        self._last_metric = 'similarity'
         if area is not None:
             self._button_offset = area
-        logger.debug(
-            'Button: {}, similarity: {:.3f}, threshold: {:.3f}, hit: {}',
-            self.name,
-            similarity,
-            float(threshold),
-            bool(hit),
-        )
+        logger.debug(f'按钮: {self.name}, 相似度: {similarity}, 阈值: {float(threshold)}, 命中: {bool(hit)}')
         return bool(hit)
 
     def match_with_scale(self, image, threshold=0.85, scale_range=(0.9, 1.1), scale_step=0.02):
@@ -226,10 +224,10 @@ class Button:
         bgr = roi.mean(axis=(0, 1))
         color_bgr = np.array([self.color[2], self.color[1], self.color[0]], dtype=np.float32)
         diff = float(np.linalg.norm(bgr.astype(np.float32) - color_bgr))
+        self._last_score = diff
+        self._last_metric = 'color_diff'
         hit = diff <= float(threshold)
-        logger.debug(
-            'Button: {}, color_diff: {:.3f}, threshold: {:.3f}, hit: {}', self.name, diff, float(threshold), bool(hit)
-        )
+        logger.debug(f'按钮: {self.name}, 色差: {diff}, 阈值: {float(threshold)}, 命中: {bool(hit)}')
         return hit
 
     def match_several(self, image, offset=30, threshold=0.85, static=True) -> list[dict]:

@@ -307,9 +307,15 @@ class ModuleBase:
         if interval <= 0:
             return True
         timer = self.interval_timer.get(key)
-        if timer is None or abs(timer.limit - float(interval)) > 1e-6:
+        if timer is None:
+            self.interval_timer[key] = Timer(interval)
+            return True
+        if abs(timer.limit - float(interval)) > 1e-6:
             timer = Timer(interval)
             self.interval_timer[key] = timer
+            return True
+        if not timer.started():
+            return True
         return timer.reached()
 
     def _button_interval_hit(self, key: str):

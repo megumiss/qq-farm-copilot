@@ -5,10 +5,12 @@ from __future__ import annotations
 import io
 import multiprocessing as mp
 import queue
+import re
 import time
 import uuid
 from typing import Any
 
+from loguru import logger
 from PIL import Image as PILImage
 from PyQt6.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSignal
 
@@ -84,6 +86,24 @@ class BotEngine(QObject):
         self._poller.start()
         QTimer.singleShot(0, self._prewarm_worker)
 
+    @staticmethod
+    def _relay_worker_log(text: str) -> None:
+        """将 worker 回传日志写入主进程 logger（文件/控制台/UI 统一）。"""
+        raw = str(text or '').strip()
+        if not raw:
+            return
+
+        # worker 默认格式: "HH:mm:ss | LEVEL   | message"
+        parts = [part.strip() for part in raw.split('|', 2)]
+        if len(parts) == 3:
+            level = parts[1].upper()
+            message = parts[2]
+            if re.fullmatch(r'[A-Z]+', level):
+                if level in {'TRACE', 'DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR', 'CRITICAL'}:
+                    logger.log(level, message)
+                    return
+        logger.info(raw)
+
     def _prewarm_worker(self) -> None:
         """空闲时预热 worker，减少首次点击启动等待。"""
         if not self._allow_idle_prewarm:
@@ -135,7 +155,7 @@ class BotEngine(QObject):
         if etype == 'log':
             text = str(payload or '').strip()
             if text:
-                self.log_message.emit(text)
+                self._relay_worker_log(text)
             return
 
         if etype == 'state':

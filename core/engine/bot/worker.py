@@ -59,7 +59,7 @@ def bot_worker_main(initial_config: dict[str, Any], command_queue, event_queue) 
     logger.remove()
     logger.add(
         lambda m: _safe_put(event_queue, {'type': 'log', 'data': str(m).strip()}),
-        level='INFO',
+        level='DEBUG',
         format='{time:HH:mm:ss} | {level:<7} | {message}',
     )
 
