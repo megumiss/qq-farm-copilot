@@ -14,7 +14,7 @@ from core.ui.page import (
     GOTO_MAIN,
 )
 from core.ui.ui import UI
-from models.config import AppConfig, PlantMode
+from models.config import AppConfig, PlantMode, RunMode, resolve_effective_run_mode
 from models.game_data import get_best_crop_for_level
 from utils.template_paths import normalize_template_platform
 
@@ -22,12 +22,24 @@ from utils.template_paths import normalize_template_platform
 class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
 
+    def _get_effective_run_mode(self, *, emit_hint: bool = False) -> RunMode:
+        """返回生效运行模式（仅 QQ 支持后台模式）。"""
+        mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
+        if emit_hint and mode != self.config.safety.run_mode:
+            self.log_message.emit('提示：仅QQ平台支持后台模式，已自动使用前台模式')
+        return mode
+
     def update_config(self, config: AppConfig):
         """更新配置并将变更同步到执行器。"""
         self.config = config
         platform = getattr(config.planting, 'window_platform', 'qq')
         platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         Button.set_template_platform(normalize_template_platform(platform_value))
+        effective_mode = self._get_effective_run_mode(emit_hint=True)
+        if self.action_executor is not None:
+            self.action_executor.update_run_mode(effective_mode)
+        if self.screen_capture is not None:
+            self.screen_capture.update_run_mode(effective_mode)
         self._sync_executor_tasks_from_config()
 
     def _resolve_crop_name_quiet(self) -> str:
@@ -138,10 +150,14 @@ class BotRuntimeMixin:
             rect = (window.left, window.top, window.width, window.height)
         self.action_executor = ActionExecutor(
             window_rect=rect,
+            hwnd=window.hwnd,
+            run_mode=self._get_effective_run_mode(emit_hint=True),
             delay_min=self.config.safety.random_delay_min,
             delay_max=self.config.safety.random_delay_max,
             click_offset=self.config.safety.click_offset_range,
         )
+        if self.screen_capture is not None:
+            self.screen_capture.update_run_mode(self._get_effective_run_mode())
         # [适配层阶段] 构建设备/UI/任务对象，供执行器回调使用。
         self.device = Device(engine=self)
         self.device.set_rect(rect)

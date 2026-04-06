@@ -56,10 +56,11 @@ class Device:
             self.preview_image = None
             return None
 
+        hwnd = self.engine.window_manager.get_window_handle()
         if save:
-            image, _ = self.engine.screen_capture.capture_and_save(self.rect, prefix)
+            image, _ = self.engine.screen_capture.capture_and_save(self.rect, prefix, hwnd=hwnd)
         else:
-            image = self.engine.screen_capture.capture_region(self.rect)
+            image = self.engine.screen_capture.capture(self.rect, hwnd=hwnd)
         if image is None:
             self.image = None
             self.preview_image = None
@@ -97,7 +98,8 @@ class Device:
 
         if not self.screenshot_deque and self.rect is not None:
             try:
-                image = self.engine.screen_capture.capture_region(self.rect)
+                hwnd = self.engine.window_manager.get_window_handle()
+                image = self.engine.screen_capture.capture(self.rect, hwnd=hwnd)
                 preview = self._crop_preview_image(image)
                 if preview is not None:
                     self.screenshot_deque.append({'time': datetime.now(), 'image': preview.copy()})

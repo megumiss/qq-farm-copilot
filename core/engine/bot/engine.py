@@ -16,7 +16,7 @@ from PyQt6.QtCore import QCoreApplication, QEventLoop, QObject, QTimer, pyqtSign
 
 from core.engine.bot.worker import bot_worker_main
 from core.platform.window_manager import WindowManager
-from models.config import AppConfig
+from models.config import AppConfig, RunMode, resolve_effective_run_mode
 
 
 class _SchedulerSnapshot:
@@ -289,8 +289,10 @@ class BotEngine(QObject):
         self.stats_updated.emit(self.scheduler.get_stats())
 
     def start(self) -> bool:
-        # 前台激活放到主进程执行，避免预热 worker 触发 Windows 前台权限限制。
-        self._activate_target_window()
+        # 仅前台模式需要拉起窗口；后台模式不抢焦点。
+        effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
+        if effective_mode == RunMode.FOREGROUND:
+            self._activate_target_window()
         ok = self._send_command('start', wait=True, timeout=20.0, ensure_worker=True)
         if not ok:
             # 启动失败时回收空闲 worker，避免残留后台进程。

@@ -39,6 +39,26 @@ class WindowPlatform(str, Enum):
     WECHAT = 'wechat'
 
 
+class RunMode(str, Enum):
+    """封装 `RunMode` 相关的数据与行为。"""
+    FOREGROUND = 'foreground'
+    BACKGROUND = 'background'
+
+
+def is_background_mode_supported(window_platform: WindowPlatform | str) -> bool:
+    """判断当前平台是否支持后台模式。"""
+    platform_value = window_platform.value if hasattr(window_platform, 'value') else str(window_platform)
+    return str(platform_value).lower() == WindowPlatform.QQ.value
+
+
+def resolve_effective_run_mode(run_mode: RunMode | str, window_platform: WindowPlatform | str) -> RunMode:
+    """根据平台约束计算生效运行模式（仅 QQ 支持后台）。"""
+    mode = run_mode if isinstance(run_mode, RunMode) else RunMode(str(run_mode))
+    if mode == RunMode.BACKGROUND and not is_background_mode_supported(window_platform):
+        return RunMode.FOREGROUND
+    return mode
+
+
 class SellConfig(BaseModel):
     """定义 `SellConfig` 的配置数据结构与默认值。"""
     mode: SellMode = SellMode.BATCH_ALL
@@ -56,6 +76,7 @@ class SafetyConfig(BaseModel):
     random_delay_max: float = 0.3
     click_offset_range: int = 5
     max_actions_per_round: int = 20
+    run_mode: RunMode = RunMode.BACKGROUND
 
 
 class ScreenshotConfig(BaseModel):

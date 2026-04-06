@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from models.config import AppConfig, PlantMode, WindowPlatform, WindowPosition
+from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, get_crop_names
 
 
@@ -81,6 +81,14 @@ class SettingsPanel(QWidget):
         self._window_platform.addItem('QQ', WindowPlatform.QQ.value)
         self._window_platform.addItem('微信', WindowPlatform.WECHAT.value)
         mf.addRow('平台:', self._window_platform)
+        self._run_mode = QComboBox()
+        self._run_mode.addItem('后台模式', RunMode.BACKGROUND.value)
+        self._run_mode.addItem('前台模式', RunMode.FOREGROUND.value)
+        mf.addRow('运行方式:', self._run_mode)
+        self._run_mode_tip = QLabel('提示：仅 QQ 平台支持后台模式，微信平台会自动使用前台模式')
+        self._run_mode_tip.setWordWrap(True)
+        self._run_mode_tip.setStyleSheet('color: #d97706;')
+        mf.addRow('', self._run_mode_tip)
         self._window_keyword = QLineEdit()
         mf.addRow('窗口关键词:', self._window_keyword)
         self._window_position = QComboBox()
@@ -103,6 +111,7 @@ class SettingsPanel(QWidget):
         self._strategy_combo.currentIndexChanged.connect(self._auto_save)
         self._crop_combo.currentIndexChanged.connect(self._auto_save)
         self._window_platform.currentIndexChanged.connect(self._auto_save)
+        self._run_mode.currentIndexChanged.connect(self._auto_save)
         self._window_keyword.editingFinished.connect(self._auto_save)
         self._window_position.currentIndexChanged.connect(self._auto_save)
 
@@ -117,6 +126,7 @@ class SettingsPanel(QWidget):
         if 0 <= idx < len(self._crop_names):
             c.planting.preferred_crop = self._crop_names[idx]
         c.planting.window_platform = WindowPlatform(self._window_platform.currentData())
+        c.safety.run_mode = RunMode(self._run_mode.currentData())
         c.window_title_keyword = self._window_keyword.text().strip()
         c.planting.window_position = WindowPosition(self._window_position.currentData())
         c.save()
@@ -173,6 +183,10 @@ class SettingsPanel(QWidget):
         for i in range(self._window_platform.count()):
             if self._window_platform.itemData(i) == c.planting.window_platform.value:
                 self._window_platform.setCurrentIndex(i)
+                break
+        for i in range(self._run_mode.count()):
+            if self._run_mode.itemData(i) == c.safety.run_mode.value:
+                self._run_mode.setCurrentIndex(i)
                 break
         self._window_keyword.setText(c.window_title_keyword)
         for i in range(self._window_position.count()):
