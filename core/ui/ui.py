@@ -61,6 +61,10 @@ class UI(Handler):
 
         while True:
             self.device.screenshot()
+            # 下次再来弹窗，抛出异常
+            self.handle_login_repeat()
+            # 重新登录弹窗，点击后重新启动
+            self._handle_login_again_retry()
 
             # 按 ui_pages 顺序尝试页面判定，命中即返回当前页。
             for page in self.ui_pages:
@@ -72,8 +76,6 @@ class UI(Handler):
                     return page
 
             logger.info('未识别到页面')
-            # 处理“重新登录”按钮
-            self._handle_login_again_retry()
             # 未知页面先尝试固定坐标回主，再尝试弹窗处理，最后按超时退出。
             if self._click_goto_main(interval=2.0):
                 deadline.reset()
@@ -131,6 +133,10 @@ class UI(Handler):
         timeout = Timer(6.0, count=1).start()
         while True:
             self.device.screenshot()
+            # 下次再来弹窗，抛出异常
+            self.handle_login_repeat()
+            # 重新登录弹窗，点击后重新启动
+            self._handle_login_again_retry()
 
             if self.ui_page_appear(destination):
                 if confirm_timer.reached():
@@ -155,8 +161,6 @@ class UI(Handler):
             if clicked:
                 continue
 
-            # 处理“重新登录”按钮
-            self._handle_login_again_retry()
             if self.ui_additional():
                 continue
 
@@ -181,11 +185,11 @@ class UI(Handler):
 
     def ui_additional(self):
         """统一处理全局弹窗；任一处理命中即返回 True。"""
+        if self.handle_login_repeat():
+            return True
         if self.handle_click_close():
             return True
         if self.handle_announcement():
-            return True
-        if self.handle_login_repeat():
             return True
         return False
 
@@ -205,6 +209,11 @@ class UI(Handler):
         overall_timer = Timer(2.0)
         while True:
             self.device.screenshot()
+            # 下次再来弹窗，抛出异常
+            self.handle_login_repeat()
+            # 重新登录弹窗，点击后重新启动
+            self._handle_login_again_retry()
+
             if self.ui_additional():
                 if not confirm_timer.started():
                     confirm_timer.start()
