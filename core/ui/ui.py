@@ -51,8 +51,8 @@ class UI(Handler):
         if isinstance(check, (list, tuple, set)):
             if not check:
                 return False
-            return all(self.appear(btn, offset=(30, 30), threshold=0.8, static=False) for btn in check)
-        return self.appear(check, offset=(30, 30), threshold=0.8, static=False)
+            return all(self.appear(btn, offset=(30, 30), static=False) for btn in check)
+        return self.appear(check, offset=(30, 30), static=False)
 
     def ui_get_current_page(self, timeout=2.0):
         """识别当前页面；未知时尝试回主与弹窗处理，直到超时。"""
