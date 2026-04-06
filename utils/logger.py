@@ -43,7 +43,7 @@ def setup_logger(log_dir: str = 'logs'):
         )
     # 文件输出
     logger.add(
-        f'{log_dir}/bot_{{time:YYYY-MM-DD}}.log',
+        f'{log_dir}/qq_farm_copilot_{{time:YYYY-MM-DD}}.log',
         rotation='00:00',
         retention='7 days',
         level='DEBUG',

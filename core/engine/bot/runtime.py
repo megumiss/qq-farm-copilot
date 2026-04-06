@@ -133,6 +133,13 @@ class BotRuntimeMixin:
             self.log_message.emit('未找到QQ农场窗口，请先打开微信小程序中的QQ农场')
             return False
 
+        display_metrics = self.window_manager.get_display_metrics(window.hwnd)
+        if display_metrics:
+            self.log_message.emit(
+                '屏幕信息: 主屏={screen_width}x{screen_height} 监视器={monitor_width}x{monitor_height} '
+                '工作区={work_width}x{work_height} DPI={dpi} 缩放={scale_percent}%'.format(**display_metrics)
+            )
+
         # [窗口阶段] 调整窗口尺寸与位置，确保截图区域稳定。
         pos = getattr(self.config.planting, 'window_position', 'left_center')
         pos_value = pos.value if hasattr(pos, 'value') else str(pos)

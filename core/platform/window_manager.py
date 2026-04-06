@@ -14,6 +14,7 @@ from utils.app_paths import ensure_user_configs, resolve_config_file
 @dataclass
 class WindowInfo:
     """封装 `WindowInfo` 相关的数据与行为。"""
+
     hwnd: int
     title: str
     left: int
@@ -24,6 +25,7 @@ class WindowInfo:
 
 class MONITORINFO(ctypes.Structure):
     """封装 `MONITORINFO` 相关的数据与行为。"""
+
     _fields_ = [
         ('cbSize', ctypes.wintypes.DWORD),
         ('rcMonitor', ctypes.wintypes.RECT),
@@ -34,6 +36,7 @@ class MONITORINFO(ctypes.Structure):
 
 class WindowManager:
     """封装 `WindowManager` 相关的数据与行为。"""
+
     TARGET_CLIENT_WIDTH = 540
     TARGET_CLIENT_HEIGHT = 960
     _MONITOR_DEFAULTTONEAREST = 2
@@ -181,6 +184,52 @@ class WindowManager:
         if not ok:
             return None
         return work_area
+
+    def get_display_metrics(self, hwnd: int | None = None) -> dict[str, int] | None:
+        """读取屏幕/显示器分辨率与缩放信息。"""
+        try:
+            user32 = ctypes.windll.user32
+            target_hwnd = int(hwnd or 0)
+            if target_hwnd <= 0 and self._cached_window:
+                target_hwnd = int(self._cached_window.hwnd)
+
+            screen_w = int(user32.GetSystemMetrics(0))
+            screen_h = int(user32.GetSystemMetrics(1))
+            metrics = {
+                'screen_width': screen_w,
+                'screen_height': screen_h,
+                'monitor_width': screen_w,
+                'monitor_height': screen_h,
+                'work_width': screen_w,
+                'work_height': screen_h,
+                'dpi': 96,
+                'scale_percent': 100,
+            }
+
+            if target_hwnd > 0:
+                scale_percent = int(self._get_window_scale_percent(target_hwnd))
+                metrics['scale_percent'] = scale_percent
+                metrics['dpi'] = int(round((scale_percent / 100.0) * 96))
+
+                monitor = user32.MonitorFromWindow(ctypes.wintypes.HWND(target_hwnd), self._MONITOR_DEFAULTTONEAREST)
+                if monitor:
+                    monitor_info = MONITORINFO()
+                    monitor_info.cbSize = ctypes.sizeof(MONITORINFO)
+                    ok = bool(user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)))
+                    if ok:
+                        monitor_w = int(monitor_info.rcMonitor.right - monitor_info.rcMonitor.left)
+                        monitor_h = int(monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top)
+                        work_w = int(monitor_info.rcWork.right - monitor_info.rcWork.left)
+                        work_h = int(monitor_info.rcWork.bottom - monitor_info.rcWork.top)
+                        metrics['monitor_width'] = monitor_w
+                        metrics['monitor_height'] = monitor_h
+                        metrics['work_width'] = work_w
+                        metrics['work_height'] = work_h
+
+            return metrics
+        except Exception as exc:
+            logger.debug(f'读取屏幕信息失败: {exc}')
+            return None
 
     def _set_window_outer_rect(self, hwnd: int, x: int, y: int, width: int, height: int) -> tuple[bool, str]:
         """设置 `window outer rect` 参数。"""
@@ -638,4 +687,3 @@ class WindowManager:
     def refresh_window_info(self, title_keyword: str = 'QQ农场') -> WindowInfo | None:
         """刷新窗口位置信息"""
         return self.find_window(title_keyword)
-
