@@ -16,6 +16,7 @@ class PlantMode(str, Enum):
 
     PREFERRED = 'preferred'  # 用户手动指定作物
     BEST_EXP_RATE = 'best_exp_rate'  # 当前等级下单位时间经验最高
+    LATEST_LEVEL = 'latest_level'  # 当前等级下可种植的最高等级作物
 
 
 class SellMode(str, Enum):
@@ -173,7 +174,7 @@ class PlantingConfig(BaseModel):
     """定义 `PlantingConfig` 的配置数据结构与默认值。"""
 
     strategy: PlantMode = PlantMode.BEST_EXP_RATE
-    preferred_crop: str = '白萝卜'  # strategy=preferred 时使用
+    preferred_crop: str = '白萝卜'
     player_level: int = 10
     window_platform: WindowPlatform = WindowPlatform.QQ
     window_position: WindowPosition = WindowPosition.LEFT_CENTER

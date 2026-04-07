@@ -15,7 +15,7 @@ from core.ui.page import (
 )
 from core.ui.ui import UI
 from models.config import AppConfig, PlantMode, RunMode, resolve_effective_run_mode
-from models.game_data import get_best_crop_for_level
+from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from utils.template_paths import normalize_template_platform
 
 
@@ -48,16 +48,24 @@ class BotRuntimeMixin:
         if planting.strategy == PlantMode.BEST_EXP_RATE:
             best = get_best_crop_for_level(planting.player_level)
             if best:
-                return best[0]
+                planting.preferred_crop = best[0]
+        elif planting.strategy == PlantMode.LATEST_LEVEL:
+            latest = get_latest_crop_for_level(planting.player_level)
+            if latest:
+                planting.preferred_crop = latest[0]
         return planting.preferred_crop
 
     def _resolve_crop_name(self) -> str:
-        """根据策略决定种植作物"""
+        """解析并返回当前播种作物。"""
         crop_name = self._resolve_crop_name_quiet()
         if self.config.planting.strategy == PlantMode.BEST_EXP_RATE:
             best = get_best_crop_for_level(self.config.planting.player_level)
             if best:
-                logger.info(f'策略选择: {best[0]} (经验效率 {best[4] / best[3]:.4f}/秒)')
+                logger.info(f'策略自动最优: {best[0]} (经验效率 {best[4] / best[3]:.4f}/秒)')
+        elif self.config.planting.strategy == PlantMode.LATEST_LEVEL:
+            latest = get_latest_crop_for_level(self.config.planting.player_level)
+            if latest:
+                logger.info(f'策略自动最新: {latest[0]} (解锁等级 Lv{latest[2]})')
         return crop_name
 
     def _clear_screen(self, rect: tuple):

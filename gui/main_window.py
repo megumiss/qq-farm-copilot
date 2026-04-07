@@ -17,7 +17,7 @@ import time
 
 import keyboard
 from PIL import Image
-from PyQt6.QtCore import QSettings, QTimer, Qt, QUrl
+from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -58,7 +58,7 @@ QCheckBox::indicator:checked {
     background: #2563eb; border-color: #2563eb;
     image: url(__CHECK_ICON__);
 }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+QLineEdit, QSpinBox, QDoubleSpinBox {
     background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px;
     padding: 5px 8px; color: #1e293b; selection-background-color: #dbeafe;
     min-height: 20px;
@@ -68,10 +68,64 @@ QSpinBox::down-button, QDoubleSpinBox::down-button { subcontrol-position: bottom
 QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #dbeafe; }
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow { image: url(__ARROW_UP_ICON__); width: 10px; height: 6px; }
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow { image: url(__ARROW_DOWN_ICON__); width: 10px; height: 6px; }
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #2563eb; }
+QComboBox {
+    combobox-popup: 0;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    color: #1e293b;
+    padding: 6px 36px 6px 12px;
+    min-height: 24px;
+}
+QComboBox:hover {
+    border-color: #94a3b8;
+    background-color: #ffffff;
+}
+QComboBox:focus {
+    border-color: #3b82f6;
+    background-color: #ffffff;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+    background: transparent;
+}
 QComboBox::down-arrow { image: url(__ARROW_DOWN_ICON__); width: 10px; height: 6px; }
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-color: #2563eb; }
-QComboBox::drop-down { border: none; padding-right: 8px; }
-QComboBox QAbstractItemView { background-color: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; selection-background-color: #dbeafe; }
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 4px;
+    outline: 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;
+}
+QComboBoxPrivateContainer {
+    background: transparent;
+    border: none;
+    padding: 0px;
+}
+QComboBox QAbstractItemView::item {
+    min-height: 26px;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+QComboBox QAbstractItemView::item:hover {
+    background-color: #eef2f7;
+    color: #0f172a;
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 600;
+}
 QScrollBar:vertical { background: #f5f5f7; width: 6px; border-radius: 3px; }
 QScrollBar::handle:vertical { background: #cbd5e1; border-radius: 3px; min-height: 30px; }
 QScrollBar::handle:vertical:hover { background: #94a3b8; }

@@ -2,7 +2,6 @@
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
@@ -18,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
-from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, get_crop_names
+from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
 
 PROJECT_URL = 'https://github.com/megumiss/qq-farm-copilot'
 
@@ -64,7 +63,7 @@ class SettingsPanel(QWidget):
         root.addWidget(scroll)
 
         # ===== 种植设置 =====
-        # 等级与策略在同一行，便于联动查看“可种作物”和“推荐作物”。
+        # 等级与策略在同一行，便于联动查看可种作物并自动同步最优作物。
         plant_group = QGroupBox('种植')
         pf = QFormLayout()
         pf.setContentsMargins(0, 0, 0, 4)
@@ -77,22 +76,18 @@ class SettingsPanel(QWidget):
         row_level.addWidget(QLabel('等级'))
         row_level.addWidget(self._player_level)
         self._strategy_combo = NoWheelComboBox()
+        self._strategy_combo.addItem('自动最新', PlantMode.LATEST_LEVEL.value)
         self._strategy_combo.addItem('自动最优', PlantMode.BEST_EXP_RATE.value)
-        # self._strategy_combo.addItem('手动指定', PlantMode.PREFERRED.value)
+        self._strategy_combo.addItem('手动选择', PlantMode.PREFERRED.value)
         row_level.addWidget(QLabel('策略'))
         row_level.addWidget(self._strategy_combo, 1)
         pf.addRow(row_level)
-
-        self._auto_crop_label = QLabel()
-        self._auto_crop_label.setStyleSheet('color: #16a34a; font-weight: bold; font-size: 12px;')
-        pf.addRow('推荐:', self._auto_crop_label)
 
         self._crop_combo = NoWheelComboBox()
         self._crop_names = get_crop_names()
         pf.addRow('作物:', self._crop_combo)
 
         self._player_level.valueChanged.connect(self._on_level_changed)
-        self._player_level.valueChanged.connect(self._update_auto_crop_label)
         self._strategy_combo.currentIndexChanged.connect(self._on_strategy_changed)
         plant_group.setLayout(pf)
         layout.addWidget(plant_group)
@@ -224,6 +219,7 @@ class SettingsPanel(QWidget):
 
     def _on_level_changed(self, level: int):
         """按玩家等级重建作物下拉列表，并保留已有选择。"""
+        was_loading = self._loading
         self._loading = True
         current_crop = self._crop_names[self._crop_combo.currentIndex()] if self._crop_combo.currentIndex() >= 0 else ''
         self._crop_combo.clear()
@@ -237,39 +233,56 @@ class SettingsPanel(QWidget):
         # 仅当旧作物仍在列表中时恢复选择，避免等级变化后索引错位。
         if current_crop in self._crop_names:
             self._crop_combo.setCurrentIndex(self._crop_names.index(current_crop))
-        self._loading = False
+        self._loading = was_loading
+        self._sync_crop_from_strategy()
 
     def _on_strategy_changed(self, index: int):
-        """切换种植策略时同步手动作物控件与推荐提示可见性。"""
+        """切换种植策略时同步作物控件状态与自动最优作物。"""
         is_manual = self._strategy_combo.itemData(index) == PlantMode.PREFERRED.value
         self._crop_combo.setEnabled(is_manual)
-        self._auto_crop_label.setVisible(not is_manual)
-        self._update_auto_crop_label()
+        self._sync_crop_from_strategy()
 
-    def _update_auto_crop_label(self):
-        """刷新“自动最优”策略下的推荐作物说明。"""
+    def _sync_crop_from_strategy(self) -> bool:
+        """自动策略下，将作物下拉同步到策略对应作物。"""
+        strategy_value = self._strategy_combo.currentData() or PlantMode.BEST_EXP_RATE.value
         level = self._player_level.value()
-        best = get_best_crop_for_level(level)
-        if best:
-            name, _, _, grow_time, exp, _ = best
-            time_str = format_grow_time(grow_time)
-            rate = exp / grow_time
-            self._auto_crop_label.setText(f'{name} ({time_str}, {exp}exp, {rate:.4f}/s)')
+        selected = None
+        if strategy_value == PlantMode.BEST_EXP_RATE.value:
+            selected = get_best_crop_for_level(level)
+        elif strategy_value == PlantMode.LATEST_LEVEL.value:
+            selected = get_latest_crop_for_level(level)
         else:
-            self._auto_crop_label.setText('无可用作物')
+            return False
+
+        if selected:
+            crop_name = selected[0]
+            if crop_name in self._crop_names:
+                target_index = self._crop_names.index(crop_name)
+                if self._crop_combo.currentIndex() != target_index:
+                    was_loading = self._loading
+                    self._loading = True
+                    self._crop_combo.setCurrentIndex(target_index)
+                    self._loading = was_loading
+                    return True
+        return False
 
     def _load_config(self):
         """将配置文件中的值回填到界面控件。"""
         c = self.config
         self._player_level.setValue(c.planting.player_level)
         strategy_idx = 0
+        for i in range(self._strategy_combo.count()):
+            if self._strategy_combo.itemData(i) == c.planting.strategy.value:
+                strategy_idx = i
+                break
         self._strategy_combo.setCurrentIndex(strategy_idx)
-        # 先设置策略，再同步推荐文案与作物列表，保证控件状态一致。
-        self._on_strategy_changed(strategy_idx)
-        self._update_auto_crop_label()
-        if c.planting.preferred_crop in self._crop_names:
-            self._crop_combo.setCurrentIndex(self._crop_names.index(c.planting.preferred_crop))
         self._on_level_changed(c.planting.player_level)
+        if (
+            self._strategy_combo.currentData() == PlantMode.PREFERRED.value
+            and c.planting.preferred_crop in self._crop_names
+        ):
+            self._crop_combo.setCurrentIndex(self._crop_names.index(c.planting.preferred_crop))
+        self._on_strategy_changed(strategy_idx)
         for i in range(self._window_platform.count()):
             if self._window_platform.itemData(i) == c.planting.window_platform.value:
                 self._window_platform.setCurrentIndex(i)

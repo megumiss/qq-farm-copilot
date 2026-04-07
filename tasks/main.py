@@ -141,6 +141,7 @@ class TaskMain(TaskBase):
 
         return result
 
+    # TODO
     def _run_feature_fertilize(self) -> str | None:
         """自动施肥"""
         return None
@@ -150,14 +151,6 @@ class TaskMain(TaskBase):
         self._buy_seeds(self.engine._resolve_crop_name())
 
         while 1:
-            if self.ui.ui_additional():
-                self.ui.device.sleep(0.2)
-                continue
-            if not self.ui.ui_page_appear(page_main):
-                if self.ui.ui_goto(page_main, confirm_wait=0.4):
-                    continue
-                return None
-
             has_land = self.ui.appear_any(
                 [LAND_EMPTY, LAND_EMPTY_2, LAND_EMPTY_3], offset=30, threshold=0.89, static=False
             )
@@ -168,47 +161,6 @@ class TaskMain(TaskBase):
             if not actions:
                 return None
             return actions[-1]
-
-    def _run_feature_upgrade(self) -> str | None:
-        """自动扩建"""
-        return self._try_expand()
-
-    def _try_expand(self) -> str | None:
-        """尝试执行一次扩建流程；失败后短路避免重复触发。"""
-        if self._expand_failed:
-            return None
-
-        # 第一步：点击扩建入口。
-        if not self.ui.appear_then_click(BTN_EXPAND, offset=30, interval=1, threshold=0.8, static=False):
-            return None
-
-        # 第二步：确认扩建（普通确认/直接确认）并处理残留弹窗。
-        for _ in range(5):
-            if self.ui.device.screenshot() is None:
-                return None
-
-            action_name = None
-            if self.ui.appear_then_click(BTN_EXPAND_DIRECT_CONFIRM, offset=30, interval=1, threshold=0.8, static=False):
-                action_name = '直接扩建'
-            elif self.ui.appear_then_click(BTN_EXPAND_CONFIRM, offset=30, interval=1, threshold=0.8, static=False):
-                action_name = '扩建确认'
-
-            if action_name:
-                self._expand_failed = False
-                if self.ui.device.screenshot() is not None:
-                    self.ui.appear_then_click_any(
-                        [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
-                    )
-                return action_name
-
-            if self.ui.appear_then_click_any(
-                [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
-            ):
-                continue
-
-        # 多轮都未完成时进入短路，避免每轮重复尝试导致噪音点击。
-        self._expand_failed = True
-        return None
 
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
@@ -327,3 +279,45 @@ class TaskMain(TaskBase):
 
         self.ui.ui_ensure(page_main)
         return f'购买{crop_name}'
+
+    # TODO
+    def _run_feature_upgrade(self) -> str | None:
+        """自动扩建"""
+        return self._try_expand()
+
+    def _try_expand(self) -> str | None:
+        """尝试执行一次扩建流程；失败后短路避免重复触发。"""
+        if self._expand_failed:
+            return None
+
+        # 第一步：点击扩建入口。
+        if not self.ui.appear_then_click(BTN_EXPAND, offset=30, interval=1, threshold=0.8, static=False):
+            return None
+
+        # 第二步：确认扩建（普通确认/直接确认）并处理残留弹窗。
+        for _ in range(5):
+            if self.ui.device.screenshot() is None:
+                return None
+
+            action_name = None
+            if self.ui.appear_then_click(BTN_EXPAND_DIRECT_CONFIRM, offset=30, interval=1, threshold=0.8, static=False):
+                action_name = '直接扩建'
+            elif self.ui.appear_then_click(BTN_EXPAND_CONFIRM, offset=30, interval=1, threshold=0.8, static=False):
+                action_name = '扩建确认'
+
+            if action_name:
+                self._expand_failed = False
+                if self.ui.device.screenshot() is not None:
+                    self.ui.appear_then_click_any(
+                        [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
+                    )
+                return action_name
+
+            if self.ui.appear_then_click_any(
+                [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
+            ):
+                continue
+
+        # 多轮都未完成时进入短路，避免每轮重复尝试导致噪音点击。
+        self._expand_failed = True
+        return None
