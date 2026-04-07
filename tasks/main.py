@@ -32,51 +32,50 @@ class TaskMain(TaskBase):
 
         # 一键收获
         if self.has_feature(features, 'auto_harvest'):
-            action = self._run_feature_harvest(rect)
+            action = self._run_feature_harvest()
             if action:
                 actions.append(action)
 
         # 一键除草
         if self.has_feature(features, 'auto_weed'):
-            action = self._run_feature_weed(rect)
+            action = self._run_feature_weed()
             if action:
                 actions.append(action)
 
         # 一键除虫
         if self.has_feature(features, 'auto_bug'):
-            action = self._run_feature_bug(rect)
+            action = self._run_feature_bug()
             if action:
                 actions.append(action)
 
         # 一键浇水
         if self.has_feature(features, 'auto_water'):
-            action = self._run_feature_water(rect)
+            action = self._run_feature_water()
+            if action:
+                actions.append(action)
+
+        # 自动播种
+        if self.has_feature(features, 'auto_plant'):
+            action = self._run_feature_plant()
             if action:
                 actions.append(action)
 
         # TODO 自动施肥
         if self.has_feature(features, 'auto_fertilize'):
-            action = self._run_feature_fertilize(rect)
-            if action:
-                actions.append(action)
-
-        # TODO 自动播种
-        if self.has_feature(features, 'auto_plant'):
-            action = self._run_feature_plant(rect)
+            action = self._run_feature_fertilize()
             if action:
                 actions.append(action)
 
         # TODO 自动扩建
         if self.has_feature(features, 'auto_upgrade'):
-            action = self._run_feature_upgrade(rect)
+            action = self._run_feature_upgrade()
             if action:
                 actions.append(action)
 
         return self.ok(actions=actions)
 
-    def _run_feature_harvest(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_harvest(self) -> str | None:
         """一键收获"""
-        _ = rect
         self.ui.device.screenshot()
         if not self.ui.appear(BTN_HARVEST, offset=30, static=False) and not self.ui.appear(
             BTN_MATURE, offset=30, static=False
@@ -106,19 +105,16 @@ class TaskMain(TaskBase):
 
         return result
 
-    def _run_feature_weed(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_weed(self) -> str | None:
         """一键除草"""
-        _ = rect
         return self._run_feature_single_action(BTN_WEED, ActionType.WEED, '一键除草')
 
-    def _run_feature_bug(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_bug(self) -> str | None:
         """一键除虫"""
-        _ = rect
         return self._run_feature_single_action(BTN_BUG, ActionType.BUG, '一键除虫')
 
-    def _run_feature_water(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_water(self) -> str | None:
         """一键浇水"""
-        _ = rect
         return self._run_feature_single_action(BTN_WATER, ActionType.WATER, '一键浇水')
 
     def _run_feature_single_action(self, button, stat_action: str, done_text: str) -> str | None:
@@ -145,16 +141,15 @@ class TaskMain(TaskBase):
 
         return result
 
-    def _run_feature_fertilize(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_fertilize(self) -> str | None:
         """自动施肥"""
-        _ = rect
         return None
 
-    def _run_feature_plant(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_plant(self) -> str | None:
         """自动播种"""
+        self._buy_seeds(self.engine._resolve_crop_name())
+
         while 1:
-            if self.ui.device.screenshot(rect=rect, save=False) is None:
-                return None
             if self.ui.ui_additional():
                 self.ui.device.sleep(0.2)
                 continue
@@ -164,24 +159,21 @@ class TaskMain(TaskBase):
                 return None
 
             has_land = self.ui.appear_any(
-                [LAND_EMPTY, LAND_EMPTY_2, LAND_EMPTY_3],
-                offset=30,
-                threshold=0.89,
-                static=False,
+                [LAND_EMPTY, LAND_EMPTY_2, LAND_EMPTY_3], offset=30, threshold=0.89, static=False
             )
             if not has_land:
                 return None
 
-            actions = self._plant_all(rect, self.engine._resolve_crop_name())
+            actions = self._plant_all(self.engine._resolve_crop_name())
             if not actions:
                 return None
             return actions[-1]
 
-    def _run_feature_upgrade(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _run_feature_upgrade(self) -> str | None:
         """自动扩建"""
-        return self._try_expand(rect)
+        return self._try_expand()
 
-    def _try_expand(self, rect: tuple[int, int, int, int]) -> str | None:
+    def _try_expand(self) -> str | None:
         """尝试执行一次扩建流程；失败后短路避免重复触发。"""
         if self._expand_failed:
             return None
@@ -189,11 +181,10 @@ class TaskMain(TaskBase):
         # 第一步：点击扩建入口。
         if not self.ui.appear_then_click(BTN_EXPAND, offset=30, interval=1, threshold=0.8, static=False):
             return None
-        self.ui.device.sleep(0.5)
 
         # 第二步：确认扩建（普通确认/直接确认）并处理残留弹窗。
         for _ in range(5):
-            if self.ui.device.screenshot(rect=rect, save=False) is None:
+            if self.ui.device.screenshot() is None:
                 return None
 
             action_name = None
@@ -203,38 +194,27 @@ class TaskMain(TaskBase):
                 action_name = '扩建确认'
 
             if action_name:
-                self.ui.device.sleep(0.5)
                 self._expand_failed = False
-                if self.ui.device.screenshot(rect=rect, save=False) is not None:
+                if self.ui.device.screenshot() is not None:
                     self.ui.appear_then_click_any(
-                        [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM],
-                        offset=30,
-                        interval=1,
-                        threshold=0.8,
-                        static=False,
+                        [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
                     )
                 return action_name
 
             if self.ui.appear_then_click_any(
-                [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM],
-                offset=30,
-                interval=1,
-                threshold=0.8,
-                static=False,
+                [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
             ):
-                self.ui.device.sleep(0.2)
                 continue
-            self.ui.device.sleep(0.3)
 
         # 多轮都未完成时进入短路，避免每轮重复尝试导致噪音点击。
         self._expand_failed = True
         return None
 
-    def _plant_all(self, rect: tuple[int, int, int, int], crop_name: str) -> list[str]:
+    def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
         all_actions: list[str] = []
 
-        cv_img = self.ui.device.screenshot(rect=rect, save=False)
+        cv_img = self.ui.device.screenshot()
         if cv_img is None:
             return all_actions
         dets = self.engine.cv_detector.detect_templates(
@@ -252,7 +232,7 @@ class TaskMain(TaskBase):
 
         seed_det = None
         for _ in range(2):
-            cv_img = self.ui.device.screenshot(rect=rect, save=False)
+            cv_img = self.ui.device.screenshot()
             if cv_img is None:
                 return all_actions
             seed_dets = self.engine.cv_detector.detect_seed_template(cv_img, crop_name_or_template=crop_name)
@@ -262,10 +242,10 @@ class TaskMain(TaskBase):
             self.ui.device.sleep(0.3)
 
         if not seed_det:
-            buy_result = self._buy_seeds(rect, crop_name)
+            buy_result = self._buy_seeds(crop_name)
             if buy_result:
                 all_actions.append(buy_result)
-                return all_actions + self._plant_all(rect, crop_name)
+                return all_actions + self._plant_all(crop_name)
             return all_actions
 
         if not self.engine.action_executor or not self.engine.device:
@@ -294,15 +274,15 @@ class TaskMain(TaskBase):
             all_actions.append(f'播种{crop_name}×{planted_count}')
 
         self.ui.device.sleep(0.5)
-        cv_check = self.ui.device.screenshot(rect=rect, save=False)
+        cv_check = self.ui.device.screenshot()
         if cv_check is not None:
             if BTN_SHOP_CLOSE is not None and self.ui.appear(BTN_SHOP_CLOSE, offset=30, threshold=0.8, static=False):
-                self._close_shop_and_buy(rect, crop_name, all_actions)
+                self._close_shop_and_buy(crop_name, all_actions)
 
             if BTN_FERTILIZE_POPUP is not None and self.ui.appear(
                 BTN_FERTILIZE_POPUP, offset=30, threshold=0.8, static=False
             ):
-                x, y = self.engine._resolve_goto_main_point(rect)
+                x, y = self.engine._resolve_goto_main_point()
                 self.engine.device.click_point(x, y, desc='点击回主按钮')
 
         return all_actions
@@ -324,13 +304,26 @@ class TaskMain(TaskBase):
             logger.error(f"购买流程: OCR未找到 '{crop_name}'")
             raise BuySeedError
 
+        click_buy = False
         while 1:
             self.ui.device.screenshot()
 
-            self.ui.device.click_point(
-                int(ocr_match.target.center_x), int(ocr_match.target.center_y), desc=f'选择{crop_name}'
-            )
-            if self.ui.appear_then_click(BTN_BUY_CONFIRM, offset=30, interval=1):
-                return f'购买{crop_name}'
+            # 点击物品
+            if not click_buy and self.ui.appear(SHOP_CHECK, offset=30):
+                self.ui.device.click_point(
+                    int(ocr_match.target.center_x), int(ocr_match.target.center_y), desc=f'选择{crop_name}'
+                )
+                self.ui.device.sleep(0.5)
+                click_buy = True
+                continue
+            # 购买
+            if self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30) and self.ui.appear_then_click(
+                BTN_SHOP_BUY_CONFIRM, offset=30, interval=1
+            ):
+                continue
+            if click_buy and not self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30):
+                logger.info('购买流程: 购买成功 | 商品={}', crop_name)
+                break
 
         self.ui.ui_ensure(page_main)
+        return f'购买{crop_name}'
