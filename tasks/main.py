@@ -9,9 +9,14 @@ from core.engine.task.registry import TaskResult
 from core.exceptions import BuySeedError
 from core.ui.assets import *
 from core.ui.page import page_main, page_shop
+from models.config import PlantMode
 from models.farm_state import ActionType
+from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from tasks.base import TaskBase
 from utils.shop_item_ocr import ShopItemOCR
+
+SHOP_LIST_SWIPE_START = (270, 300)
+SHOP_LIST_SWIPE_END = (270, 860)
 
 
 class TaskMain(TaskBase):
@@ -245,37 +250,86 @@ class TaskMain(TaskBase):
         if buy_result:
             actions_done.append(buy_result)
 
-    def _buy_seeds(self, crop_name: str) -> str | None:
-        """执行买种流程：开商店 -> OCR 定位 -> 选择并确认购买。"""
-        logger.info('购买流程: 开始 | 商品={}', crop_name)
-        self.ui.ui_ensure(page_shop, confirm_wait=0.5)
+    def _is_crop_aligned_with_strategy(self, crop_name: str) -> bool:
+        """校验当前作物是否与自动策略一致。"""
+        planting = self.engine.config.planting
+        expected_crop_name = None
+        if planting.strategy == PlantMode.LATEST_LEVEL:
+            latest_crop = get_latest_crop_for_level(planting.player_level)
+            expected_crop_name = latest_crop[0] if latest_crop else None
+        elif planting.strategy == PlantMode.BEST_EXP_RATE:
+            best_crop = get_best_crop_for_level(planting.player_level)
+            expected_crop_name = best_crop[0] if best_crop else None
 
+        if expected_crop_name and crop_name != expected_crop_name:
+            return False
+        return True
+
+    def _scan_shop_page_for_seed(self, crop_name: str):
+        """识别当前商店页，返回 OCR 匹配与白萝卜出现标记。"""
         cv_img = self.ui.device.screenshot()
-        ocr_match = self.shop_ocr.find_item(cv_img, crop_name, min_similarity=0.70)
-        if not ocr_match.target:
-            logger.error(f"购买流程: OCR未找到 '{crop_name}'")
-            raise BuySeedError
+        ocr_match = self.shop_ocr.find_item(cv_img, crop_name, min_similarity=0.80)
+        has_white_radish = any(
+            ('白萝卜' in str(item.name)) or ('白萝卜' in str(item.raw_name)) for item in ocr_match.parsed_items
+        )
+        return ocr_match, has_white_radish
 
+    def _locate_seed_in_shop(self, crop_name: str, swipe_list: bool = False):
+        """按页识别并定位待购买种子；命中白萝卜仍未找到目标时抛异常。"""
+        ocr_match, has_white_radish = self._scan_shop_page_for_seed(crop_name)
+        swipe_list = bool(swipe_list) or not bool(ocr_match.target)
+        if not swipe_list:
+            logger.info('购买流程: 已定位目标 | 种子={}', crop_name)
+            return ocr_match.target
+        if ocr_match.target:
+            logger.info('购买流程: 已定位目标 | 种子={}', crop_name)
+            return ocr_match.target
+
+        logger.info('购买流程: 需滑动列表 | 种子={}', crop_name)
+        while swipe_list:
+            if has_white_radish:
+                logger.error("购买流程: 已到达商店首页且未找到种子 '{}'", crop_name)
+                raise BuySeedError
+
+            self.ui.device.swipe(SHOP_LIST_SWIPE_START, SHOP_LIST_SWIPE_END, speed=20, delay=1)
+            ocr_match, has_white_radish = self._scan_shop_page_for_seed(crop_name)
+            if ocr_match.target:
+                logger.info('购买流程: 已定位目标 | 商品={}', crop_name)
+                return ocr_match.target
+
+    def _confirm_buy_seed(self, crop_name: str, target_item) -> None:
+        """点击目标种子并确认购买。"""
         click_buy = False
         while 1:
             self.ui.device.screenshot()
 
-            # 点击物品
-            if not click_buy and self.ui.appear(SHOP_CHECK, offset=30):
-                self.ui.device.click_point(
-                    int(ocr_match.target.center_x), int(ocr_match.target.center_y), desc=f'选择{crop_name}'
-                )
-                self.ui.device.sleep(0.5)
-                click_buy = True
-                continue
+            # 购买完成
+            if click_buy and not self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30):
+                logger.info('购买流程: 购买成功 | 商品={}', crop_name)
+                break
             # 购买
             if self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30) and self.ui.appear_then_click(
                 BTN_SHOP_BUY_CONFIRM, offset=30, interval=1
             ):
                 continue
-            if click_buy and not self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30):
-                logger.info('购买流程: 购买成功 | 商品={}', crop_name)
-                break
+            # 点击物品
+            if self.ui.appear(SHOP_CHECK, offset=30) and not self.ui.appear(BTN_SHOP_BUY_CHECK, offset=30):
+                self.ui.device.click_point(
+                    int(target_item.center_x), int(target_item.center_y), desc=f'选择{crop_name}'
+                )
+                self.ui.device.sleep(0.5)
+                click_buy = True
+                continue
+
+    def _buy_seeds(self, crop_name: str) -> str | bool:
+        """执行买种流程：开商店 -> OCR 定位 -> 选择并确认购买。"""
+        logger.info('购买流程: 开始 | 商品={}', crop_name)
+
+        self.ui.ui_ensure(page_shop, confirm_wait=0.5)
+
+        swipe_list = not self._is_crop_aligned_with_strategy(crop_name)
+        target_item = self._locate_seed_in_shop(crop_name, swipe_list=swipe_list)
+        self._confirm_buy_seed(crop_name, target_item)
 
         self.ui.ui_ensure(page_main)
         return f'购买{crop_name}'

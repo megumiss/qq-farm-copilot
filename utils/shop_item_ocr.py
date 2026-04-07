@@ -12,6 +12,7 @@ from difflib import SequenceMatcher
 
 import cv2
 import numpy as np
+from loguru import logger
 
 from models.game_data import get_crop_names
 from utils.ocr_utils import OCRItem, OCRTool
@@ -20,6 +21,7 @@ from utils.ocr_utils import OCRItem, OCRTool
 @dataclass
 class ShopCard:
     """封装 `ShopCard` 相关的数据与行为。"""
+
     x: int
     y: int
     w: int
@@ -45,6 +47,7 @@ class ShopCard:
 @dataclass
 class ShopItem:
     """封装 `ShopItem` 相关的数据与行为。"""
+
     name: str
     raw_name: str
     ocr_score: float
@@ -57,6 +60,7 @@ class ShopItem:
 @dataclass
 class ShopItemMatch:
     """封装 `ShopItemMatch` 相关的数据与行为。"""
+
     target: ShopItem | None
     best: ShopItem | None
     best_similarity: float
@@ -65,6 +69,7 @@ class ShopItemMatch:
 
 class ShopItemOCR:
     """封装 `ShopItemOCR` 相关的数据与行为。"""
+
     _shared_ocr: OCRTool | None = None
 
     def __init__(self, vocab: list[str] | None = None):
@@ -256,14 +261,11 @@ class ShopItemOCR:
             )
         return results
 
-    def find_item(
-        self,
-        img_bgr: np.ndarray,
-        target_name: str,
-        min_similarity: float = 0.70,
-    ) -> ShopItemMatch:
+    def find_item(self, img_bgr: np.ndarray, target_name: str, min_similarity: float = 0.70) -> ShopItemMatch:
         """执行 `find item` 相关处理。"""
         parsed = self.detect_items(img_bgr)
+        parsed_debug = '; '.join(f'{item.name}/{item.raw_name}@({item.center_x},{item.center_y})' for item in parsed)
+        logger.debug("OCR识别内容: target='{}' | items={}", target_name, parsed_debug or '[]')
         if not parsed:
             return ShopItemMatch(target=None, best=None, best_similarity=0.0, parsed_items=[])
 
@@ -288,7 +290,23 @@ class ShopItemOCR:
                 best = item
 
         if exact:
+            logger.info(
+                "OCR匹配成功: target='{}' | match='{}' raw='{}' | center=({}, {})",
+                target_name,
+                exact.name,
+                exact.raw_name,
+                exact.center_x,
+                exact.center_y,
+            )
             return ShopItemMatch(target=exact, best=exact, best_similarity=1.0, parsed_items=parsed)
         if best and best_similarity >= min_similarity:
+            logger.info(
+                "OCR匹配成功: target='{}' | match='{}' raw='{}' | center=({}, {})",
+                target_name,
+                best.name,
+                best.raw_name,
+                best.center_x,
+                best.center_y,
+            )
             return ShopItemMatch(target=best, best=best, best_similarity=best_similarity, parsed_items=parsed)
         return ShopItemMatch(target=None, best=best, best_similarity=best_similarity, parsed_items=parsed)
