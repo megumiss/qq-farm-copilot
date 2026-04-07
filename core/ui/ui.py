@@ -107,7 +107,7 @@ class UI(Handler):
         做法：
         - 先基于页面 link 反向构建可达父链。
         - 循环识别当前页并执行单步跳转。
-        - 无法跳转时交给 `ui_additional` 清弹窗，超时返回失败。
+        - 不在此处做全局弹窗处理，持续尝试直到到达目标页。
         """
         # 每次导航前重置 parent，避免沿用上次导航链。
         for page in self.ui_pages:
@@ -129,8 +129,7 @@ class UI(Handler):
             visited = new
 
         logger.info(f'开始跳转页面 -> {destination.cn_name}')
-        confirm_timer = Timer(confirm_wait, count=max(1, int(confirm_wait // 0.5) or 1)).start()
-        timeout = Timer(6.0, count=1).start()
+        confirm_timer = Timer(confirm_wait, count=1).start()
         while True:
             self.device.screenshot()
             # 下次再来弹窗，抛出异常
@@ -151,21 +150,19 @@ class UI(Handler):
             for page in visited:
                 if not page.parent:
                     continue
+                page_switch_key = f'ui_goto_page::{page.name}'
+                if not self._button_interval_ready(page_switch_key, 4.0):
+                    continue
                 if not self.ui_page_appear(page):
                     continue
+                self._button_interval_hit(page_switch_key)
                 button = page.links[page.parent]
                 logger.info(f'页面切换: {page.cn_name} -> {page.parent.cn_name}')
-                self.device.click_button(button)
-                clicked = True
-                break
+                if self.device.click_button(button):
+                    clicked = True
+                    break
             if clicked:
                 continue
-
-            if self.ui_additional():
-                continue
-
-            if timeout.reached():
-                return False
 
     def ui_ensure(self, destination, confirm_wait=0):
         """确保当前页面位于目标页；已在目标页则不重复跳转。"""
