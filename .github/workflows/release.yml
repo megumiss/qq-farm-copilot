@@ -100,6 +100,9 @@ jobs:
           $target = '${{ steps.meta.outputs.target }}'
           $repo = '${{ github.repository }}'
 
+          # 确保本地可见所有 tag，避免浅拉取或手动触发时 tag 不完整
+          git fetch --force --tags
+
           # 计算上一版本 tag（优先按当前 tag 可达历史）
           $prevTag = ''
           $tagRefExists = $false
@@ -130,16 +133,26 @@ jobs:
           }
 
           # 先取 GitHub 自动生成说明（通常偏 PR），再追加全量 commits
+          # 注意：workflow_dispatch 首次发布时，当前 tag 可能尚未在本地存在。
+          # 生成本地 commit 差异时要使用可解析的 toRef（优先 tag，其次 target）。
+          $toRef = $target
+          if ($tagRefExists) {
+            $toRef = $tag
+          }
+
           if ($prevTag) {
             $generated = gh api "repos/$repo/releases/generate-notes" -f tag_name="$tag" -f target_commitish="$target" -f previous_tag_name="$prevTag" | ConvertFrom-Json
-            $range = "$prevTag..$tag"
+            $range = "$prevTag..$toRef"
             $compareUrl = "https://github.com/$repo/compare/$prevTag...$tag"
-            $rangeTitle = "变更范围: $prevTag -> $tag"
+            if (-not $tagRefExists) {
+              $compareUrl = "https://github.com/$repo/compare/$prevTag...$target"
+            }
+            $rangeTitle = "变更范围: $prevTag -> $toRef"
           } else {
             $generated = gh api "repos/$repo/releases/generate-notes" -f tag_name="$tag" -f target_commitish="$target" | ConvertFrom-Json
-            $range = $target
+            $range = $toRef
             $compareUrl = ''
-            $rangeTitle = "变更范围: $target"
+            $rangeTitle = "变更范围: $toRef"
           }
 
           $commitLines = git log $range --pretty=format:"- %h %s (%an)" --no-color
