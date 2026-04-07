@@ -123,7 +123,10 @@ class ActionExecutor:
 
     def _in_window(self, abs_x: int, abs_y: int) -> bool:
         """判断绝对坐标是否在当前窗口矩形范围内。"""
-        return self._window_left <= abs_x <= self._window_left + self._window_width and self._window_top <= abs_y <= self._window_top + self._window_height
+        return (
+            self._window_left <= abs_x <= self._window_left + self._window_width
+            and self._window_top <= abs_y <= self._window_top + self._window_height
+        )
 
     def _click_background(self, abs_x: int, abs_y: int) -> bool:
         """后台消息点击。"""

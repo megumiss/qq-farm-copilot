@@ -17,6 +17,7 @@ from models.config import AppConfig
 
 class FeaturePanel(QWidget):
     """承载 `FeaturePanel` 相关界面控件与交互逻辑。"""
+
     config_changed = pyqtSignal(object)
 
     def __init__(self, config: AppConfig, parent=None):

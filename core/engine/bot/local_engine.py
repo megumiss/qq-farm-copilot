@@ -12,6 +12,7 @@ from core.engine.bot.vision import BotVisionMixin
 
 class LocalBotEngine(BotInitMixin, BotExecutorMixin, BotRuntimeMixin, BotVisionMixin, QObject):
     """封装 worker 进程内本地引擎。"""
+
     log_message = pyqtSignal(str)
     screenshot_updated = pyqtSignal(object)
     state_changed = pyqtSignal(str)

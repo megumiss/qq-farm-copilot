@@ -17,7 +17,7 @@
 - `main`：农场主流程（收获维护、播种、扩建、出售、任务奖励、好友求助入口）
 - `friend`：独立好友任务
 - `share`：独立分享/任务奖励任务（通常配合每日触发）
-- `gift`：免费礼包任务（QQSVIP礼包 + 商城礼包，每日）
+- `gift`：免费礼包任务（QQSVIP礼包、商城礼包、可选邮件领取；支持分项开关）
 
 ## 已实现功能
 
@@ -121,9 +121,24 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "features": {
       "auto_task": true
     }
+  },
+  "gift": {
+    "enabled": true,
+    "priority": 35,
+    "trigger": "daily",
+    "daily_time": "04:00",
+    "interval_seconds": 86400,
+    "failure_interval_seconds": 300,
+    "features": {
+      "auto_svip_gift": true,
+      "auto_mall_gift": true,
+      "auto_mail": true
+    }
   }
 }
 ```
+
+说明：`gift.features.auto_svip_gift`、`gift.features.auto_mall_gift`、`gift.features.auto_mail` 默认均启用；其中 `auto_mail` 依赖 `menu_goto_mail` 按钮模板，未提供模板时会自动跳过邮件领取步骤。
 
 调度规则：
 

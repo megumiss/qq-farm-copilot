@@ -18,7 +18,10 @@
       "auto_steal": "偷菜",
       "auto_accept_request": "同意好友请求",
       "auto_task": "任务奖励",
-      "auto_fertilize": "施肥"
+      "auto_fertilize": "施肥",
+      "auto_svip_gift": "SVIP礼包领取",
+      "auto_mall_gift": "商城礼包领取",
+      "auto_mail": "邮件领取"
     },
     "enabled": "启用",
     "empty_text": "当前没有可配置的任务功能项",

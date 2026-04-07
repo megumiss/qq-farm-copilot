@@ -19,6 +19,7 @@ from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, g
 
 class SettingsPanel(QWidget):
     """承载 `SettingsPanel` 相关界面控件与交互逻辑。"""
+
     config_changed = pyqtSignal(object)
 
     def __init__(self, config: AppConfig, parent=None):

@@ -61,7 +61,11 @@
       "interval_seconds": 86400,
       "daily_time": "00:00",
       "failure_interval_seconds": 300,
-      "features": {}
+      "features": {
+        "auto_svip_gift": true,
+        "auto_mall_gift": true,
+        "auto_mail": true
+      }
     },
     "sell": {
       "enabled": true,

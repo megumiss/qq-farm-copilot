@@ -212,4 +212,3 @@ class ScreenCapture:
                     os.remove(f)
         except Exception as e:
             logger.warning(f'清理截图失败: {e}')
-

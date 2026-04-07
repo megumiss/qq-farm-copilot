@@ -211,7 +211,9 @@ def collect_sources_for_platform(platform: str) -> dict[str, SourceBundle]:
     return bundles
 
 
-def _extract_bundle_values(bundle: SourceBundle) -> tuple[tuple[int, int, int, int], tuple[int, int, int], tuple[int, int, int, int], str] | None:
+def _extract_bundle_values(
+    bundle: SourceBundle,
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int], tuple[int, int, int, int], str] | None:
     """从 bundle 提取 area/color/button/file。"""
 
     if bundle.base is None:
@@ -324,7 +326,7 @@ def render(items: list[Item]) -> str:
 
         comment = f'  # {item.alias}' if item.alias else ''
         lines.append(
-            f"{const_name} = Button(area={area_expr}, color={color_expr}, button={button_expr}, "
+            f'{const_name} = Button(area={area_expr}, color={color_expr}, button={button_expr}, '
             f"file={file_expr}, name='{item.name}'){comment}"
         )
 

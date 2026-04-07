@@ -141,6 +141,9 @@
 - `share`
 : 独立分享/任务奖励任务，复用 `TaskReward`。
 
+- `gift`
+: 免费礼包任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 模板，缺失时自动跳过）。
+
 ## 5. 新增任务标准流程
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>(ctx)`。

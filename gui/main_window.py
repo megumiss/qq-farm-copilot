@@ -83,8 +83,7 @@ def _build_stylesheet() -> str:
     arrow_up_icon = str(resolve_runtime_path('gui', 'icons', 'arrow_up.svg')).replace('\\', '/')
     arrow_down_icon = str(resolve_runtime_path('gui', 'icons', 'arrow_down.svg')).replace('\\', '/')
     return (
-        STYLESHEET_TEMPLATE
-        .replace('__CHECK_ICON__', check_icon)
+        STYLESHEET_TEMPLATE.replace('__CHECK_ICON__', check_icon)
         .replace('__ARROW_UP_ICON__', arrow_up_icon)
         .replace('__ARROW_DOWN_ICON__', arrow_down_icon)
     )
@@ -144,7 +143,7 @@ class MainWindow(QMainWindow):
 
         # 动态获取当前屏幕的 DPI 缩放比例
         ratio = self.devicePixelRatioF()
-        
+
         # 不再写死窗口高度，仅限制最小宽度保证左右两侧能放得下
         self.setMinimumWidth(int(540 / ratio) + 550)
         # 设置一个合理的初始宽度，高度交由系统和内部内容自适应撑开

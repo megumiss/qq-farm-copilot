@@ -20,6 +20,7 @@ from utils.ocr_utils import OCRItem, OCRTool
 @dataclass
 class ShopCard:
     """封装 `ShopCard` 相关的数据与行为。"""
+
     x: int
     y: int
     w: int
@@ -45,6 +46,7 @@ class ShopCard:
 @dataclass
 class ShopItem:
     """封装 `ShopItem` 相关的数据与行为。"""
+
     name: str
     raw_name: str
     ocr_score: float
@@ -57,6 +59,7 @@ class ShopItem:
 @dataclass
 class ShopItemMatch:
     """封装 `ShopItemMatch` 相关的数据与行为。"""
+
     target: ShopItem | None
     best: ShopItem | None
     best_similarity: float
@@ -65,6 +68,7 @@ class ShopItemMatch:
 
 class ShopItemOCR:
     """封装 `ShopItemOCR` 相关的数据与行为。"""
+
     _shared_ocr: OCRTool | None = None
 
     def __init__(self, vocab: list[str] | None = None):
