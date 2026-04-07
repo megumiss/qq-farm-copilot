@@ -18,17 +18,19 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.labels import load_ui_labels
+from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, TaskTriggerType
 
 
 class TaskPanel(QWidget):
     """任务调度配置面板。
 
-    
+
     - 根据 `tasks` 配置动态生成任务调度表单。
     - 维护执行器策略（空队列策略、最大连续失败）。
     - 用户修改后自动写回 `config.json` 并发出 `config_changed` 信号。
     """
+
     config_changed = pyqtSignal(object)
 
     def __init__(self, config: AppConfig, parent=None):
@@ -99,14 +101,14 @@ class TaskPanel(QWidget):
     def _build_task_group(self, task_name: str, trigger: TaskTriggerType) -> QGroupBox:
         """构建单个任务的配置卡片。
 
-        
+
         - 固定提供任务开关。
         - `INTERVAL` 任务显示“执行间隔（秒/分钟/小时）”。
         - `DAILY` 任务显示“每日执行时间 + 下次执行提示”。
         """
         title = self._task_title_map.get(task_name, f'{task_name}{self._task_title_suffix}')
         group = QGroupBox(title)
-        group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
+        group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
         form = QFormLayout()
         form.setContentsMargins(10, 15, 10, 10)
         form.setSpacing(10)
@@ -123,14 +125,14 @@ class TaskPanel(QWidget):
             time_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
             time_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             time_edit.setStyleSheet(
-                "QTimeEdit {"
-                "background-color: #ffffff;"
-                "border: 1px solid #cbd5e1;"
-                "border-radius: 6px;"
-                "padding: 4px 8px;"
-                "font-weight: 600;"
-                "}"
-                "QTimeEdit:focus { border-color: #2563eb; }"
+                'QTimeEdit {'
+                'background-color: #ffffff;'
+                'border: 1px solid #cbd5e1;'
+                'border-radius: 6px;'
+                'padding: 4px 8px;'
+                'font-weight: 600;'
+                '}'
+                'QTimeEdit:focus { border-color: #2563eb; }'
             )
             next_label = QLabel('--')
 
@@ -148,7 +150,7 @@ class TaskPanel(QWidget):
         else:
             interval_value = QSpinBox()
             interval_value.setRange(1, 999999)
-            interval_unit = QComboBox()
+            interval_unit = NoWheelComboBox()
             interval_unit.addItem(self._interval_unit_second, 1)
             interval_unit.addItem(self._interval_unit_minute, 60)
             interval_unit.addItem(self._interval_unit_hour, 3600)
@@ -172,16 +174,16 @@ class TaskPanel(QWidget):
     def _build_executor_group(self) -> QGroupBox:
         """构建执行器全局配置卡片。
 
-        
+
         - 配置空队列策略（停留/回主界面）。
         - 配置最大连续失败次数（影响失败退避策略）。
         """
         group = QGroupBox(self._executor_group_title)
-        group.setStyleSheet("QGroupBox { font-weight: bold; color: #475569; }")
+        group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 4)
         form.setSpacing(10)
-        self._empty_policy = QComboBox()
+        self._empty_policy = NoWheelComboBox()
         self._empty_policy.addItem(self._policy_stay, 'stay')
         self._empty_policy.addItem(self._policy_goto_main, 'goto_main')
         self._max_failures = QSpinBox()
@@ -270,7 +272,11 @@ class TaskPanel(QWidget):
         enabled = widgets.get('enabled')
         daily_time = widgets.get('daily_time')
         next_label = widgets.get('next_label')
-        if not isinstance(enabled, QCheckBox) or not isinstance(daily_time, QTimeEdit) or not isinstance(next_label, QLabel):
+        if (
+            not isinstance(enabled, QCheckBox)
+            or not isinstance(daily_time, QTimeEdit)
+            or not isinstance(next_label, QLabel)
+        ):
             return
 
         if not enabled.isChecked():

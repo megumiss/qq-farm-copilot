@@ -89,7 +89,6 @@ class SafetyConfig(BaseModel):
 class ScreenshotConfig(BaseModel):
     """定义 `ScreenshotConfig` 的配置数据结构与默认值。"""
 
-    quality: int = 80
     save_history: bool = True
     max_history_count: int = 50
 
