@@ -8,7 +8,6 @@
     "run_mode": "background"
   },
   "screenshot": {
-    "quality": 80,
     "save_history": true,
     "max_history_count": 50
   },

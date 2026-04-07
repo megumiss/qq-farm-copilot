@@ -1,18 +1,22 @@
 """设置面板 - 紧凑布局，实时生效"""
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, get_crop_names
 
@@ -35,10 +39,29 @@ class SettingsPanel(QWidget):
         self._loading = False
 
     def _init_ui(self):
-        """构建“种植 + 其他”两组配置项界面。"""
-        layout = QVBoxLayout(self)
+        """构建设置界面并提供滚动能力。"""
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        scroll = QScrollArea()
+        scroll.setObjectName('settingsScroll')
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setObjectName('settingsViewport')
+        scroll.setStyleSheet("""
+            QScrollArea#settingsScroll { background: transparent; border: none; border-radius: 8px; }
+            QWidget#settingsViewport { background: transparent; border-radius: 8px; }
+            QWidget#settingsContent { background: transparent; }
+        """)
+        content = QWidget()
+        content.setObjectName('settingsContent')
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(6)
+        scroll.setWidget(content)
+        root.addWidget(scroll)
 
         # ===== 种植设置 =====
         # 等级与策略在同一行，便于联动查看“可种作物”和“推荐作物”。
@@ -53,9 +76,9 @@ class SettingsPanel(QWidget):
         self._player_level.setFixedWidth(80)
         row_level.addWidget(QLabel('等级'))
         row_level.addWidget(self._player_level)
-        self._strategy_combo = QComboBox()
+        self._strategy_combo = NoWheelComboBox()
         self._strategy_combo.addItem('自动最优', PlantMode.BEST_EXP_RATE.value)
-        self._strategy_combo.addItem('手动指定', PlantMode.PREFERRED.value)
+        # self._strategy_combo.addItem('手动指定', PlantMode.PREFERRED.value)
         row_level.addWidget(QLabel('策略'))
         row_level.addWidget(self._strategy_combo, 1)
         pf.addRow(row_level)
@@ -64,7 +87,7 @@ class SettingsPanel(QWidget):
         self._auto_crop_label.setStyleSheet('color: #16a34a; font-weight: bold; font-size: 12px;')
         pf.addRow('推荐:', self._auto_crop_label)
 
-        self._crop_combo = QComboBox()
+        self._crop_combo = NoWheelComboBox()
         self._crop_names = get_crop_names()
         pf.addRow('作物:', self._crop_combo)
 
@@ -80,11 +103,11 @@ class SettingsPanel(QWidget):
         mf = QFormLayout()
         mf.setContentsMargins(0, 0, 0, 4)
         mf.setSpacing(10)
-        self._window_platform = QComboBox()
+        self._window_platform = NoWheelComboBox()
         self._window_platform.addItem('QQ', WindowPlatform.QQ.value)
         self._window_platform.addItem('微信', WindowPlatform.WECHAT.value)
         mf.addRow('平台:', self._window_platform)
-        self._run_mode = QComboBox()
+        self._run_mode = NoWheelComboBox()
         self._run_mode.addItem('后台模式', RunMode.BACKGROUND.value)
         self._run_mode.addItem('前台模式', RunMode.FOREGROUND.value)
         mf.addRow('运行方式:', self._run_mode)
@@ -94,7 +117,7 @@ class SettingsPanel(QWidget):
         mf.addRow('', self._run_mode_tip)
         self._window_keyword = QLineEdit()
         mf.addRow('窗口关键词:', self._window_keyword)
-        self._window_position = QComboBox()
+        self._window_position = NoWheelComboBox()
         self._window_position.addItem('左侧居中', WindowPosition.LEFT_CENTER.value)
         self._window_position.addItem('居中', WindowPosition.CENTER.value)
         self._window_position.addItem('右侧居中', WindowPosition.RIGHT_CENTER.value)
@@ -103,16 +126,61 @@ class SettingsPanel(QWidget):
         self._window_position.addItem('左下', WindowPosition.LEFT_BOTTOM.value)
         self._window_position.addItem('右下', WindowPosition.RIGHT_BOTTOM.value)
         mf.addRow('窗口位置:', self._window_position)
+        misc_group.setLayout(mf)
+        layout.addWidget(misc_group)
+
+        # ===== 高级设置 =====
+        self._advanced_group = QGroupBox('高级')
+        af = QFormLayout()
+        af.setContentsMargins(0, 0, 0, 0)
+        af.setSpacing(10)
+        # 安全参数归类到“高级”分组。
+        self._random_delay_min = QDoubleSpinBox()
+        self._random_delay_min.setRange(0.0, 10.0)
+        self._random_delay_min.setDecimals(2)
+        self._random_delay_min.setSingleStep(0.05)
+        self._random_delay_min.setSuffix(' 秒')
+        self._random_delay_min.setToolTip('每次操作后的最小随机停顿时间')
+        self._random_delay_max = QDoubleSpinBox()
+        self._random_delay_max.setRange(0.0, 10.0)
+        self._random_delay_max.setDecimals(2)
+        self._random_delay_max.setSingleStep(0.05)
+        self._random_delay_max.setSuffix(' 秒')
+        self._random_delay_max.setToolTip('每次操作后的最大随机停顿时间')
+        delay_row = QWidget()
+        delay_layout = QHBoxLayout(delay_row)
+        delay_layout.setContentsMargins(0, 0, 0, 0)
+        delay_layout.setSpacing(8)
+        delay_layout.addWidget(QLabel('最小'))
+        delay_layout.addWidget(self._random_delay_min)
+        delay_layout.addSpacing(12)
+        delay_layout.addWidget(QLabel('最大'))
+        delay_layout.addWidget(self._random_delay_max)
+        delay_layout.addStretch()
+        af.addRow('随机延迟:', delay_row)
+        self._click_offset_range = QSpinBox()
+        self._click_offset_range.setRange(0, 50)
+        af.addRow('点击抖动范围(像素):', self._click_offset_range)
+        self._max_actions_per_round = QSpinBox()
+        self._max_actions_per_round.setRange(1, 500)
+        af.addRow('单轮最大点击数:', self._max_actions_per_round)
+        self._advanced_group.setLayout(af)
+        layout.addWidget(self._advanced_group)
+
+        declaration_group = QGroupBox('声明')
+        df = QFormLayout()
+        df.setContentsMargins(0, 0, 0, 4)
+        df.setSpacing(10)
         self._free_notice = QLabel('本软件完全免费，若付费购买请立即退款。')
         self._free_notice.setWordWrap(True)
         self._free_notice.setStyleSheet('color: #dc2626; font-weight: bold;')
-        mf.addRow('免费声明:', self._free_notice)
+        df.addRow('免费声明:', self._free_notice)
         self._project_link = QLabel(f'<a href="{PROJECT_URL}">{PROJECT_URL}</a>')
         self._project_link.setOpenExternalLinks(True)
         self._project_link.setWordWrap(True)
-        mf.addRow('项目地址:', self._project_link)
-        misc_group.setLayout(mf)
-        layout.addWidget(misc_group)
+        df.addRow('项目地址:', self._project_link)
+        declaration_group.setLayout(df)
+        layout.addWidget(declaration_group)
 
         layout.addStretch()
 
@@ -123,6 +191,10 @@ class SettingsPanel(QWidget):
         self._crop_combo.currentIndexChanged.connect(self._auto_save)
         self._window_platform.currentIndexChanged.connect(self._auto_save)
         self._run_mode.currentIndexChanged.connect(self._auto_save)
+        self._random_delay_min.valueChanged.connect(self._auto_save)
+        self._random_delay_max.valueChanged.connect(self._auto_save)
+        self._click_offset_range.valueChanged.connect(self._auto_save)
+        self._max_actions_per_round.valueChanged.connect(self._auto_save)
         self._window_keyword.editingFinished.connect(self._auto_save)
         self._window_position.currentIndexChanged.connect(self._auto_save)
 
@@ -132,12 +204,19 @@ class SettingsPanel(QWidget):
             return
         c = self.config
         c.planting.player_level = self._player_level.value()
-        c.planting.strategy = PlantMode(self._strategy_combo.currentData())
+        strategy_value = self._strategy_combo.currentData() or PlantMode.BEST_EXP_RATE.value
+        c.planting.strategy = PlantMode(strategy_value)
         idx = self._crop_combo.currentIndex()
         if 0 <= idx < len(self._crop_names):
             c.planting.preferred_crop = self._crop_names[idx]
         c.planting.window_platform = WindowPlatform(self._window_platform.currentData())
         c.safety.run_mode = RunMode(self._run_mode.currentData())
+        delay_min = float(self._random_delay_min.value())
+        delay_max = float(self._random_delay_max.value())
+        c.safety.random_delay_min = min(delay_min, delay_max)
+        c.safety.random_delay_max = max(delay_min, delay_max)
+        c.safety.click_offset_range = int(self._click_offset_range.value())
+        c.safety.max_actions_per_round = int(self._max_actions_per_round.value())
         c.window_title_keyword = self._window_keyword.text().strip()
         c.planting.window_position = WindowPosition(self._window_position.currentData())
         c.save()
@@ -183,7 +262,7 @@ class SettingsPanel(QWidget):
         """将配置文件中的值回填到界面控件。"""
         c = self.config
         self._player_level.setValue(c.planting.player_level)
-        strategy_idx = 0 if c.planting.strategy == PlantMode.BEST_EXP_RATE else 1
+        strategy_idx = 0
         self._strategy_combo.setCurrentIndex(strategy_idx)
         # 先设置策略，再同步推荐文案与作物列表，保证控件状态一致。
         self._on_strategy_changed(strategy_idx)
@@ -199,6 +278,10 @@ class SettingsPanel(QWidget):
             if self._run_mode.itemData(i) == c.safety.run_mode.value:
                 self._run_mode.setCurrentIndex(i)
                 break
+        self._random_delay_min.setValue(float(c.safety.random_delay_min))
+        self._random_delay_max.setValue(float(c.safety.random_delay_max))
+        self._click_offset_range.setValue(int(c.safety.click_offset_range))
+        self._max_actions_per_round.setValue(int(c.safety.max_actions_per_round))
         self._window_keyword.setText(c.window_title_keyword)
         for i in range(self._window_position.count()):
             if self._window_position.itemData(i) == c.planting.window_position.value:

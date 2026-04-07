@@ -58,18 +58,18 @@ QCheckBox::indicator:checked {
     background: #2563eb; border-color: #2563eb;
     image: url(__CHECK_ICON__);
 }
-QLineEdit, QSpinBox, QComboBox {
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
     background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px;
     padding: 5px 8px; color: #1e293b; selection-background-color: #dbeafe;
     min-height: 20px;
 }
-QSpinBox::up-button { subcontrol-position: top right; width: 20px; border: none; background: #f1f5f9; border-top-right-radius: 5px; }
-QSpinBox::down-button { subcontrol-position: bottom right; width: 20px; border: none; background: #f1f5f9; border-bottom-right-radius: 5px; }
-QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #dbeafe; }
-QSpinBox::up-arrow { image: url(__ARROW_UP_ICON__); width: 10px; height: 6px; }
-QSpinBox::down-arrow { image: url(__ARROW_DOWN_ICON__); width: 10px; height: 6px; }
+QSpinBox::up-button, QDoubleSpinBox::up-button { subcontrol-position: top right; width: 20px; border: none; background: #f1f5f9; border-top-right-radius: 5px; }
+QSpinBox::down-button, QDoubleSpinBox::down-button { subcontrol-position: bottom right; width: 20px; border: none; background: #f1f5f9; border-bottom-right-radius: 5px; }
+QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #dbeafe; }
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow { image: url(__ARROW_UP_ICON__); width: 10px; height: 6px; }
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow { image: url(__ARROW_DOWN_ICON__); width: 10px; height: 6px; }
 QComboBox::down-arrow { image: url(__ARROW_DOWN_ICON__); width: 10px; height: 6px; }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: #2563eb; }
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus { border-color: #2563eb; }
 QComboBox::drop-down { border: none; padding-right: 8px; }
 QComboBox QAbstractItemView { background-color: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; selection-background-color: #dbeafe; }
 QScrollBar:vertical { background: #f5f5f7; width: 6px; border-radius: 3px; }
