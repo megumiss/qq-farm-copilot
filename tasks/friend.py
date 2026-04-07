@@ -27,7 +27,7 @@ from core.ui.assets import (
     ICON_WEED_IN_FRIEND_LIST,
     MAIN_GOTO_FRIEND,
 )
-from core.ui.page import page_friend
+from core.ui.page import page_friend, page_main
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
@@ -260,6 +260,8 @@ class TaskFriend(TaskBase):
 
     def back_to_home(self):
         """返回主页。"""
+        self.ui.ui_ensure(page_main)
+
         while 1:
             self.ui.device.screenshot()
 
