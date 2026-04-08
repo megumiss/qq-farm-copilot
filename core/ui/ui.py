@@ -23,7 +23,7 @@ class UI(Handler):
         page_unknown,
         page_main,
         page_shop,
-        page_friend,
+        page_friend_list,
         page_mall,
         page_pet,
         page_task,
@@ -170,7 +170,7 @@ class UI(Handler):
         if self.ui_current == destination:
             logger.info(f'已在页面: {destination.cn_name}')
             return False
-        if self.ui_current == page_main and destination == page_friend:
+        if self.ui_current == page_main and destination == page_friend_list:
             if self._ensure_main_to_friend():
                 return True
         logger.info(f'跳转到页面: {destination.cn_name}')

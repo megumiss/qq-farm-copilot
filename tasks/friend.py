@@ -27,7 +27,7 @@ from core.ui.assets import (
     ICON_WEED_IN_FRIEND_LIST,
     MAIN_GOTO_FRIEND,
 )
-from core.ui.page import page_friend, page_main
+from core.ui.page import page_friend_list, page_main
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
@@ -59,7 +59,7 @@ class TaskFriend(TaskBase):
             return self.ok()
 
         # 进入好友列表页
-        self.ui.ui_ensure(page_friend)
+        self.ui.ui_ensure(page_friend_list)
         # 处理微信好友请求
         if enable_accept_request:
             self.accept_friend()

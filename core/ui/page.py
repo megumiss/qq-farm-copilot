@@ -56,15 +56,18 @@ page_unknown.link(button=GOTO_MAIN, destination=page_main)
 
 page_menu = Page('page_menu', SETTING_CHECK, cn_name='菜单')
 page_shop = Page('page_shop', SHOP_CHECK, cn_name='商店')
-page_friend = Page('page_friend', FRIEND_CHECK, cn_name='好友')
+page_friend_list = Page('page_friend_list', FRIEND_CHECK, cn_name='好友列表')
+page_friend_farm = Page('page_friend_farm', FRIEND_CHECK, cn_name='好友农场')
 page_mall = Page('page_mall', MALL_CHECK, cn_name='商城')
 page_pet = Page('page_pet', PET_CHECK, cn_name='宠物')
 page_task = Page('page_task', TASK_CHECK, cn_name='任务')
 page_warehouse = Page('page_warehouse', WAREHOUSE_CHECK, cn_name='仓库')
 page_wiki = Page('page_wiki', WIKI_CHECK, cn_name='图鉴')
 
-page_main.link(button=MAIN_GOTO_FRIEND, destination=page_friend)
-page_friend.link(button=BTN_CLOSE, destination=page_main)
+page_main.link(button=MAIN_GOTO_FRIEND, destination=page_friend_list)
+page_friend_list.link(button=BTN_CLOSE, destination=page_main)
+
+page_friend_farm.link(button=BTN_HOME, destination=page_main)
 
 page_main.link(button=MAIN_GOTO_SHOP, destination=page_shop)
 page_shop.link(button=BTN_CLOSE, destination=page_main)
