@@ -11,5 +11,3 @@ __all__ = [
     'TaskFriend',
     'TaskShare',
 ]
-
-

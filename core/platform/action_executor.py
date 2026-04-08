@@ -10,7 +10,8 @@ from loguru import logger
 
 from models.config import RunMode
 from models.farm_state import Action, OperationResult
-from utils.run_mode_decorator import Config as DecoratorConfig, UNSET
+from utils.run_mode_decorator import UNSET
+from utils.run_mode_decorator import Config as DecoratorConfig
 
 # Windows 消息常量
 WM_MOUSEMOVE = 0x0200
@@ -123,7 +124,10 @@ class ActionExecutor:
 
     def _in_window(self, abs_x: int, abs_y: int) -> bool:
         """判断绝对坐标是否在当前窗口矩形范围内。"""
-        return self._window_left <= abs_x <= self._window_left + self._window_width and self._window_top <= abs_y <= self._window_top + self._window_height
+        return (
+            self._window_left <= abs_x <= self._window_left + self._window_width
+            and self._window_top <= abs_y <= self._window_top + self._window_height
+        )
 
     def _click_background(self, abs_x: int, abs_y: int) -> bool:
         """后台消息点击。"""
@@ -334,11 +338,10 @@ class ActionExecutor:
         p2: tuple[int, int],
         *,
         speed: float = 15.0,
-        inertia: bool = False,
         rel_p1: tuple[int, int] | None = None,
         rel_p2: tuple[int, int] | None = None,
     ) -> bool:
-        """执行鼠标滑动（兼容前台/后台模式）。"""
+        """执行鼠标滑动"""
         try:
             x1, y1 = int(p1[0]), int(p1[1])
             x2, y2 = int(p2[0]), int(p2[1])
@@ -350,18 +353,19 @@ class ActionExecutor:
             logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
             return False
 
-        distance = max(abs(x2 - x1), abs(y2 - y1))
+        distance = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
         if distance <= 0:
             return True
 
-        speed_value = max(1.0, float(speed))
-        if inertia:
-            total_duration = max(0.05, min(0.45, distance / (speed_value * 220.0)))
-            steps = max(4, min(18, distance // 20))
-        else:
-            # 无惯性模式：增加轨迹采样并降低末段速度，减少抬手瞬间速度。
-            total_duration = max(0.15, min(0.95, distance / (speed_value * 140.0)))
-            steps = max(8, min(36, distance // 12))
+        speed_value = max(0.1, float(speed))
+        total_duration = max(0.12, min(distance / (70 * speed_value), 0.42))
+        brake_start_ratio = 0.7
+        phase1_steps = max(1, int((distance * brake_start_ratio) / 12))
+        # 末段刹车：1-2px 级别的细分步进
+        phase2_steps = max(1, int((distance * (1.0 - brake_start_ratio)) / 1.5))
+        weighted_steps = float(phase1_steps + phase2_steps * 2.8)
+        phase1_step_duration = max(0.003, total_duration / weighted_steps)
+        phase2_step_duration = max(0.008, phase1_step_duration * 2.8)
 
         if not self.move_abs(x1, y1, duration=0.01):
             return False
@@ -370,36 +374,26 @@ class ActionExecutor:
 
         ok = True
         try:
-            # 分段时长：越到后段越慢（ease-out），用于主动去惯性。
-            duration_weights: list[float] = []
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                duration_weights.append(0.7 + 1.6 * t if not inertia else 1.0)
-            total_weight = sum(duration_weights) if duration_weights else 1.0
-
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                if inertia:
-                    ratio = t
-                else:
-                    ratio = 1.0 - pow(1.0 - t, 2.2)
+            for i in range(1, phase1_steps + 1):
+                ratio = brake_start_ratio * (i / float(phase1_steps))
                 tx = int(round(x1 + (x2 - x1) * ratio))
                 ty = int(round(y1 + (y2 - y1) * ratio))
-                step_duration = total_duration * duration_weights[i - 1] / total_weight
-                if not self.move_abs(tx, ty, duration=step_duration):
+                if not self.move_abs(tx, ty, duration=phase1_step_duration):
                     ok = False
                     break
-            if ok and not inertia:
-                # 末端回拉-回位：主动抵消拖拽末速度（比单纯延时更有效）。
-                sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
-                sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
-                pull = max(2, min(10, int(distance * 0.03)))
-                back_x = x2 - sign_x * pull
-                back_y = y2 - sign_y * pull
-                if self._in_window(back_x, back_y):
-                    self.move_abs(back_x, back_y, duration=0.03)
-                    self.move_abs(x2, y2, duration=0.04)
-                time.sleep(0.03)
+
+            if ok:
+                for i in range(1, phase2_steps + 1):
+                    ratio = brake_start_ratio + (1.0 - brake_start_ratio) * (i / float(phase2_steps))
+                    tx = int(round(x1 + (x2 - x1) * ratio))
+                    ty = int(round(y1 + (y2 - y1) * ratio))
+                    if not self.move_abs(tx, ty, duration=phase2_step_duration):
+                        ok = False
+                        break
+
+            if ok:
+                # 终点停驻后再抬手，进一步降低释放瞬间触发惯性概率。
+                time.sleep(0.18)
         finally:
             self.mouse_up()
 

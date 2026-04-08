@@ -14,5 +14,6 @@ class LoginRepeatError(RuntimeError):
 class TaskRetryCurrentError(RuntimeError):
     """微信重新登录"""
 
+
 class BuySeedError(RuntimeError):
     """购买种子失败"""

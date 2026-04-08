@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QFrame, QTextEdit
 
 class LogPanel(QTextEdit):
     """承载 `LogPanel` 相关界面控件与交互逻辑。"""
+
     MAX_LINES = 500
 
     def __init__(self, parent=None):

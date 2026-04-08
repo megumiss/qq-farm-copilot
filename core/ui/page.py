@@ -48,7 +48,7 @@ class Page:
         self.links[destination] = button
 
 
-page_main = Page('page_main', (MAIN_GOTO_TASK, MAIN_GOTO_MENU), cn_name='主页')
+page_main = Page('page_main', (MAIN_GOTO_FRIEND, MAIN_GOTO_MENU), cn_name='主页')
 
 # Unknown
 page_unknown = Page('page_unknown', None, cn_name='未知页面')
@@ -57,7 +57,7 @@ page_unknown.link(button=GOTO_MAIN, destination=page_main)
 page_menu = Page('page_menu', SETTING_CHECK, cn_name='菜单')
 page_shop = Page('page_shop', SHOP_CHECK, cn_name='商店')
 page_friend_list = Page('page_friend_list', FRIEND_CHECK, cn_name='好友列表')
-page_friend_farm = Page('page_friend_farm', FRIEND_CHECK, cn_name='好友农场')
+page_friend_farm = Page('page_friend_farm', BTN_HOME, cn_name='好友农场')
 page_mall = Page('page_mall', MALL_CHECK, cn_name='商城')
 page_pet = Page('page_pet', PET_CHECK, cn_name='宠物')
 page_task = Page('page_task', TASK_CHECK, cn_name='任务')

@@ -213,8 +213,7 @@ class CVDetector:
 
         self._loaded = True
         logger.info(
-            f'已加载 {len(self._templates_by_name)} 个模板，分 {len(self._templates)} 个类别，'
-            f'平台={selected_platform}'
+            f'已加载 {len(self._templates_by_name)} 个模板，分 {len(self._templates)} 个类别，平台={selected_platform}'
         )
 
     def detect_all(self, screenshot: np.ndarray, threshold: float = 0.8) -> list[DetectResult]:

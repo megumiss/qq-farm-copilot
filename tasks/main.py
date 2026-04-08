@@ -281,7 +281,7 @@ class TaskMain(TaskBase):
                 logger.error("购买流程: 已到达商店首页且未找到种子 '{}'", crop_name)
                 raise BuySeedError
 
-            self.ui.device.swipe(SHOP_LIST_SWIPE_START, SHOP_LIST_SWIPE_END, speed=20, delay=1)
+            self.ui.device.swipe(SHOP_LIST_SWIPE_START, SHOP_LIST_SWIPE_END, speed=10, delay=1)
             ocr_match, has_white_radish = self._scan_shop_page_for_seed(crop_name)
             if ocr_match.target:
                 logger.info('购买流程: 已定位目标 | 商品={}', crop_name)

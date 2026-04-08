@@ -68,5 +68,3 @@ class TaskReward(TaskBase):
 
             self.ui.device.sleep(0.3)
         return actions
-
-

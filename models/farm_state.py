@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 class ActionType(str, Enum):
     """封装 `ActionType` 相关的数据与行为。"""
+
     HARVEST = 'harvest'
     PLANT = 'plant'
     WATER = 'water'

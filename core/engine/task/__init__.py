@@ -20,4 +20,3 @@ __all__ = [
     'TaskSnapshot',
     'build_default_tasks',
 ]
-

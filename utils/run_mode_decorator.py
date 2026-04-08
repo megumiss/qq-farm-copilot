@@ -99,4 +99,3 @@ def _resolve_option(instance: Any, key: str) -> Any:
                 return getattr(child, k)
 
     return UNSET
-

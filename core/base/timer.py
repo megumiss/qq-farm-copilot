@@ -7,6 +7,7 @@ import time
 
 class Timer:
     """封装 `Timer` 相关的数据与行为。"""
+
     def __init__(self, limit: float, count: int = 1):
         """初始化对象并准备运行所需状态。"""
         self.limit = max(0.0, float(limit))
