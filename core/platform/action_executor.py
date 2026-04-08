@@ -365,6 +365,24 @@ class ActionExecutor:
 
         speed_value = max(0.1, float(speed))
         hold_value = max(0.0, float(hold))
+        if self._run_mode == RunMode.FOREGROUND:
+            ok = self._swipe_foreground_nikke_style(
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                speed=speed_value,
+                hold=hold_value,
+            )
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1])) if rel_p1 is not None else (x1, y1)
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1])) if rel_p2 is not None else (x2, y2)
+            if ok:
+                logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+            else:
+                logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+            self._debug(f'滑动调试: result={ok}')
+            return ok
+
         # 统一滑动速度参数：不按运行模式区分。
         duration_scale = 33.0
         total_duration = distance / speed_value / 1000.0 * duration_scale
@@ -502,3 +520,48 @@ class ActionExecutor:
             logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
         self._debug(f'滑动调试: result={ok}')
         return ok
+
+    def _swipe_foreground_nikke_style(
+        self,
+        *,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        speed: float,
+        hold: float,
+    ) -> bool:
+        """前台滑动：对齐 NIKKE win input.mouse_swipe 的分段线性拖拽。"""
+        try:
+            distance = math.hypot(x2 - x1, y2 - y1)
+            segments = max(1, int(distance / 20))
+            total_time = max(0.05, min(distance / (100 * max(0.1, float(speed))), 0.15))
+            step_delay = total_time / float(segments)
+            self._debug(
+                '滑动调试: path=foreground_nikke_swipe distance={:.2f} speed={:.2f} '
+                'segments={} total_time={:.4f} step_delay={:.4f} hold={:.3f}'.format(
+                    distance, speed, segments, total_time, step_delay, hold
+                )
+            )
+
+            prev_pause = pyautogui.PAUSE
+            pyautogui.PAUSE = 0.0
+            try:
+                pyautogui.moveTo(x1, y1, duration=0.0)
+                time.sleep(0.01)
+                pyautogui.mouseDown()
+                for i in range(1, segments + 1):
+                    t = i / float(segments)
+                    tx = x1 + (x2 - x1) * t
+                    ty = y1 + (y2 - y1) * t
+                    pyautogui.moveTo(tx, ty, duration=0.0)
+                    time.sleep(step_delay)
+                if hold > 0:
+                    time.sleep(hold)
+                pyautogui.mouseUp()
+            finally:
+                pyautogui.PAUSE = prev_pause
+            return True
+        except Exception as e:
+            logger.error(f'前台滑动失败: {e}')
+            return False

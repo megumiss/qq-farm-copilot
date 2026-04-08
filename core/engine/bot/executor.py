@@ -23,16 +23,12 @@ from tasks.friend import TaskFriend
 from tasks.main import TaskMain
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
+from utils.feature_policy import get_forced_off_features
 from utils.ui_labels import load_ui_labels
 
 
 class BotExecutorMixin:
     """Bot 执行器与调度相关逻辑。"""
-
-    _OPTIONAL_FEATURE_FORCE_OFF: dict[str, set[str]] = {
-        'main': {'auto_plant', 'auto_upgrade', 'auto_fertilize'},
-        'share': {'auto_task'},
-    }
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -226,7 +222,7 @@ class BotExecutorMixin:
         if not isinstance(raw, dict):
             return {}
         features = {str(k): bool(v) for k, v in raw.items()}
-        for key in self._OPTIONAL_FEATURE_FORCE_OFF.get(str(task_name), set()):
+        for key in get_forced_off_features(str(task_name)):
             features[key] = False
         return features
 

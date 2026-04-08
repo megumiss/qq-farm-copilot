@@ -144,7 +144,7 @@ class TaskMain(TaskBase):
         """自动播种"""
         logger.info('自动播种流程: 开始')
         self.ui.ui_ensure(page_main)
-        # self._buy_seeds(self.engine._resolve_crop_name())
+        self._buy_seeds(self.engine._resolve_crop_name())
 
         # TODO 点击空白处
         self.ui.device.screenshot()

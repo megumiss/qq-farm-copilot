@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 
 from gui.labels import load_ui_labels
 from models.config import AppConfig
+from utils.feature_policy import is_feature_forced_off
 
 
 class FeaturePanel(QWidget):
@@ -35,12 +36,6 @@ class FeaturePanel(QWidget):
         f'  image: url({_FORCED_OFF_ICON});'
         '}'
     )
-    _FORCED_OFF_FEATURES: set[tuple[str, str]] = {
-        ('main', 'auto_plant'),
-        ('main', 'auto_upgrade'),
-        ('main', 'auto_fertilize'),
-        ('share', 'auto_task'),
-    }
 
     def __init__(self, config: AppConfig, parent=None):
         """初始化对象并准备运行所需状态。"""
@@ -120,7 +115,7 @@ class FeaturePanel(QWidget):
             if task_cfg is None:
                 continue
             feature_map = dict(getattr(task_cfg, 'features', {}) or {})
-            if (task_name, feature_name) in self._FORCED_OFF_FEATURES:
+            if is_feature_forced_off(task_name, feature_name):
                 feature_map[str(feature_name)] = False
             else:
                 feature_map[str(feature_name)] = bool(cb.isChecked())
@@ -136,7 +131,7 @@ class FeaturePanel(QWidget):
             if task_cfg is None:
                 continue
             feature_map = getattr(task_cfg, 'features', {}) or {}
-            forced = (task_name, feature_name) in self._FORCED_OFF_FEATURES
+            forced = is_feature_forced_off(task_name, feature_name)
             if forced:
                 cb.setChecked(False)
                 cb.setEnabled(False)
