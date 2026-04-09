@@ -117,7 +117,31 @@ class SettingsPanel(QWidget):
         mf.addRow('窗口关键词:', self._window_keyword)
         self._window_select = NoWheelComboBox()
         self._window_select_refresh = QPushButton('刷新')
-        self._window_select_refresh.setFixedWidth(52)
+        self._window_select_refresh.setObjectName('windowSelectRefreshButton')
+        self._window_select_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._window_select_refresh.setFixedWidth(64)
+        self._window_select_refresh.setFixedHeight(28)
+        self._window_select_refresh.setStyleSheet("""
+            QPushButton#windowSelectRefreshButton {
+                background: #f8fafc;
+                color: #334155;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 0 8px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton#windowSelectRefreshButton:hover {
+                background: #eef2ff;
+                border-color: #a5b4fc;
+                color: #1e3a8a;
+            }
+            QPushButton#windowSelectRefreshButton:pressed {
+                background: #e0e7ff;
+                border-color: #818cf8;
+                color: #1e40af;
+            }
+        """)
         select_row_widget = QWidget()
         select_row = QHBoxLayout(select_row_widget)
         select_row.setContentsMargins(0, 0, 0, 0)
@@ -246,9 +270,33 @@ class SettingsPanel(QWidget):
     def _format_window_option_label(index: int, info: WindowInfo) -> str:
         """格式化窗口下拉显示文案。"""
         title = str(info.title).replace('\n', ' ').strip()
-        if len(title) > 18:
-            title = f'{title[:18]}...'
-        return f'#{index + 1} {title} [{info.left},{info.top}]'
+        if len(title) > 16:
+            title = f'{title[:16]}...'
+        process_name = str(info.process_name or '').strip().lower()
+        if process_name == 'qq.exe' or process_name.startswith('qq'):
+            platform = 'QQ'
+        elif process_name.startswith('wechat') or 'weixin' in process_name:
+            platform = '微信'
+        else:
+            platform = '未知'
+        return (
+            f'#{index + 1} [{platform}] {title} | '
+            f'{int(info.width)}x{int(info.height)} | '
+            f'({int(info.left)},{int(info.top)}) | '
+            f'0x{int(info.hwnd):X}'
+        )
+
+    @staticmethod
+    def _format_window_option_tooltip(index: int, info: WindowInfo) -> str:
+        """格式化窗口选项 tooltip 文案。"""
+        return (
+            f'序号: #{index + 1}\n'
+            f'标题: {info.title}\n'
+            f'句柄: {int(info.hwnd)} (0x{int(info.hwnd):X})\n'
+            f'进程: {info.process_name or "unknown"} (PID: {int(info.pid)})\n'
+            f'位置: ({int(info.left)}, {int(info.top)})\n'
+            f'尺寸: {int(info.width)} x {int(info.height)}'
+        )
 
     def _set_window_select_rule(self, select_rule: str) -> None:
         """按规则值设置下拉当前项，找不到则回退自动。"""
@@ -268,8 +316,15 @@ class SettingsPanel(QWidget):
         self._window_select.blockSignals(True)
         self._window_select.clear()
         self._window_select.addItem('自动（按平台优先）', 'auto')
+        self._window_select.setItemData(
+            0, '自动模式会按“平台 + 关键词”匹配候选窗口，并优先选择对应平台窗口。', Qt.ItemDataRole.ToolTipRole
+        )
         for idx, info in enumerate(windows):
             self._window_select.addItem(self._format_window_option_label(idx, info), f'index:{idx}')
+            item_index = self._window_select.count() - 1
+            self._window_select.setItemData(
+                item_index, self._format_window_option_tooltip(idx, info), Qt.ItemDataRole.ToolTipRole
+            )
         self._set_window_select_rule(preferred_rule or self.config.window_select_rule)
         self._window_select.blockSignals(False)
         if windows:
