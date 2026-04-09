@@ -18,7 +18,9 @@ class BotVisionMixin:
 
     def _prepare_window(self) -> tuple | None:
         """刷新并激活窗口，返回当前有效截图区域。"""
-        window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
+        window = self.window_manager.refresh_window_info(
+            self.config.window_title_keyword, self.config.window_select_rule
+        )
         if not window:
             return None
         effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)

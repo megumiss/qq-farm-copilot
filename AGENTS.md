@@ -12,6 +12,7 @@
 - 调度模式：`TaskExecutor` 单线程串行执行
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
+- 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 
 ## 1. 核心架构与职责
@@ -194,7 +195,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 先运行 `python tools/button_extract.py`。
 
 - 页面识别卡 unknown
-: 检查 `window_title_keyword`、窗口平台（QQ/微信）、模板是否与平台匹配。
+: 检查 `window_title_keyword`、`window_select_rule`、窗口平台（QQ/微信）、模板是否与平台匹配。
 
 - 任务未执行
 : 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds`、`priority`。

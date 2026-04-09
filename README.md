@@ -84,8 +84,9 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ### 首次运行建议检查
 
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
-2. `planting.window_platform` 与当前平台一致（QQ / 微信）。
-3. 游戏窗口已打开且未最小化。
+2. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
+3. `planting.window_platform` 与当前平台一致（QQ / 微信）。
+4. 游戏窗口已打开且未最小化。
 
 热键：
 
@@ -101,6 +102,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
+- `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，推荐 `auto`）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `planting`：种植策略、等级、平台、窗口位置
 - `executor`：空队列策略、默认间隔、最大失败次数

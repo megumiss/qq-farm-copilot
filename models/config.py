@@ -185,6 +185,7 @@ class AppConfig(BaseModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
     window_title_keyword: str = 'QQ经典农场'
+    window_select_rule: str = 'auto'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
     tasks: dict[str, TaskScheduleItemConfig] = Field(default_factory=dict)
@@ -288,6 +289,23 @@ class AppConfig(BaseModel):
         except Exception:
             pass
         return {}
+
+    @field_validator('window_select_rule', mode='before')
+    @classmethod
+    def _normalize_window_select_rule(cls, value):
+        """规范化 `window_select_rule` 输入值。"""
+        text = str(value or 'auto').strip().lower()
+        if not text or text == 'auto':
+            return 'auto'
+        if text.startswith('index:'):
+            suffix = text.split(':', 1)[1]
+            try:
+                index = int(suffix)
+            except Exception:
+                return 'auto'
+            if index >= 0:
+                return f'index:{index}'
+        return 'auto'
 
     @classmethod
     def load(cls, path: str = 'configs/config.json', template_path: str | None = None) -> 'AppConfig':

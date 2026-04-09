@@ -10,12 +10,14 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from core.platform.window_manager import WindowInfo, WindowManager
 from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import CROPS, format_grow_time, get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
@@ -113,6 +115,20 @@ class SettingsPanel(QWidget):
         mf.addRow('', self._run_mode_tip)
         self._window_keyword = QLineEdit()
         mf.addRow('窗口关键词:', self._window_keyword)
+        self._window_select = NoWheelComboBox()
+        self._window_select_refresh = QPushButton('刷新')
+        self._window_select_refresh.setFixedWidth(52)
+        select_row_widget = QWidget()
+        select_row = QHBoxLayout(select_row_widget)
+        select_row.setContentsMargins(0, 0, 0, 0)
+        select_row.setSpacing(6)
+        select_row.addWidget(self._window_select, 1)
+        select_row.addWidget(self._window_select_refresh)
+        mf.addRow('选择窗口:', select_row_widget)
+        self._window_select_tip = QLabel('仅保存匹配顺序，不保存窗口句柄。')
+        self._window_select_tip.setWordWrap(True)
+        self._window_select_tip.setStyleSheet('color: #6b7280;')
+        mf.addRow('', self._window_select_tip)
         self._window_position = NoWheelComboBox()
         self._window_position.addItem('左侧居中', WindowPosition.LEFT_CENTER.value)
         self._window_position.addItem('居中', WindowPosition.CENTER.value)
@@ -195,7 +211,9 @@ class SettingsPanel(QWidget):
         self._click_offset_range.valueChanged.connect(self._auto_save)
         self._max_actions_per_round.valueChanged.connect(self._auto_save)
         self._debug_log_enabled.toggled.connect(self._auto_save)
-        self._window_keyword.editingFinished.connect(self._auto_save)
+        self._window_keyword.editingFinished.connect(self._on_window_keyword_committed)
+        self._window_select.currentIndexChanged.connect(self._auto_save)
+        self._window_select_refresh.clicked.connect(self._on_refresh_window_select_clicked)
         self._window_position.currentIndexChanged.connect(self._auto_save)
 
     def _auto_save(self):
@@ -219,9 +237,57 @@ class SettingsPanel(QWidget):
         c.safety.max_actions_per_round = int(self._max_actions_per_round.value())
         c.safety.debug_log_enabled = bool(self._debug_log_enabled.isChecked())
         c.window_title_keyword = self._window_keyword.text().strip()
+        c.window_select_rule = str(self._window_select.currentData() or 'auto')
         c.planting.window_position = WindowPosition(self._window_position.currentData())
         c.save()
         self.config_changed.emit(c)
+
+    @staticmethod
+    def _format_window_option_label(index: int, info: WindowInfo) -> str:
+        """格式化窗口下拉显示文案。"""
+        title = str(info.title).replace('\n', ' ').strip()
+        if len(title) > 18:
+            title = f'{title[:18]}...'
+        return f'#{index + 1} {title} [{info.left},{info.top}]'
+
+    def _set_window_select_rule(self, select_rule: str) -> None:
+        """按规则值设置下拉当前项，找不到则回退自动。"""
+        target = str(select_rule or 'auto').strip().lower() or 'auto'
+        found_index = 0
+        for i in range(self._window_select.count()):
+            if str(self._window_select.itemData(i) or '').strip().lower() == target:
+                found_index = i
+                break
+        self._window_select.setCurrentIndex(found_index)
+
+    def _refresh_window_candidates(self, *, preferred_rule: str | None = None) -> None:
+        """按关键词刷新可选窗口下拉。"""
+        keyword = self._window_keyword.text().strip()
+        windows = WindowManager.list_windows(keyword)
+        # 刷新选项时不触发自动保存，由调用方决定是否落盘。
+        self._window_select.blockSignals(True)
+        self._window_select.clear()
+        self._window_select.addItem('自动（匹配第1个）', 'auto')
+        for idx, info in enumerate(windows):
+            self._window_select.addItem(self._format_window_option_label(idx, info), f'index:{idx}')
+        self._set_window_select_rule(preferred_rule or self.config.window_select_rule)
+        self._window_select.blockSignals(False)
+        if windows:
+            self._window_select_tip.setText(f'当前匹配 {len(windows)} 个窗口；仅保存匹配顺序，不保存窗口句柄。')
+        else:
+            self._window_select_tip.setText('当前未匹配到窗口；将使用自动策略并在启动时重试匹配。')
+
+    def _on_window_keyword_committed(self):
+        """关键词提交后刷新窗口下拉并保存。"""
+        current_rule = str(self._window_select.currentData() or self.config.window_select_rule or 'auto')
+        self._refresh_window_candidates(preferred_rule=current_rule)
+        self._auto_save()
+
+    def _on_refresh_window_select_clicked(self):
+        """手动刷新窗口候选列表并保存。"""
+        current_rule = str(self._window_select.currentData() or self.config.window_select_rule or 'auto')
+        self._refresh_window_candidates(preferred_rule=current_rule)
+        self._auto_save()
 
     def _on_level_changed(self, level: int):
         """按玩家等级重建作物下拉列表，并保留已有选择。"""
@@ -303,6 +369,7 @@ class SettingsPanel(QWidget):
         self._max_actions_per_round.setValue(int(c.safety.max_actions_per_round))
         self._debug_log_enabled.setChecked(bool(c.safety.debug_log_enabled))
         self._window_keyword.setText(c.window_title_keyword)
+        self._refresh_window_candidates(preferred_rule=c.window_select_rule)
         for i in range(self._window_position.count()):
             if self._window_position.itemData(i) == c.planting.window_position.value:
                 self._window_position.setCurrentIndex(i)

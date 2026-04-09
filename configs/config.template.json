@@ -1,5 +1,6 @@
 {
   "window_title_keyword": "QQ经典农场",
+  "window_select_rule": "auto",
   "safety": {
     "random_delay_min": 0.1,
     "random_delay_max": 0.3,
