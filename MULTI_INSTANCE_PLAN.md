@@ -94,7 +94,7 @@
 
 状态说明：`[ ]` 未完成，`[x]` 已完成。
 
-- [ ] [main.py](E:/AutoGame/qq-farm-auto/main.py)：改 `main()` 为“加载 `profiles.json` + 初始化 `InstanceManager` + 创建 `MainWindow(instance_manager)`”；保留 `_set_windows_app_id()`、`_resolve_app_icon_path()`。
+- [x] [main.py](E:/AutoGame/qq-farm-auto/main.py)：改 `main()` 为“加载 `profiles.json` + 初始化 `InstanceManager` + 创建 `MainWindow(instance_manager)`”；保留 `_set_windows_app_id()`、`_resolve_app_icon_path()`。
 - [x] [utils/app_paths.py](E:/AutoGame/qq-farm-auto/utils/app_paths.py)：新增实例路径函数 `user_instances_dir()`、`instance_dir()`、`instance_configs_dir()`、`instance_config_file()`、`instance_logs_dir()`、`instance_screenshots_dir()`、`instance_error_dir()`、`profiles_meta_file()`。
 - [x] [utils/instance_paths.py](E:/AutoGame/qq-farm-auto/utils/instance_paths.py)（新增）：新增 `InstancePaths`、`load_profiles_meta()`、`save_profiles_meta()`、`ensure_instance_layout()`、`create_instance()`、`clone_instance()`、`rename_instance()`、`delete_instance()`、`list_instances()`、`sanitize_instance_name()`。
 - [x] [models/config.py](E:/AutoGame/qq-farm-auto/models/config.py)：改 `AppConfig.load()` 与 `AppConfig.save()` 为实例绝对路径；新增 `_atomic_write_json()` 并使用 `tmp + os.replace`。
