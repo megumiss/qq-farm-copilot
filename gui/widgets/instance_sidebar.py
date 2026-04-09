@@ -32,7 +32,7 @@ class InstanceSidebar(QWidget):
         super().__init__(parent)
         self._id_to_state: dict[str, str] = {}
         self._id_to_name: dict[str, str] = {}
-        self._sidebar_width = 168
+        self._sidebar_width = 112
         self._build_ui()
         self.setFixedWidth(self._sidebar_width)
 

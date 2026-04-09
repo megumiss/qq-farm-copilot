@@ -210,8 +210,10 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(icon_path))
 
         ratio = self.devicePixelRatioF()
-        self.setMinimumWidth(int(540 / ratio) + 580)
-        self.resize(int(540 / ratio) + 680, 100)
+        base_min_width = int(540 / ratio) + 550
+        base_init_width = int(540 / ratio) + 670
+        self.setMinimumWidth(base_min_width)
+        self.resize(base_init_width, 100)
         self.setStyleSheet(_build_stylesheet())
 
         screen = self.screen().availableGeometry()
@@ -249,6 +251,11 @@ class MainWindow(QMainWindow):
         self._instance_sidebar.clone_requested.connect(self._on_instance_clone)
         self._instance_sidebar.rename_requested.connect(self._on_instance_rename)
         root.addWidget(self._instance_sidebar)
+
+        sidebar_extra = self._instance_sidebar.width() + 10
+        self.setMinimumWidth(base_min_width + sidebar_extra)
+        if self.width() < base_init_width + sidebar_extra:
+            self.resize(base_init_width + sidebar_extra, self.height())
 
     @staticmethod
     def _runtime_paths(session: InstanceSession) -> dict[str, str]:
