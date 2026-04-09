@@ -109,7 +109,7 @@
 - [x] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：改为三栏布局（左预览/中原面板/右实例栏）；新增 `_create_instance_workspace()`、`_switch_instance()`、`_on_instance_create()`、`_on_instance_delete()`、`_on_instance_clone()`、`_on_instance_rename()`、`_get_active_session()`。
 - [x] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：将 `_on_start()`、`_on_pause()`、`_on_stop()`、`_on_run_once()`、`_on_config_changed()` 改为只作用当前实例会话。
 - [x] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：`_update_screenshot()` 改为实例路由；当前实例实时显示，非当前实例只更新 `last_preview` 缓存。
-- [ ] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：`_connect_signals()` 改为“每实例绑定”；停用/移除 `get_log_signal().new_log.connect(...)` 的全局日志直连，避免多实例串日志。
+- [x] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：`_connect_signals()` 改为“每实例绑定”；停用/移除 `get_log_signal().new_log.connect(...)` 的全局日志直连，避免多实例串日志。
 - [ ] [gui/widgets/task_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/task_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
 - [ ] [gui/widgets/feature_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/feature_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
 - [ ] [gui/widgets/settings_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/settings_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
