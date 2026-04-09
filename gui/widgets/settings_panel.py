@@ -307,3 +307,10 @@ class SettingsPanel(QWidget):
             if self._window_position.itemData(i) == c.planting.window_position.value:
                 self._window_position.setCurrentIndex(i)
                 break
+
+    def set_config(self, config: AppConfig):
+        """替换配置对象并刷新界面。"""
+        self.config = config
+        self._loading = True
+        self._load_config()
+        self._loading = False
