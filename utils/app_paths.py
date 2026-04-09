@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 APP_DIR_NAME = 'QQFarmCopilot'
+INSTANCES_DIR_NAME = 'instances'
+PROFILES_META_FILENAME = 'profiles.json'
 _USER_CONFIG_COPY_EXCLUDES = {'config.template.json', 'plants.json', 'ui_labels.json', 'button_aliases.json'}
 
 
@@ -40,6 +42,49 @@ def user_app_dir() -> Path:
             return Path(base) / APP_DIR_NAME
         return Path.home() / 'AppData' / 'Roaming' / APP_DIR_NAME
     return Path.home() / f'.{APP_DIR_NAME}'
+
+
+def profiles_meta_file() -> Path:
+    """返回实例元数据文件路径。"""
+    return user_app_dir() / PROFILES_META_FILENAME
+
+
+def user_instances_dir() -> Path:
+    """返回实例根目录。"""
+    return user_app_dir() / INSTANCES_DIR_NAME
+
+
+def instance_dir(instance_id: str) -> Path:
+    """返回实例目录。"""
+    name = str(instance_id or '').strip()
+    if not name:
+        name = 'default'
+    return user_instances_dir() / name
+
+
+def instance_configs_dir(instance_id: str) -> Path:
+    """返回实例 configs 目录。"""
+    return instance_dir(instance_id) / 'configs'
+
+
+def instance_config_file(instance_id: str) -> Path:
+    """返回实例 config.json 路径。"""
+    return instance_configs_dir(instance_id) / 'config.json'
+
+
+def instance_logs_dir(instance_id: str) -> Path:
+    """返回实例 logs 目录。"""
+    return instance_dir(instance_id) / 'logs'
+
+
+def instance_screenshots_dir(instance_id: str) -> Path:
+    """返回实例 screenshots 目录。"""
+    return instance_dir(instance_id) / 'screenshots'
+
+
+def instance_error_dir(instance_id: str) -> Path:
+    """返回实例错误截图目录。"""
+    return instance_logs_dir(instance_id) / 'error'
 
 
 def user_configs_dir() -> Path:
