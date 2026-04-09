@@ -1,17 +1,8 @@
-"""主窗口 - 现代浅色主题
+"""主窗口 - 单窗口多实例布局。"""
 
-配色方案 (Clean Light):
-  Background: #f5f5f7
-  Card:       #ffffff
-  Primary:    #2563eb (蓝)
-  Success:    #16a34a (绿)
-  Warning:    #d97706 (琥珀)
-  Danger:     #dc2626 (红)
-  Text:       #1e293b
-  TextDim:    #94a3b8
-  Border:     #e2e8f0
-"""
+from __future__ import annotations
 
+from dataclasses import dataclass
 import os
 import time
 
@@ -21,27 +12,29 @@ from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from core.engine.bot import BotEngine
+from core.instance.manager import InstanceManager, InstanceSession
 from gui.widgets.feature_panel import FeaturePanel
+from gui.widgets.instance_sidebar import InstanceSidebar
 from gui.widgets.log_panel import LogPanel
 from gui.widgets.settings_panel import SettingsPanel
 from gui.widgets.status_panel import StatusPanel
 from gui.widgets.task_panel import TaskPanel
 from models.config import AppConfig
 from utils.app_paths import resolve_runtime_path
-from utils.logger import get_log_signal, update_logger_level
 
 STYLESHEET_TEMPLATE = """
 QMainWindow { background-color: #f5f5f7; }
@@ -134,9 +127,30 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 
 PROJECT_URL = 'https://github.com/megumiss/qq-farm-copilot'
 PROJECT_URL_TEXT = 'github.com/megumiss/qq-farm-copilot'
+APP_WINDOW_TITLE = 'QQ Farm Copilot（免费软件，谨防倒卖）'
 APP_SETTINGS_ORG = 'QQFarmCopilot'
 APP_SETTINGS_NAME = 'QQFarmCopilot'
 FREE_NOTICE_ENABLED_KEY = 'ui/free_notice_enabled'
+
+
+@dataclass
+class InstanceWorkspace:
+    instance_id: str
+    name: str
+    session: InstanceSession
+    container: QWidget
+    engine: BotEngine
+    status_panel: StatusPanel
+    log_panel: LogPanel
+    task_panel: TaskPanel
+    feature_panel: FeaturePanel
+    settings_panel: SettingsPanel
+    btn_start: QPushButton
+    btn_pause: QPushButton
+    btn_stop: QPushButton
+    btn_run_once: QPushButton
+    state: str = 'idle'
+    last_preview: Image.Image | None = None
 
 
 def _build_stylesheet() -> str:
@@ -149,19 +163,6 @@ def _build_stylesheet() -> str:
         .replace('__ARROW_UP_ICON__', arrow_up_icon)
         .replace('__ARROW_DOWN_ICON__', arrow_down_icon)
     )
-
-
-def _card(widget: QWidget = None) -> QFrame:
-    """创建统一卡片容器，并可选包裹一个子控件。"""
-    card = QFrame()
-    card.setStyleSheet("""
-        QFrame { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; }
-    """)
-    if widget:
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(widget)
-    return card
 
 
 def _make_btn(text: str, color: str, hover: str) -> QPushButton:
@@ -181,97 +182,113 @@ def _make_btn(text: str, color: str, hover: str) -> QPushButton:
 
 
 class MainWindow(QMainWindow):
-    """主窗口：组合预览、日志、任务面板并驱动 BotEngine。"""
+    """主窗口：左预览，中实例面板，右实例栏。"""
 
-    def __init__(self, config: AppConfig):
-        """初始化主窗口与引擎，并注册全局热键。"""
+    def __init__(self, instance_manager: InstanceManager):
         super().__init__()
-        self.config = config
-        self.engine = BotEngine(config)
+        self.instance_manager = instance_manager
+        self._workspaces: dict[str, InstanceWorkspace] = {}
+        self._active_instance_id: str = ''
         self._last_screenshot: Image.Image | None = None
         self._last_screenshot_time = 0.0
         self._pending_free_notice = self._is_free_notice_enabled()
         self._free_notice_shown = False
+
         self._init_ui()
-        self._connect_signals()
+        self._init_instances()
         keyboard.add_hotkey('F9', self._on_pause)
         keyboard.add_hotkey('F10', self._on_stop)
 
     def _init_ui(self):
-        """构建主界面布局：左侧截图预览，右侧控制区和标签页。"""
-        self.setWindowTitle('QQ Farm Copilot')
+        self.setWindowTitle(APP_WINDOW_TITLE)
         icon_path = str(resolve_runtime_path('gui', 'icons', 'app_icon.ico'))
         if not os.path.exists(icon_path):
             icon_path = str(resolve_runtime_path('gui', 'icons', 'app_icon.svg'))
         self.setWindowIcon(QIcon(icon_path))
 
-        # 动态获取当前屏幕的 DPI 缩放比例
         ratio = self.devicePixelRatioF()
-
-        # 不再写死窗口高度，仅限制最小宽度保证左右两侧能放得下
-        self.setMinimumWidth(int(540 / ratio) + 550)
-        # 设置一个合理的初始宽度，高度交由系统和内部内容自适应撑开
-        self.resize(int(540 / ratio) + 670, 100)
+        self.setMinimumWidth(int(540 / ratio) + 760)
+        self.resize(int(540 / ratio) + 860, 100)
         self.setStyleSheet(_build_stylesheet())
 
-        # 居中显示窗口
         screen = self.screen().availableGeometry()
         size = self.geometry()
-        x = (screen.width() - size.width()) // 2
-        y = (screen.height() - size.height()) // 2
-        self.move(x, y)
+        self.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
 
-        # 根容器：左右分栏，左窄右宽。
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
-        # ========== 左侧：截图预览 ==========
         from PyQt6.QtWidgets import QSizePolicy
 
         self._screenshot_label = QLabel('启动后显示\n实时截图')
         self._screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._screenshot_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-        # 保持物理宽度
         self._screenshot_label.setFixedWidth(int(540 / ratio))
         self._screenshot_label.setFixedHeight(int(960 / ratio))
-        self._screenshot_label.setStyleSheet("""
+        self._screenshot_label.setStyleSheet(
+            """
             QLabel { background-color: #ffffff; border: 1px solid #e2e8f0;
                      border-radius: 10px; color: #94a3b8; font-size: 14px; }
-        """)
+            """
+        )
         root.addWidget(self._screenshot_label)
 
-        # ========== 右侧：控制按钮 + Tab ==========
-        # 顶部放运行控制按钮，底部放状态与配置标签页。
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
+        self._workspace_stack = QStackedWidget()
+        root.addWidget(self._workspace_stack, 1)
+
+        self._instance_sidebar = InstanceSidebar()
+        self._instance_sidebar.instance_selected.connect(self._switch_instance)
+        self._instance_sidebar.create_requested.connect(self._on_instance_create)
+        self._instance_sidebar.delete_requested.connect(self._on_instance_delete)
+        self._instance_sidebar.clone_requested.connect(self._on_instance_clone)
+        self._instance_sidebar.rename_requested.connect(self._on_instance_rename)
+        root.addWidget(self._instance_sidebar)
+
+    @staticmethod
+    def _runtime_paths(session: InstanceSession) -> dict[str, str]:
+        return {
+            'config_path': str(session.paths.config_file),
+            'logs_dir': str(session.paths.logs_dir),
+            'screenshots_dir': str(session.paths.screenshots_dir),
+            'error_dir': str(session.paths.error_dir),
+        }
+
+    def _create_instance_workspace(self, session: InstanceSession) -> InstanceWorkspace:
+        engine = BotEngine(
+            session.config,
+            runtime_paths=self._runtime_paths(session),
+            instance_id=session.instance_id,
+        )
+
+        container = QWidget()
+        right_layout = QVBoxLayout(container)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        # 控制按钮
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
-        self._btn_start = _make_btn('开始', '#16a34a', '#15803d')
-        self._btn_pause = _make_btn('暂停', '#d97706', '#b45309')
-        self._btn_stop = _make_btn('停止', '#dc2626', '#b91c1c')
-        self._btn_run_once = _make_btn('立即执行', '#2563eb', '#1d4ed8')
-        self._btn_pause.setEnabled(False)
-        self._btn_stop.setEnabled(False)
-        self._btn_start.clicked.connect(self._on_start)
-        self._btn_pause.clicked.connect(self._on_pause)
-        self._btn_stop.clicked.connect(self._on_stop)
-        self._btn_run_once.clicked.connect(self._on_run_once)
-        for b in (self._btn_start, self._btn_pause, self._btn_stop, self._btn_run_once):
-            btn_row.addWidget(b)
+        btn_start = _make_btn('开始', '#16a34a', '#15803d')
+        btn_pause = _make_btn('暂停', '#d97706', '#b45309')
+        btn_stop = _make_btn('停止', '#dc2626', '#b91c1c')
+        btn_run_once = _make_btn('立即执行', '#2563eb', '#1d4ed8')
+        btn_pause.setEnabled(False)
+        btn_stop.setEnabled(False)
+
+        btn_start.clicked.connect(lambda: self._on_start(session.instance_id))
+        btn_pause.clicked.connect(lambda: self._on_pause(session.instance_id))
+        btn_stop.clicked.connect(lambda: self._on_stop(session.instance_id))
+        btn_run_once.clicked.connect(lambda: self._on_run_once(session.instance_id))
+        for btn in (btn_start, btn_pause, btn_stop, btn_run_once):
+            btn_row.addWidget(btn)
         btn_row.addStretch()
         right_layout.addLayout(btn_row)
 
-        # Tab：状态 + 设置
-        # 标签页顺序按“运行信息 -> 调度 -> 任务设置 -> 程序设置”组织。
         tabs = QTabWidget()
-        tabs.setStyleSheet("""
+        tabs.setStyleSheet(
+            """
             QTabWidget::pane {
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
@@ -302,13 +319,15 @@ class MainWindow(QMainWindow):
                 background: #e2e8f0;
                 color: #1e293b;
             }
-        """)
-        self._status_panel = StatusPanel()
-        self._log_panel = LogPanel()
+            """
+        )
+        status_panel = StatusPanel()
+        log_panel = LogPanel()
 
         log_group = QGroupBox('运行日志')
         log_group.setObjectName('logGroup')
-        log_group.setStyleSheet("""
+        log_group.setStyleSheet(
+            """
             QGroupBox#logGroup {
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
@@ -323,46 +342,303 @@ class MainWindow(QMainWindow):
                 left: 12px;
                 padding: 0 6px;
             }
-        """)
+            """
+        )
         log_layout = QVBoxLayout(log_group)
-        # 给标题区和日志正文留出间隔，避免标题被内容区域“贴住”。
         log_layout.setContentsMargins(8, 14, 8, 8)
         log_layout.setSpacing(0)
-        log_layout.addWidget(self._log_panel)
+        log_layout.addWidget(log_panel)
 
         status_page = QWidget()
         status_layout = QVBoxLayout(status_page)
         status_layout.setContentsMargins(10, 10, 10, 10)
         status_layout.setSpacing(10)
-        status_layout.addWidget(self._status_panel, 0, Qt.AlignmentFlag.AlignTop)
+        status_layout.addWidget(status_panel, 0, Qt.AlignmentFlag.AlignTop)
         status_layout.addWidget(log_group, 1)
         tabs.addTab(status_page, '状态')
-        self._task_panel = TaskPanel(self.config)
-        tabs.addTab(self._task_panel, '任务调度')
-        self._feature_panel = FeaturePanel(self.config)
-        tabs.addTab(self._feature_panel, '任务设置')
-        self._settings_panel = SettingsPanel(self.config)
-        tabs.addTab(self._settings_panel, '设置')
+
+        task_panel = TaskPanel(session.config)
+        feature_panel = FeaturePanel(session.config)
+        settings_panel = SettingsPanel(session.config)
+        tabs.addTab(task_panel, '任务调度')
+        tabs.addTab(feature_panel, '任务设置')
+        tabs.addTab(settings_panel, '设置')
         right_layout.addWidget(tabs)
 
-        root.addWidget(right, 1)
+        workspace = InstanceWorkspace(
+            instance_id=session.instance_id,
+            name=session.name,
+            session=session,
+            container=container,
+            engine=engine,
+            status_panel=status_panel,
+            log_panel=log_panel,
+            task_panel=task_panel,
+            feature_panel=feature_panel,
+            settings_panel=settings_panel,
+            btn_start=btn_start,
+            btn_pause=btn_pause,
+            btn_stop=btn_stop,
+            btn_run_once=btn_run_once,
+        )
+        self._connect_workspace_signals(workspace)
+        return workspace
 
-    def _connect_signals(self):
-        """连接引擎信号与各面板更新逻辑。"""
-        self.engine.log_message.connect(self._log_panel.append_log)
-        self.engine.screenshot_updated.connect(self._update_screenshot)
-        self.engine.detection_result.connect(self._update_screenshot)
-        self.engine.state_changed.connect(self._on_state_changed)
-        self.engine.stats_updated.connect(self._status_panel.update_stats)
-        get_log_signal().new_log.connect(self._log_panel.append_log)
-        self._settings_panel.config_changed.connect(self._on_config_changed)
-        self._task_panel.config_changed.connect(self._on_config_changed)
-        self._feature_panel.config_changed.connect(self._on_config_changed)
+    def _connect_workspace_signals(self, workspace: InstanceWorkspace) -> None:
+        iid = workspace.instance_id
+        engine = workspace.engine
+        engine.log_message.connect(lambda text, _iid=iid: self._on_workspace_log(_iid, text))
+        engine.screenshot_updated.connect(lambda image, _iid=iid: self._on_workspace_screenshot(_iid, image))
+        engine.detection_result.connect(lambda image, _iid=iid: self._on_workspace_screenshot(_iid, image))
+        engine.state_changed.connect(lambda state, _iid=iid: self._on_workspace_state_changed(_iid, state))
+        engine.stats_updated.connect(workspace.status_panel.update_stats)
+
+        workspace.settings_panel.config_changed.connect(
+            lambda config, _iid=iid: self._on_workspace_config_changed(_iid, config)
+        )
+        workspace.task_panel.config_changed.connect(
+            lambda config, _iid=iid: self._on_workspace_config_changed(_iid, config)
+        )
+        workspace.feature_panel.config_changed.connect(
+            lambda config, _iid=iid: self._on_workspace_config_changed(_iid, config)
+        )
+
+    def _init_instances(self) -> None:
+        self.instance_manager.load()
+        for session in self.instance_manager.iter_sessions():
+            workspace = self._create_instance_workspace(session)
+            self._workspaces[session.instance_id] = workspace
+            self._workspace_stack.addWidget(workspace.container)
+
+        self._refresh_instance_sidebar()
+        active = self.instance_manager.get_active()
+        if active is None and self._workspaces:
+            active = next(iter(self._workspaces.values())).session
+        if active is not None:
+            self._switch_instance(active.instance_id)
+
+    def _refresh_instance_sidebar(self) -> None:
+        items = []
+        for session in self.instance_manager.iter_sessions():
+            ws = self._workspaces.get(session.instance_id)
+            state = ws.state if ws else 'idle'
+            items.append({'id': session.instance_id, 'name': session.name, 'state': state})
+        self._instance_sidebar.set_instances(items)
+        if self._active_instance_id:
+            self._instance_sidebar.set_active_instance(self._active_instance_id)
+
+    def _set_window_title_for_active(self) -> None:
+        ws = self._workspaces.get(self._active_instance_id)
+        if ws is None:
+            self.setWindowTitle(APP_WINDOW_TITLE)
+            return
+        self.setWindowTitle(f'{APP_WINDOW_TITLE} [{ws.name}]')
+
+    def _switch_instance(self, instance_id: str) -> None:
+        ws = self._workspaces.get(str(instance_id or ''))
+        if ws is None:
+            return
+        self.instance_manager.switch_active(ws.instance_id)
+        self._active_instance_id = ws.instance_id
+        self._workspace_stack.setCurrentWidget(ws.container)
+        self._instance_sidebar.set_active_instance(ws.instance_id)
+        self._set_window_title_for_active()
+        if ws.last_preview is not None:
+            self._update_screenshot(ws.last_preview, force=True)
+        else:
+            self._screenshot_label.setText('启动后显示\n实时截图')
+            self._screenshot_label.setPixmap(QPixmap())
+        self._sync_buttons(ws)
+
+    def _workspace_running(self, ws: InstanceWorkspace) -> bool:
+        state = str(ws.state or 'idle')
+        return state in {'running', 'paused'}
+
+    def _get_active_session(self) -> InstanceWorkspace | None:
+        return self._workspaces.get(self._active_instance_id)
+
+    def _sync_buttons(self, ws: InstanceWorkspace) -> None:
+        running = self._workspace_running(ws)
+        ws.btn_start.setEnabled(not running)
+        ws.btn_pause.setEnabled(running)
+        ws.btn_stop.setEnabled(running)
+        ws.btn_pause.setText('恢复' if ws.state == 'paused' else '暂停')
+
+    def _on_workspace_log(self, instance_id: str, text: str) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        ws.log_panel.append_log(text)
+
+    def _on_workspace_screenshot(self, instance_id: str, image: Image.Image) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        ws.last_preview = image.copy()
+        if instance_id == self._active_instance_id:
+            self._update_screenshot(image)
+
+    def _on_workspace_state_changed(self, instance_id: str, state: str) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        ws.state = str(state or 'idle')
+        self._instance_sidebar.update_instance_state(instance_id, ws.state, ws.name)
+        self._sync_buttons(ws)
+
+    def _on_workspace_config_changed(self, instance_id: str, config: AppConfig) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        ws.session.config = config
+        ws.session.touch()
+        ws.engine.update_config(config)
+        self.instance_manager.save()
+
+    def _on_start(self, instance_id: str | None = None) -> None:
+        iid = str(instance_id or self._active_instance_id or '')
+        ws = self._workspaces.get(iid)
+        if ws is None:
+            return
+        if ws.engine.start():
+            ws.state = 'running'
+            self._sync_buttons(ws)
+            self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+
+    def _on_pause(self, instance_id: str | None = None) -> None:
+        iid = str(instance_id or self._active_instance_id or '')
+        ws = self._workspaces.get(iid)
+        if ws is None or not self._workspace_running(ws):
+            return
+        if ws.btn_pause.text() == '暂停':
+            ws.engine.pause()
+            ws.state = 'paused'
+        else:
+            ws.engine.resume()
+            ws.state = 'running'
+        self._sync_buttons(ws)
+        self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+
+    def _on_stop(self, instance_id: str | None = None) -> None:
+        iid = str(instance_id or self._active_instance_id or '')
+        ws = self._workspaces.get(iid)
+        if ws is None:
+            return
+        ws.engine.stop()
+        ws.state = 'idle'
+        ws.status_panel.update_stats(ws.engine.scheduler.get_stats())
+        self._sync_buttons(ws)
+        self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+
+    def _on_run_once(self, instance_id: str | None = None) -> None:
+        iid = str(instance_id or self._active_instance_id or '')
+        ws = self._workspaces.get(iid)
+        if ws is None:
+            return
+        ws.engine.run_once()
+
+    def _on_instance_create(self) -> None:
+        name, ok = QInputDialog.getText(self, '新增实例', '实例名称:')
+        if not ok:
+            return
+        text = str(name or '').strip()
+        if not text:
+            return
+        try:
+            session = self.instance_manager.create_instance(text)
+        except Exception as exc:
+            QMessageBox.warning(self, '新增失败', str(exc))
+            return
+
+        ws = self._create_instance_workspace(session)
+        self._workspaces[session.instance_id] = ws
+        self._workspace_stack.addWidget(ws.container)
+        self._refresh_instance_sidebar()
+        self._switch_instance(session.instance_id)
+
+    def _on_instance_clone(self, source_instance_id: str) -> None:
+        source = self._workspaces.get(source_instance_id)
+        if source is None:
+            return
+        name, ok = QInputDialog.getText(self, '克隆实例', '新实例名称:', text=f'{source.name}-copy')
+        if not ok:
+            return
+        text = str(name or '').strip()
+        if not text:
+            return
+        try:
+            session = self.instance_manager.clone_instance(source_instance_id, text)
+        except Exception as exc:
+            QMessageBox.warning(self, '克隆失败', str(exc))
+            return
+
+        ws = self._create_instance_workspace(session)
+        self._workspaces[session.instance_id] = ws
+        self._workspace_stack.addWidget(ws.container)
+        self._refresh_instance_sidebar()
+        self._switch_instance(session.instance_id)
+
+    def _on_instance_rename(self, instance_id: str) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        if self._workspace_running(ws):
+            QMessageBox.information(self, '重命名受限', '请先停止该实例再重命名。')
+            return
+        name, ok = QInputDialog.getText(self, '重命名实例', '新实例名称:', text=ws.name)
+        if not ok:
+            return
+        text = str(name or '').strip()
+        if not text:
+            return
+        old_id = ws.instance_id
+        try:
+            session = self.instance_manager.rename_instance(old_id, text)
+        except Exception as exc:
+            QMessageBox.warning(self, '重命名失败', str(exc))
+            return
+
+        ws.engine.stop()
+        ws.instance_id = session.instance_id
+        ws.name = session.name
+        ws.session = session
+        ws.engine.instance_id = session.instance_id
+        ws.engine.runtime_paths = self._runtime_paths(session)
+        ws.engine.update_config(session.config)
+        self._workspaces.pop(old_id, None)
+        self._workspaces[ws.instance_id] = ws
+        self._refresh_instance_sidebar()
+        self._switch_instance(ws.instance_id)
+
+    def _on_instance_delete(self, instance_id: str) -> None:
+        ws = self._workspaces.get(instance_id)
+        if ws is None:
+            return
+        if self._workspace_running(ws):
+            QMessageBox.information(self, '删除受限', '请先停止该实例再删除。')
+            return
+        if len(self._workspaces) <= 1:
+            QMessageBox.information(self, '删除受限', '至少保留一个实例。')
+            return
+        ret = QMessageBox.question(self, '确认删除', f'确认删除实例 `{ws.name}` 吗？')
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.instance_manager.delete_instance(instance_id)
+        except Exception as exc:
+            QMessageBox.warning(self, '删除失败', str(exc))
+            return
+
+        ws.engine.stop()
+        self._workspace_stack.removeWidget(ws.container)
+        ws.container.deleteLater()
+        self._workspaces.pop(instance_id, None)
+        self._refresh_instance_sidebar()
+        active = self.instance_manager.get_active()
+        if active is not None:
+            self._switch_instance(active.instance_id)
 
     def _update_screenshot(self, image: Image.Image, force: bool = False):
-        """将 PIL 图像转为 QPixmap 并按预览区尺寸缩放显示。
-        为避免高频截图导致界面卡顿，限制刷新率为最高 1 fps。
-        """
         now = time.time()
         if not force and now - self._last_screenshot_time < 1.0:
             return
@@ -378,20 +654,17 @@ class MainWindow(QMainWindow):
             if target_size.width() <= 0 or target_size.height() <= 0:
                 return
 
-            # 优先按宽度缩放并裁剪上下，避免左右被裁。
             scaled_w = pixmap.scaledToWidth(target_size.width(), Qt.TransformationMode.SmoothTransformation)
             if scaled_w.height() >= target_size.height():
                 offset_y = (scaled_w.height() - target_size.height()) // 2
                 cropped = scaled_w.copy(0, offset_y, target_size.width(), target_size.height())
             else:
-                # 目标区域偏“高”时，保持宽度完整，仅做纵向拉伸补齐，避免左右被裁。
                 cropped = scaled_w.scaled(
                     target_size,
                     Qt.AspectRatioMode.IgnoreAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
 
-            # 再对最终图像做圆角裁剪：图片依然充满，仅圆角重叠部分被遮挡。
             rounded = QPixmap(target_size)
             rounded.fill(Qt.GlobalColor.transparent)
             painter = QPainter(rounded)
@@ -406,65 +679,24 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _on_start(self):
-        """点击“开始”后启动引擎并更新按钮可用状态。"""
-        if self.engine.start():
-            self._btn_start.setEnabled(False)
-            self._btn_pause.setEnabled(True)
-            self._btn_stop.setEnabled(True)
-
-    def _on_pause(self):
-        """在暂停/恢复之间切换执行状态。"""
-        if self._btn_pause.text() == '暂停':
-            self.engine.pause()
-            self._btn_pause.setText('恢复')
-        else:
-            self.engine.resume()
-            self._btn_pause.setText('暂停')
-
-    def _on_stop(self):
-        """停止引擎并立即刷新界面状态。"""
-        self.engine.stop()
-        self._btn_start.setEnabled(True)
-        self._btn_pause.setEnabled(False)
-        self._btn_stop.setEnabled(False)
-        self._btn_pause.setText('暂停')
-        # 兜底刷新状态，避免线程信号时序导致面板停留在旧状态。
-        self._status_panel.update_stats(self.engine.scheduler.get_stats())
-
-    def _on_run_once(self):
-        """触发一次立即执行。"""
-        self.engine.run_once()
-
-    def _on_state_changed(self, state: str):
-        """状态变化时刷新状态统计。"""
-        self._status_panel.update_stats(self.engine.scheduler.get_stats())
-
-    def _on_config_changed(self, config: AppConfig):
-        """接收子面板配置变更并同步到引擎。"""
-        self.config = config
-        update_logger_level(config.safety.debug_log_enabled)
-        self.engine.update_config(config)
-
     def _show_free_notice(self):
-        """启动后展示免费声明与项目地址入口。"""
         box = QMessageBox(self)
         box.setWindowTitle('使用提示')
         box.setIcon(QMessageBox.Icon.Warning)
         box.setTextFormat(Qt.TextFormat.RichText)
-        box.setText(
-            '<span style="font-size:16px; font-weight:700; color:#dc2626;">本软件完全免费，若付费购买请立即退款。</span>'
-        )
+        box.setText('<span style="font-size:16px; font-weight:700; color:#dc2626;">本软件完全免费，若付费购买请立即退款。</span>')
         box.setInformativeText(
             '<span style="font-size:13px; font-weight:600; color:#b45309;">'
             '请通过项目主页获取最新版与公告，谨防二次售卖、捆绑分发或虚假收费。'
             '</span><br><br>'
             f'<span style="font-size:12px; color:#2563eb;">项目地址：{PROJECT_URL_TEXT}</span>'
         )
-        box.setStyleSheet("""
+        box.setStyleSheet(
+            """
             QMessageBox QPushButton { min-width: 102px; min-height: 30px; padding: 2px 10px; }
             QMessageBox QCheckBox { color: #334155; font-size: 12px; font-weight: 600; }
-        """)
+            """
+        )
         text_label = box.findChild(QLabel, 'qt_msgbox_label')
         if text_label is not None:
             text_label.setWordWrap(True)
@@ -487,7 +719,6 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _is_free_notice_enabled() -> bool:
-        """读取“启动免费提示”是否启用。"""
         settings = QSettings(APP_SETTINGS_ORG, APP_SETTINGS_NAME)
         raw = settings.value(FREE_NOTICE_ENABLED_KEY, True)
         if isinstance(raw, bool):
@@ -496,35 +727,27 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _set_free_notice_enabled(enabled: bool) -> None:
-        """写入“启动免费提示”开关。"""
         settings = QSettings(APP_SETTINGS_ORG, APP_SETTINGS_NAME)
         settings.setValue(FREE_NOTICE_ENABLED_KEY, bool(enabled))
         settings.sync()
 
     def showEvent(self, event):
-        """窗口显示时确保居中。
-        由于高度自适应，必须在显示瞬间（尺寸确定后）进行二次居中校验。
-        """
         super().showEvent(event)
         if not hasattr(self, '_centered'):
             screen = self.screen().availableGeometry()
             size = self.frameGeometry()
-            x = (screen.width() - size.width()) // 2
-            y = (screen.height() - size.height()) // 2
-            self.move(x, y)
+            self.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
             self._centered = True
         if self._pending_free_notice and not self._free_notice_shown:
             self._free_notice_shown = True
-            # 延迟到主窗口真正显示后再弹，避免构造期阻塞导致“窗口不出现”的假死感。
             QTimer.singleShot(0, self._show_free_notice)
 
     def closeEvent(self, event):
-        """窗口关闭时执行收尾清理。"""
-        self.engine.stop()
+        for ws in self._workspaces.values():
+            ws.engine.stop()
         super().closeEvent(event)
 
     def resizeEvent(self, event):
-        """窗口尺寸变化时重绘当前预览。"""
         super().resizeEvent(event)
         if self._last_screenshot is not None:
             self._update_screenshot(self._last_screenshot, force=True)
