@@ -39,7 +39,9 @@ class ScreenCapture:
     @staticmethod
     def _make_screenshot_path(save_dir: str, prefix: str = 'farm') -> str:
         ts = time.strftime('%Y%m%d_%H%M%S')
-        filename = f'{prefix}_{ts}.png'
+        ms = int((time.time() % 1) * 1000)
+        pid = os.getpid()
+        filename = f'{prefix}_{ts}_{ms:03d}_{pid}.png'
         return os.path.join(save_dir, filename)
 
     def capture_region(self, rect: tuple[int, int, int, int]) -> Image.Image | None:
