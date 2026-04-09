@@ -413,7 +413,9 @@ class BotExecutorMixin:
         if self.device:
             try:
                 folder = self.device.save_error_screenshots(
-                    task_name=task_name, error_text=tb_text, base_dir='logs/error'
+                    task_name=task_name,
+                    error_text=tb_text,
+                    base_dir=getattr(self, '_error_dir', 'logs/error'),
                 )
                 logger.error(f'异常截图已保存: {folder}')
             except Exception as save_exc:

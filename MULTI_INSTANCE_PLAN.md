@@ -103,7 +103,7 @@
 - [x] [core/engine/bot/worker.py](E:/AutoGame/qq-farm-auto/core/engine/bot/worker.py)：`bot_worker_main()` 增加 `runtime_paths`、`instance_id` 参数；`_configure_worker_logger()` 增加实例日志 sink；构造引擎改为 `LocalBotEngine(config, runtime_paths=..., instance_id=...)`。
 - [x] [core/engine/bot/local_engine.py](E:/AutoGame/qq-farm-auto/core/engine/bot/local_engine.py)：新增 `__init__(self, config, runtime_paths=None, instance_id='')`，并向 mixin 透传。
 - [x] [core/engine/bot/bootstrap.py](E:/AutoGame/qq-farm-auto/core/engine/bot/bootstrap.py)：`BotInitMixin.__init__()` 增加实例上下文；`ScreenCapture` 使用实例 `screenshots_dir`；记录 `self._error_dir`。
-- [ ] [core/engine/bot/executor.py](E:/AutoGame/qq-farm-auto/core/engine/bot/executor.py)：`_on_executor_task_error()` 内 `save_error_screenshots(..., base_dir=self._error_dir)`，移除硬编码 `'logs/error'`。
+- [x] [core/engine/bot/executor.py](E:/AutoGame/qq-farm-auto/core/engine/bot/executor.py)：`_on_executor_task_error()` 内 `save_error_screenshots(..., base_dir=self._error_dir)`，移除硬编码 `'logs/error'`。
 - [ ] [core/platform/screen_capture.py](E:/AutoGame/qq-farm-auto/core/platform/screen_capture.py)：`_make_screenshot_path()` 文件名增加毫秒时间戳与 PID，避免多实例重名覆盖。
 - [ ] [gui/widgets/instance_sidebar.py](E:/AutoGame/qq-farm-auto/gui/widgets/instance_sidebar.py)（新增）：新增最右侧竖向实例栏 `InstanceSidebar`，提供 `instance_selected`、`create_requested`、`delete_requested`、`clone_requested`、`rename_requested` 信号。
 - [ ] [gui/main_window.py](E:/AutoGame/qq-farm-auto/gui/main_window.py)：改为三栏布局（左预览/中原面板/右实例栏）；新增 `_create_instance_workspace()`、`_switch_instance()`、`_on_instance_create()`、`_on_instance_delete()`、`_on_instance_clone()`、`_on_instance_rename()`、`_get_active_session()`。
