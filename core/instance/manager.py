@@ -149,7 +149,23 @@ class InstanceManager:
         if session is None:
             raise KeyError(f'instance not found: {instance_id}')
 
-        new_id = self._ensure_unique_id(new_name)
+        candidate = sanitize_instance_name(new_name)
+        if candidate == session.instance_id:
+            session.name = str(new_name or session.instance_id)
+            session.touch()
+            self.save()
+            return session
+
+        existing = {item.instance_id for item in self._sessions if item.instance_id != session.instance_id}
+        new_id = candidate
+        if new_id in existing:
+            for idx in range(2, 10_000):
+                alt = f'{candidate}-{idx}'
+                if alt not in existing:
+                    new_id = alt
+                    break
+            else:
+                raise RuntimeError('failed to allocate unique instance id')
         meta = rename_instance(session.instance_id, new_id, new_name=new_name)
         session.instance_id = str(meta['id'])
         session.name = str(meta['name'])
