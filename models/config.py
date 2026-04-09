@@ -238,6 +238,29 @@ class AppConfig(BaseModel):
                 out[key] = value
         return out
 
+    @classmethod
+    def _same_structure_and_order(cls, left, right) -> bool:
+        """递归比较配置内容与键顺序是否一致。"""
+        if type(left) is not type(right):
+            return False
+        if isinstance(left, dict):
+            left_keys = list(left.keys())
+            right_keys = list(right.keys())
+            if left_keys != right_keys:
+                return False
+            for key in left_keys:
+                if not cls._same_structure_and_order(left[key], right[key]):
+                    return False
+            return True
+        if isinstance(left, list):
+            if len(left) != len(right):
+                return False
+            for idx, item in enumerate(left):
+                if not cls._same_structure_and_order(item, right[idx]):
+                    return False
+            return True
+        return left == right
+
     @field_validator('tasks', mode='before')
     @classmethod
     def _normalize_tasks(cls, value):
@@ -272,6 +295,12 @@ class AppConfig(BaseModel):
             user_data = cls._read_json_file(config_file)
             data = cls._deep_merge_dict(template_data, user_data)
             config = cls(**data)
+            # 自动同步模板新增字段与键顺序，避免老用户本地配置顺序/结构漂移。
+            normalized = config.model_dump()
+            if not cls._same_structure_and_order(user_data, normalized):
+                os.makedirs(os.path.dirname(os.path.abspath(config_file)), exist_ok=True)
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    json.dump(normalized, f, ensure_ascii=False, indent=2)
         else:
             if template_data:
                 config = cls(**template_data)

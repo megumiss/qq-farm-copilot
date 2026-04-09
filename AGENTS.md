@@ -1,7 +1,7 @@
 # AGENTS
 
 本文件定义本仓库内自动化/编码代理的工作约定。以当前代码实现为准。
-- 每次修改完后，使用 `ruff format` 进行代码格式化。
+- 每次修改完后，使用项目 `.venv` 下的 `ruff format` 进行代码格式化（如 `.\.venv\Scripts\ruff format` 或 `.\.venv\Scripts\python.exe -m ruff format`）。
 
 
 ## 0. 当前状态
@@ -148,7 +148,7 @@
 2. 在 `configs/config.template.json` 与用户配置中增加 `tasks.<name>`。
 3. 任务业务代码放入 `core/tasks/<name>.py`（或复用已有子任务）。
 4. 在任务中通过 `engine.get_task_features('<name>')` 读取开关。
-5. 必要时补充 `utils/ui_labels.py` 文案映射。
+5. 必要时补充 `configs/ui_labels.json` 文案映射。
 
 ## 6. 配置字段约定（tasks）
 
@@ -189,7 +189,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds`、`priority`。
 
 - 修改文案后界面未更新
-: UI 文案已内置在 `utils/ui_labels.py`；修改后需重启程序，运行中不会热重建已创建面板。
+: UI 文案读取 `configs/ui_labels.json`（内置配置）；修改后需重启程序，运行中不会热重建已创建面板。
 
 - 点击偏移明显
 : 检查 `resolve_live_click_point` 是否被绕过；优先走 `device.click_minitouch` / `ActionExecutor`。

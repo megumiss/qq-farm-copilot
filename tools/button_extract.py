@@ -17,13 +17,13 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.app_paths import load_config_json_object
 from utils.template_paths import (
     DEFAULT_TEMPLATE_PLATFORM,
     VALID_TEMPLATE_PLATFORMS,
     normalize_template_platform,
     template_scan_roots,
 )
-from utils.button_aliases import load_button_aliases
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = ROOT / 'templates'
@@ -70,7 +70,8 @@ class SourceBundle:
 
 def load_aliases() -> dict[str, str]:
     """读取按钮别名配置。"""
-    return load_button_aliases()
+    aliases = load_config_json_object('button_aliases.json', prefer_user=False)
+    return {str(k): str(v) for k, v in aliases.items()}
 
 
 def extract_bbox_and_color(image_path: Path) -> tuple[tuple[int, int, int, int], tuple[int, int, int]]:

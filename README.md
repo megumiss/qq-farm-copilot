@@ -158,7 +158,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ### UI 文案配置
 
-- 任务/功能/状态面板文案已内置在代码中（`utils/ui_labels.py`）。
+- 任务/功能/状态面板文案读取 `configs/ui_labels.json`（内置配置）。
 - 修改文案后需要重新运行程序，运行中不会热重建已创建面板。
 
 > 说明：`priority` 目前在配置文件中维护，未在面板提供编辑控件。
@@ -167,7 +167,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>` 方法
 2. 在 `configs/config.json` 的 `tasks` 增加 `<name>` 配置
-3. （可选）在 `utils/ui_labels.py` 增加任务与功能文案
+3. （可选）在 `configs/ui_labels.json` 增加任务与功能文案
 
 执行器会自动发现 `_run_task_*` 并参与调度。
 

@@ -38,8 +38,8 @@
       "daily_time": "00:00",
       "failure_interval_seconds": 60,
       "features": {
-        "auto_help": true,
         "auto_steal": false,
+        "auto_help": true,
         "auto_accept_request": true
       }
     },

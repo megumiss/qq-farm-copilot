@@ -337,6 +337,7 @@ class ActionExecutor:
 
         return results
 
+    @DecoratorConfig.when(RUN_MODE=RunMode.BACKGROUND)
     def swipe_absolute(
         self,
         p1: tuple[int, int],
@@ -347,7 +348,64 @@ class ActionExecutor:
         rel_p1: tuple[int, int] | None = None,
         rel_p2: tuple[int, int] | None = None,
     ) -> bool:
-        """执行鼠标滑动"""
+        """执行鼠标滑动（后台模式）。"""
+        try:
+            x1, y1 = int(p1[0]), int(p1[1])
+            x2, y2 = int(p2[0]), int(p2[1])
+        except Exception:
+            logger.error('滑动失败: 坐标格式非法')
+            return False
+
+        if not self._in_window(x1, y1) or not self._in_window(x2, y2):
+            logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
+            return False
+
+        distance = math.hypot(x2 - x1, y2 - y1)
+        if distance <= 0:
+            return True
+
+        speed = max(0.1, float(speed))
+        hold = max(0.0, float(hold))
+        ok = self._swipe_decel_profile(
+            x1=x1,
+            y1=y1,
+            x2=x2,
+            y2=y2,
+            distance=distance,
+            speed=speed,
+            hold=hold,
+            rel_p1=rel_p1,
+            rel_p2=rel_p2,
+        )
+
+        if rel_p1 is None:
+            log_p1 = (x1, y1)
+        else:
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1]))
+        if rel_p2 is None:
+            log_p2 = (x2, y2)
+        else:
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
+
+        if ok:
+            logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        else:
+            logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        self._debug(f'滑动调试: result={ok}')
+        return ok
+
+    @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
+    def swipe_absolute(
+        self,
+        p1: tuple[int, int],
+        p2: tuple[int, int],
+        *,
+        speed: float = 15.0,
+        hold: float = 0.0,
+        rel_p1: tuple[int, int] | None = None,
+        rel_p2: tuple[int, int] | None = None,
+    ) -> bool:
+        """执行鼠标滑动（前台模式）。"""
         try:
             x1, y1 = int(p1[0]), int(p1[1])
             x2, y2 = int(p2[0]), int(p2[1])
@@ -365,34 +423,57 @@ class ActionExecutor:
 
         speed_value = max(0.1, float(speed))
         hold_value = max(0.0, float(hold))
-        if self._run_mode == RunMode.FOREGROUND:
-            ok = self._swipe_foreground_nikke_style(
-                x1=x1,
-                y1=y1,
-                x2=x2,
-                y2=y2,
-                speed=speed_value,
-                hold=hold_value,
-            )
-            log_p1 = (int(rel_p1[0]), int(rel_p1[1])) if rel_p1 is not None else (x1, y1)
-            log_p2 = (int(rel_p2[0]), int(rel_p2[1])) if rel_p2 is not None else (x2, y2)
-            if ok:
-                logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
-            else:
-                logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
-            self._debug(f'滑动调试: result={ok}')
-            return ok
+        ok = self._swipe_decel_profile(
+            x1=x1,
+            y1=y1,
+            x2=x2,
+            y2=y2,
+            distance=distance,
+            speed=speed_value,
+            hold=hold_value,
+            rel_p1=rel_p1,
+            rel_p2=rel_p2,
+        )
 
-        # 统一滑动速度参数：不按运行模式区分。
+        if rel_p1 is None:
+            log_p1 = (x1, y1)
+        else:
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1]))
+        if rel_p2 is None:
+            log_p2 = (x2, y2)
+        else:
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
+
+        if ok:
+            logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        else:
+            logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        self._debug(f'滑动调试: result={ok}')
+        return ok
+
+    def _swipe_decel_profile(
+        self,
+        *,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        distance: float,
+        speed: float,
+        hold: float,
+        rel_p1: tuple[int, int] | None = None,
+        rel_p2: tuple[int, int] | None = None,
+    ) -> bool:
+        """执行统一减速滑动轨迹（前后台共用）。"""
         duration_scale = 33.0
-        total_duration = distance / speed_value / 1000.0 * duration_scale
+        total_duration = distance / speed / 1000.0 * duration_scale
         max_duration = 0.56
         min_duration = 0.08
         if total_duration > max_duration:
             total_duration = max_duration
         if total_duration < min_duration:
             total_duration = min_duration
-        # 分两段滑动：前段正常推进，末段减速；严格受 total_duration 预算约束。
+
         tail_ratio = 0.35
         total_steps = max(14, min(60, int(distance / 12)))
         tail_steps = max(8, int(total_steps * tail_ratio))
@@ -418,8 +499,8 @@ class ActionExecutor:
                 x2,
                 y2,
                 distance,
-                speed_value,
-                hold_value,
+                speed,
+                hold,
                 total_duration,
                 planned_duration,
                 total_steps,
@@ -461,7 +542,6 @@ class ActionExecutor:
                         break
 
             if ok and distance >= 120:
-                # 抬手前微回拉刹车，降低释放瞬间速度。
                 sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
                 sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
                 brake_px = max(1, min(3, int(distance * 0.0045)))
@@ -473,10 +553,9 @@ class ActionExecutor:
                     self.move_abs(x2, y2, duration=0.016)
 
             if ok:
-                # hold 阶段不只 sleep：终点附近 1~2px 微抖动，避免同坐标 move 被合并。
-                if hold_value > 0:
-                    stop_frames = max(1, min(80, int(hold_value / 0.016)))
-                    stop_dt = hold_value / float(stop_frames)
+                if hold > 0:
+                    stop_frames = max(1, min(80, int(hold / 0.016)))
+                    stop_dt = hold / float(stop_frames)
                 else:
                     stop_frames = 6
                     stop_dt = 0.012
@@ -505,63 +584,4 @@ class ActionExecutor:
             self.mouse_up()
             self._debug('滑动调试: mouse_up done')
 
-        if rel_p1 is None:
-            log_p1 = (x1, y1)
-        else:
-            log_p1 = (int(rel_p1[0]), int(rel_p1[1]))
-        if rel_p2 is None:
-            log_p2 = (x2, y2)
-        else:
-            log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
-
-        if ok:
-            logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
-        else:
-            logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
-        self._debug(f'滑动调试: result={ok}')
         return ok
-
-    def _swipe_foreground_nikke_style(
-        self,
-        *,
-        x1: int,
-        y1: int,
-        x2: int,
-        y2: int,
-        speed: float,
-        hold: float,
-    ) -> bool:
-        """前台滑动：对齐 NIKKE win input.mouse_swipe 的分段线性拖拽。"""
-        try:
-            distance = math.hypot(x2 - x1, y2 - y1)
-            segments = max(1, int(distance / 20))
-            total_time = max(0.05, min(distance / (100 * max(0.1, float(speed))), 0.15))
-            step_delay = total_time / float(segments)
-            self._debug(
-                '滑动调试: path=foreground_nikke_swipe distance={:.2f} speed={:.2f} '
-                'segments={} total_time={:.4f} step_delay={:.4f} hold={:.3f}'.format(
-                    distance, speed, segments, total_time, step_delay, hold
-                )
-            )
-
-            prev_pause = pyautogui.PAUSE
-            pyautogui.PAUSE = 0.0
-            try:
-                pyautogui.moveTo(x1, y1, duration=0.0)
-                time.sleep(0.01)
-                pyautogui.mouseDown()
-                for i in range(1, segments + 1):
-                    t = i / float(segments)
-                    tx = x1 + (x2 - x1) * t
-                    ty = y1 + (y2 - y1) * t
-                    pyautogui.moveTo(tx, ty, duration=0.0)
-                    time.sleep(step_delay)
-                if hold > 0:
-                    time.sleep(hold)
-                pyautogui.mouseUp()
-            finally:
-                pyautogui.PAUSE = prev_pause
-            return True
-        except Exception as e:
-            logger.error(f'前台滑动失败: {e}')
-            return False

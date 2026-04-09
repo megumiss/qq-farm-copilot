@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 APP_DIR_NAME = 'QQFarmCopilot'
+_USER_CONFIG_COPY_EXCLUDES = {'config.template.json', 'plants.json', 'ui_labels.json', 'button_aliases.json'}
 
 
 def _project_root() -> Path:
@@ -54,6 +57,8 @@ def ensure_user_configs() -> Path:
         return dst_dir
 
     for src in src_dir.glob('*.json'):
+        if src.name in _USER_CONFIG_COPY_EXCLUDES:
+            continue
         dst = dst_dir / src.name
         if dst.exists():
             continue
@@ -85,3 +90,29 @@ def resolve_config_file(filename: str, prefer_user: bool = True) -> Path:
 def resolve_runtime_path(*parts: str) -> Path:
     """返回运行时资源目录下的相对路径。"""
     return bundled_root_dir().joinpath(*parts)
+
+
+def load_config_json(filename: str, prefer_user: bool = True) -> Any:
+    """按统一路径规则读取配置 JSON。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    if not path.exists():
+        raise FileNotFoundError(f'config json not found: {path}')
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def load_config_json_object(filename: str, prefer_user: bool = True) -> dict[str, Any]:
+    """读取配置 JSON，并要求根节点为对象。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    data = load_config_json(filename, prefer_user=prefer_user)
+    if not isinstance(data, dict):
+        raise ValueError(f'{path.name} root must be object: {path}')
+    return data
+
+
+def load_config_json_array(filename: str, prefer_user: bool = True) -> list[Any]:
+    """读取配置 JSON，并要求根节点为数组。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    data = load_config_json(filename, prefer_user=prefer_user)
+    if not isinstance(data, list):
+        raise ValueError(f'{path.name} root must be array: {path}')
+    return data

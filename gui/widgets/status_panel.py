@@ -2,7 +2,7 @@
 
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QGroupBox, QSizePolicy
 
-from gui.labels import load_ui_labels
+from utils.app_paths import load_config_json_object
 
 
 class StatusPanel(QWidget):
@@ -12,7 +12,7 @@ class StatusPanel(QWidget):
         """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        panel_labels = load_ui_labels().get('status_panel', {})
+        panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('status_panel', {})
         self._group_titles = panel_labels.get('group_titles', {})
         self._cell_labels = panel_labels.get('labels', {})
         self._page_name_map = panel_labels.get('page_names', {})

@@ -2,13 +2,12 @@
 
 import ctypes
 import ctypes.wintypes
-import json
 from dataclasses import dataclass
 
 import pygetwindow as gw
 from loguru import logger
 
-from utils.app_paths import ensure_user_configs, resolve_config_file
+from utils.app_paths import ensure_user_configs, load_config_json_object, resolve_config_file
 
 
 @dataclass
@@ -68,10 +67,7 @@ class WindowManager:
     def _load_nonclient_config(self) -> dict:
         """加载窗口边框/标题高度配置。"""
         try:
-            with open(self._nonclient_json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
+            return load_config_json_object('nonclient_metrics.json', prefer_user=True)
         except Exception as e:
             logger.warning(f'加载 nonclient 配置失败: {self._nonclient_json_path}, {e}')
         return {}
