@@ -100,7 +100,7 @@
 - [x] [models/config.py](E:/AutoGame/qq-farm-auto/models/config.py)：改 `AppConfig.load()` 与 `AppConfig.save()` 为实例绝对路径；新增 `_atomic_write_json()` 并使用 `tmp + os.replace`。
 - [x] [core/instance/manager.py](E:/AutoGame/qq-farm-auto/core/instance/manager.py)（新增）：新增 `InstanceSession`、`InstanceManager`，实现 `load()`、`save()`、`create_instance()`、`clone_instance()`、`rename_instance()`、`delete_instance()`、`switch_active()`、`get_active()`、`iter_sessions()`。
 - [x] [core/engine/bot/engine.py](E:/AutoGame/qq-farm-auto/core/engine/bot/engine.py)：`BotEngine.__init__()` 增加 `runtime_paths`、`instance_id`；`_ensure_worker()` 传递实例上下文；`_handle_event()` 的 `log` 分支增加 `self.log_message.emit(text)`。
-- [ ] [core/engine/bot/worker.py](E:/AutoGame/qq-farm-auto/core/engine/bot/worker.py)：`bot_worker_main()` 增加 `runtime_paths`、`instance_id` 参数；`_configure_worker_logger()` 增加实例日志 sink；构造引擎改为 `LocalBotEngine(config, runtime_paths=..., instance_id=...)`。
+- [x] [core/engine/bot/worker.py](E:/AutoGame/qq-farm-auto/core/engine/bot/worker.py)：`bot_worker_main()` 增加 `runtime_paths`、`instance_id` 参数；`_configure_worker_logger()` 增加实例日志 sink；构造引擎改为 `LocalBotEngine(config, runtime_paths=..., instance_id=...)`。
 - [ ] [core/engine/bot/local_engine.py](E:/AutoGame/qq-farm-auto/core/engine/bot/local_engine.py)：新增 `__init__(self, config, runtime_paths=None, instance_id='')`，并向 mixin 透传。
 - [ ] [core/engine/bot/bootstrap.py](E:/AutoGame/qq-farm-auto/core/engine/bot/bootstrap.py)：`BotInitMixin.__init__()` 增加实例上下文；`ScreenCapture` 使用实例 `screenshots_dir`；记录 `self._error_dir`。
 - [ ] [core/engine/bot/executor.py](E:/AutoGame/qq-farm-auto/core/engine/bot/executor.py)：`_on_executor_task_error()` 内 `save_error_screenshots(..., base_dir=self._error_dir)`，移除硬编码 `'logs/error'`。
