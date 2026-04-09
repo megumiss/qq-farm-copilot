@@ -317,7 +317,11 @@ class BotEngine(QObject):
     def _activate_target_window(self) -> None:
         """在主进程尝试拉起目标窗口到前台。"""
         try:
-            if self._window_manager.find_window(self.config.window_title_keyword, self.config.window_select_rule):
+            platform = getattr(self.config.planting, 'window_platform', 'qq')
+            platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+            if self._window_manager.find_window(
+                self.config.window_title_keyword, self.config.window_select_rule, platform_value
+            ):
                 self._window_manager.activate_window()
         except Exception:
             pass

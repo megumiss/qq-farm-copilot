@@ -1,7 +1,8 @@
-"""窗口管理器 - 定位并管理微信小程序窗口"""
+"""窗口管理器 - 定位并管理目标农场窗口。"""
 
 import ctypes
 import ctypes.wintypes
+import os
 from dataclasses import dataclass
 
 import pygetwindow as gw
@@ -20,6 +21,8 @@ class WindowInfo:
     top: int
     width: int
     height: int
+    pid: int = 0
+    process_name: str = ''
 
 
 class MONITORINFO(ctypes.Structure):
@@ -371,6 +374,58 @@ class WindowManager:
         return bool(parts) and all(part in title_lower for part in parts)
 
     @staticmethod
+    def _get_window_pid(hwnd: int) -> int:
+        """通过窗口句柄读取进程 PID。"""
+        try:
+            pid = ctypes.wintypes.DWORD(0)
+            ctypes.windll.user32.GetWindowThreadProcessId(ctypes.wintypes.HWND(hwnd), ctypes.byref(pid))
+            return int(pid.value)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _get_process_name(pid: int) -> str:
+        """通过 PID 读取进程名。"""
+        if int(pid) <= 0:
+            return ''
+        kernel32 = ctypes.windll.kernel32
+        process_handle = 0
+        try:
+            process_handle = kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not process_handle:
+                return ''
+            size = ctypes.wintypes.DWORD(1024)
+            buf = ctypes.create_unicode_buffer(1024)
+            ok = bool(kernel32.QueryFullProcessImageNameW(process_handle, 0, buf, ctypes.byref(size)))
+            if not ok:
+                return ''
+            full_path = str(buf.value or '').strip()
+            if not full_path:
+                return ''
+            return os.path.basename(full_path).lower()
+        except Exception:
+            return ''
+        finally:
+            if process_handle:
+                try:
+                    kernel32.CloseHandle(process_handle)
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _matches_platform(process_name: str, platform: str | None) -> bool:
+        """判断进程名是否符合平台。"""
+        p = str(process_name or '').strip().lower()
+        target = str(platform or '').strip().lower()
+        if not target:
+            return False
+        if target == 'qq':
+            return p == 'qq.exe' or p.startswith('qq')
+        if target == 'wechat':
+            return p.startswith('wechat') or 'weixin' in p
+        return False
+
+    @staticmethod
     def _resolve_select_index(select_rule: str, total: int) -> int:
         """将选择规则解析为窗口索引，非法规则回退到 0。"""
         if total <= 0:
@@ -390,6 +445,15 @@ class WindowManager:
                 logger.warning(f'窗口选择规则超出范围({text})，已回退自动选择')
                 return 0
             return idx
+        return 0
+
+    def _resolve_auto_index(self, windows: list[WindowInfo], platform: str | None) -> int:
+        """自动选择窗口：优先按平台命中，失败后回退第一个。"""
+        if not windows:
+            return 0
+        for idx, info in enumerate(windows):
+            if self._matches_platform(info.process_name, platform):
+                return idx
         return 0
 
     @classmethod
@@ -417,6 +481,8 @@ class WindowManager:
                 height = int(getattr(window_obj, 'height', 0) or 0)
                 if width <= 0 or height <= 0:
                     return
+                pid = cls._get_window_pid(hwnd)
+                process_name = cls._get_process_name(pid)
                 matched.append(
                     WindowInfo(
                         hwnd=hwnd,
@@ -425,6 +491,8 @@ class WindowManager:
                         top=int(getattr(window_obj, 'top', 0) or 0),
                         width=width,
                         height=height,
+                        pid=pid,
+                        process_name=process_name,
                     )
                 )
                 seen_hwnd.add(hwnd)
@@ -443,16 +511,27 @@ class WindowManager:
             logger.error(f'列出窗口失败: {e}')
             return []
 
-    def find_window(self, title_keyword: str = 'QQ经典农场', select_rule: str = 'auto') -> WindowInfo | None:
+    def find_window(
+        self,
+        title_keyword: str = 'QQ经典农场',
+        select_rule: str = 'auto',
+        platform: str | None = None,
+    ) -> WindowInfo | None:
         """通过标题关键词与选择规则查找窗口。"""
         windows = self.list_windows(title_keyword)
         if not windows:
             logger.warning(f"未找到包含 '{title_keyword}' 的窗口")
             return None
-        target_index = self._resolve_select_index(select_rule, len(windows))
+        if str(select_rule or '').strip().lower() in {'', 'auto'}:
+            target_index = self._resolve_auto_index(windows, platform)
+        else:
+            target_index = self._resolve_select_index(select_rule, len(windows))
         info = windows[target_index]
         self._cached_window = info
-        logger.debug(f'找到窗口[{target_index + 1}/{len(windows)}]: {info.title} ({info.width}x{info.height})')
+        logger.debug(
+            f'找到窗口[{target_index + 1}/{len(windows)}]: {info.title} ({info.width}x{info.height}), '
+            f'platform={platform}, process={info.process_name or "unknown"}'
+        )
         return info
 
     def get_window_rect(self) -> tuple[int, int, int, int] | None:
@@ -734,6 +813,11 @@ class WindowManager:
         except Exception:
             return False
 
-    def refresh_window_info(self, title_keyword: str = 'QQ农场', select_rule: str = 'auto') -> WindowInfo | None:
+    def refresh_window_info(
+        self,
+        title_keyword: str = 'QQ农场',
+        select_rule: str = 'auto',
+        platform: str | None = None,
+    ) -> WindowInfo | None:
         """刷新窗口位置信息。"""
-        return self.find_window(title_keyword, select_rule)
+        return self.find_window(title_keyword, select_rule, platform)

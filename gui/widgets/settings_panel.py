@@ -125,7 +125,7 @@ class SettingsPanel(QWidget):
         select_row.addWidget(self._window_select, 1)
         select_row.addWidget(self._window_select_refresh)
         mf.addRow('选择窗口:', select_row_widget)
-        self._window_select_tip = QLabel('仅保存匹配顺序，不保存窗口句柄。')
+        self._window_select_tip = QLabel('自动模式会按平台优先匹配；仅保存匹配顺序，不保存窗口句柄。')
         self._window_select_tip.setWordWrap(True)
         self._window_select_tip.setStyleSheet('color: #6b7280;')
         mf.addRow('', self._window_select_tip)
@@ -267,13 +267,15 @@ class SettingsPanel(QWidget):
         # 刷新选项时不触发自动保存，由调用方决定是否落盘。
         self._window_select.blockSignals(True)
         self._window_select.clear()
-        self._window_select.addItem('自动（匹配第1个）', 'auto')
+        self._window_select.addItem('自动（按平台优先）', 'auto')
         for idx, info in enumerate(windows):
             self._window_select.addItem(self._format_window_option_label(idx, info), f'index:{idx}')
         self._set_window_select_rule(preferred_rule or self.config.window_select_rule)
         self._window_select.blockSignals(False)
         if windows:
-            self._window_select_tip.setText(f'当前匹配 {len(windows)} 个窗口；仅保存匹配顺序，不保存窗口句柄。')
+            self._window_select_tip.setText(
+                f'当前匹配 {len(windows)} 个窗口；自动模式会按平台优先匹配，不保存窗口句柄。'
+            )
         else:
             self._window_select_tip.setText('当前未匹配到窗口；将使用自动策略并在启动时重试匹配。')
 

@@ -102,7 +102,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
-- `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，推荐 `auto`）
+- `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `planting`：种植策略、等级、平台、窗口位置
 - `executor`：空队列策略、默认间隔、最大失败次数

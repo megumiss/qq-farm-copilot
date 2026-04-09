@@ -18,8 +18,10 @@ class BotVisionMixin:
 
     def _prepare_window(self) -> tuple | None:
         """刷新并激活窗口，返回当前有效截图区域。"""
+        platform = getattr(self.config.planting, 'window_platform', 'qq')
+        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         window = self.window_manager.refresh_window_info(
-            self.config.window_title_keyword, self.config.window_select_rule
+            self.config.window_title_keyword, self.config.window_select_rule, platform_value
         )
         if not window:
             return None
