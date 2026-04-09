@@ -684,7 +684,9 @@ class MainWindow(QMainWindow):
         box.setWindowTitle('使用提示')
         box.setIcon(QMessageBox.Icon.Warning)
         box.setTextFormat(Qt.TextFormat.RichText)
-        box.setText('<span style="font-size:16px; font-weight:700; color:#dc2626;">本软件完全免费，若付费购买请立即退款。</span>')
+        box.setText(
+            '<span style="font-size:16px; font-weight:700; color:#dc2626;">本软件完全免费，若付费购买请立即退款。</span>'
+        )
         box.setInformativeText(
             '<span style="font-size:13px; font-weight:600; color:#b45309;">'
             '请通过项目主页获取最新版与公告，谨防二次售卖、捆绑分发或虚假收费。'
