@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
-from utils.app_paths import ensure_user_configs, resolve_config_file, user_configs_dir
+from utils.app_paths import ensure_user_configs, instance_config_file, resolve_config_file
 
 
 class PlantMode(str, Enum):
@@ -196,6 +196,15 @@ class AppConfig(BaseModel):
     _template_path: str = PrivateAttr(default='')
 
     @staticmethod
+    def _atomic_write_json(path: str | Path, data: dict) -> None:
+        """以原子替换方式写入 JSON。"""
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + f'.tmp.{os.getpid()}')
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        os.replace(tmp, target)
+
+    @staticmethod
     def _read_json_file(path: str) -> dict:
         """读取 JSON 文件并返回字典对象。"""
         with open(path, 'r', encoding='utf-8') as f:
@@ -216,16 +225,19 @@ class AppConfig(BaseModel):
     @classmethod
     def _resolve_config_path(cls, path: str | None = None) -> str:
         """解析并计算用户配置文件路径。"""
-        raw = str(path or 'configs/config.json').strip()
+        raw = str(path or '').strip()
+        if not raw:
+            return str(instance_config_file('default'))
+
         candidate = Path(raw)
         if candidate.is_absolute():
             return str(candidate)
 
         norm = raw.replace('\\', '/')
         if norm.startswith('configs/'):
-            ensure_user_configs()
-            return str(user_configs_dir() / norm.split('/', 1)[1])
-        return str(candidate)
+            # 不再依赖旧版共享 configs 目录，统一回落到 default 实例配置。
+            return str(instance_config_file('default'))
+        return str(candidate.resolve())
 
     @classmethod
     def _deep_merge_dict(cls, base: dict, override: dict) -> dict:
@@ -298,9 +310,7 @@ class AppConfig(BaseModel):
             # 自动同步模板新增字段与键顺序，避免老用户本地配置顺序/结构漂移。
             normalized = config.model_dump()
             if not cls._same_structure_and_order(user_data, normalized):
-                os.makedirs(os.path.dirname(os.path.abspath(config_file)), exist_ok=True)
-                with open(config_file, 'w', encoding='utf-8') as f:
-                    json.dump(normalized, f, ensure_ascii=False, indent=2)
+                cls._atomic_write_json(config_file, normalized)
         else:
             if template_data:
                 config = cls(**template_data)
@@ -313,6 +323,4 @@ class AppConfig(BaseModel):
     def save(self, path: str | None = None):
         """将当前配置对象写回文件。"""
         p = self._resolve_config_path(path or self._config_path or 'configs/config.json')
-        os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
-        with open(p, 'w', encoding='utf-8') as f:
-            json.dump(self.model_dump(), f, ensure_ascii=False, indent=2)
+        self._atomic_write_json(p, self.model_dump())
