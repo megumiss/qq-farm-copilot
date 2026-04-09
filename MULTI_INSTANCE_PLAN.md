@@ -113,7 +113,7 @@
 - [x] [gui/widgets/task_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/task_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
 - [x] [gui/widgets/feature_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/feature_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
 - [x] [gui/widgets/settings_panel.py](E:/AutoGame/qq-farm-auto/gui/widgets/settings_panel.py)：如采用控件复用，新增 `set_config(config)` 并支持切换时重载；如每实例独立面板可不改。
-- [ ] [README.md](E:/AutoGame/qq-farm-auto/README.md)：更新单窗口多实例说明、最右侧竖向实例栏、实例目录与配置路径。
+- [x] [README.md](E:/AutoGame/qq-farm-auto/README.md)：更新单窗口多实例说明、最右侧竖向实例栏、实例目录与配置路径。
 - [ ] [AGENTS.md](E:/AutoGame/qq-farm-auto/AGENTS.md)：同步当前架构、实例纳管边界（仅新增/删除/切换/克隆/重命名）与路径规范。
 - [ ] [MULTI_INSTANCE_PLAN.md](E:/AutoGame/qq-farm-auto/MULTI_INSTANCE_PLAN.md)：随实现进度维护本清单的完成状态。
 

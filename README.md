@@ -14,9 +14,9 @@
 
 - 架构：`BotEngine` + `TaskExecutor` + UI 页面识别（`core/ui`）
 - 调度：统一任务执行器，支持 `INTERVAL` / `DAILY`
-- 任务配置：`configs/config.json` 中 `tasks` 为**动态字典**
+- 实例配置：`%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json` 中 `tasks` 为**动态字典**
 - 任务优先级：`tasks.<task>.priority`（数字越小越先执行）
-- UI：左侧实时截图，右侧状态/任务调度/任务功能/设置
+- UI：左侧实时截图、中间实例运行面板、最右侧竖向实例栏（新增/删除/切换/克隆/重命名）
 
 当前内置任务（通过 `_run_task_*` 自动发现）：
 
@@ -56,8 +56,9 @@
 1. 打开上方链接，下载最新的：
    - `QQFarmCopilot-<tag>-windows-x64.exe`
 2. 将 `exe` 放到任意目录后双击运行。
-3. 首次运行会自动在用户目录生成配置文件：
-   - `%APPDATA%\QQFarmCopilot\configs\config.json`
+3. 首次运行会自动在用户目录生成实例元数据与默认实例配置：
+   - `%APPDATA%\QQFarmCopilot\profiles.json`
+   - `%APPDATA%\QQFarmCopilot\instances\default\configs\config.json`
 4. 打开 QQ 农场窗口，点击程序内“开始”。
 
 
@@ -93,7 +94,9 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ## 配置说明
 
-主配置文件：`configs/config.json`
+实例主配置文件（按实例隔离）：
+
+- `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
 
 核心字段：
 
@@ -150,11 +153,10 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ## UI 面板
 
-- 状态：运行状态、当前任务、队列数量、统计
-- 任务调度：任务开关、间隔/每日时间、执行器策略
-- 任务设置：`tasks.<task>.features` 开关
-- 设置：窗口关键词、平台、位置、种植策略
-- 高级：随机延迟、点击抖动、单轮最大点击数、Debug 日志开关
+- 左侧：当前实例截图预览
+- 中间：当前实例状态、日志、任务调度、任务设置、设置（保留原逻辑）
+- 右侧实例栏（竖向）：新增、删除、切换、克隆、重命名
+- 启停控制：仍在中间面板内，按当前实例执行
 
 ### UI 文案配置
 
