@@ -173,7 +173,8 @@ class ExecutorConfig(BaseModel):
 class PlantingConfig(BaseModel):
     """定义 `PlantingConfig` 的配置数据结构与默认值。"""
 
-    strategy: PlantMode = PlantMode.BEST_EXP_RATE
+    strategy: PlantMode = PlantMode.LATEST_LEVEL
+    warehouse_first: bool = True
     preferred_crop: str = '白萝卜'
     player_level: int = 10
     window_platform: WindowPlatform = WindowPlatform.QQ

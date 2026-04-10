@@ -72,7 +72,8 @@
     "max_failures": 3
   },
   "planting": {
-    "strategy": "best_exp_rate",
+    "strategy": "latest_level",
+    "warehouse_first": true,
     "preferred_crop": "白萝卜",
     "player_level": 10,
     "window_platform": "qq",

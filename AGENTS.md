@@ -12,6 +12,7 @@
 - 调度模式：`TaskExecutor` 单线程串行执行
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
+- 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `number_box_detector` 选择最左种子
 - 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 

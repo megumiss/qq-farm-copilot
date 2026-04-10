@@ -85,6 +85,10 @@ class SettingsPanel(QWidget):
         self._strategy_combo.addItem('手动选择', PlantMode.PREFERRED.value)
         row_level.addWidget(QLabel('策略'))
         row_level.addWidget(self._strategy_combo, 1)
+        self._warehouse_first = QCheckBox('仓库优先')
+        self._warehouse_first.setChecked(True)
+        self._warehouse_first.setToolTip('开启后，播种选种时优先使用仓库种子')
+        row_level.addWidget(self._warehouse_first)
         pf.addRow(row_level)
 
         self._crop_combo = NoWheelComboBox()
@@ -225,6 +229,7 @@ class SettingsPanel(QWidget):
         """将用户改动实时写回配置文件。"""
         self._player_level.valueChanged.connect(self._auto_save)
         self._strategy_combo.currentIndexChanged.connect(self._auto_save)
+        self._warehouse_first.toggled.connect(self._auto_save)
         self._crop_combo.currentIndexChanged.connect(self._auto_save)
         self._window_platform.currentIndexChanged.connect(self._auto_save)
         self._run_mode.currentIndexChanged.connect(self._auto_save)
@@ -244,8 +249,9 @@ class SettingsPanel(QWidget):
             return
         c = self.config
         c.planting.player_level = self._player_level.value()
-        strategy_value = self._strategy_combo.currentData() or PlantMode.BEST_EXP_RATE.value
+        strategy_value = self._strategy_combo.currentData() or PlantMode.LATEST_LEVEL.value
         c.planting.strategy = PlantMode(strategy_value)
+        c.planting.warehouse_first = bool(self._warehouse_first.isChecked())
         idx = self._crop_combo.currentIndex()
         if 0 <= idx < len(self._crop_names):
             c.planting.preferred_crop = self._crop_names[idx]
@@ -371,7 +377,7 @@ class SettingsPanel(QWidget):
 
     def _sync_crop_from_strategy(self) -> bool:
         """自动策略下，将作物下拉同步到策略对应作物。"""
-        strategy_value = self._strategy_combo.currentData() or PlantMode.BEST_EXP_RATE.value
+        strategy_value = self._strategy_combo.currentData() or PlantMode.LATEST_LEVEL.value
         level = self._player_level.value()
         selected = None
         if strategy_value == PlantMode.BEST_EXP_RATE.value:
@@ -403,6 +409,7 @@ class SettingsPanel(QWidget):
                 strategy_idx = i
                 break
         self._strategy_combo.setCurrentIndex(strategy_idx)
+        self._warehouse_first.setChecked(bool(getattr(c.planting, 'warehouse_first', True)))
         self._on_level_changed(c.planting.player_level)
         if (
             self._strategy_combo.currentData() == PlantMode.PREFERRED.value
