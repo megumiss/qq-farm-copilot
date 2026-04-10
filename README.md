@@ -14,9 +14,9 @@
 
 - 架构：`BotEngine` + `TaskExecutor` + UI 页面识别（`core/ui`）
 - 调度：统一任务执行器，支持 `INTERVAL` / `DAILY`
-- 任务配置：`configs/config.json` 中 `tasks` 为**动态字典**
+- 实例配置：`%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json` 中 `tasks` 为**动态字典**
 - 任务优先级：`tasks.<task>.priority`（数字越小越先执行）
-- UI：左侧实时截图，右侧状态/任务调度/任务功能/设置
+- UI：左侧实时截图、中间实例运行面板、最右侧竖向实例栏（新增/删除/切换/克隆/重命名）
 
 当前内置任务（通过 `_run_task_*` 自动发现）：
 
@@ -27,8 +27,8 @@
 ## 已实现功能
 
 - [x] 一键收获 / 除草 / 除虫 / 浇水
-- [ ] 自动购买种子
-- [ ] 自动播种
+- [x] 自动购买种子
+- [x] 自动播种
 - [ ] 自动扩建 / 升级土地
 - [x] 仓库批量出售
 - [ ] 任务奖励领取
@@ -56,8 +56,9 @@
 1. 打开上方链接，下载最新的：
    - `QQFarmCopilot-<tag>-windows-x64.exe`
 2. 将 `exe` 放到任意目录后双击运行。
-3. 首次运行会自动在用户目录生成配置文件：
-   - `%APPDATA%\QQFarmCopilot\configs\config.json`
+3. 首次运行会自动在用户目录生成实例元数据与默认实例配置：
+   - `%APPDATA%\QQFarmCopilot\profiles.json`
+   - `%APPDATA%\QQFarmCopilot\instances\default\configs\config.json`
 4. 打开 QQ 农场窗口，点击程序内“开始”。
 
 
@@ -83,8 +84,9 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ### 首次运行建议检查
 
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
-2. `planting.window_platform` 与当前平台一致（QQ / 微信）。
-3. 游戏窗口已打开且未最小化。
+2. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
+3. `planting.window_platform` 与当前平台一致（QQ / 微信）。
+4. 游戏窗口已打开且未最小化。
 
 热键：
 
@@ -93,11 +95,14 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ## 配置说明
 
-主配置文件：`configs/config.json`
+实例主配置文件（按实例隔离）：
+
+- `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
 
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
+- `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `planting`：种植策略、等级、平台、窗口位置
 - `executor`：空队列策略、默认间隔、最大失败次数
@@ -150,15 +155,14 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ## UI 面板
 
-- 状态：运行状态、当前任务、队列数量、统计
-- 任务调度：任务开关、间隔/每日时间、执行器策略
-- 任务设置：`tasks.<task>.features` 开关
-- 设置：窗口关键词、平台、位置、种植策略
-- 高级：随机延迟、点击抖动、单轮最大点击数、Debug 日志开关
+- 左侧：当前实例截图预览
+- 中间：当前实例状态、日志、任务调度、任务设置、设置（保留原逻辑）
+- 右侧实例栏（竖向）：新增、删除、切换、克隆、重命名
+- 启停控制：仍在中间面板内，按当前实例执行
 
 ### UI 文案配置
 
-- 任务/功能/状态面板文案已内置在代码中（`utils/ui_labels.py`）。
+- 任务/功能/状态面板文案读取 `configs/ui_labels.json`（内置配置）。
 - 修改文案后需要重新运行程序，运行中不会热重建已创建面板。
 
 > 说明：`priority` 目前在配置文件中维护，未在面板提供编辑控件。
@@ -167,7 +171,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>` 方法
 2. 在 `configs/config.json` 的 `tasks` 增加 `<name>` 配置
-3. （可选）在 `utils/ui_labels.py` 增加任务与功能文案
+3. （可选）在 `configs/ui_labels.json` 增加任务与功能文案
 
 执行器会自动发现 `_run_task_*` 并参与调度。
 

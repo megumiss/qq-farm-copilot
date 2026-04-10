@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # 仅需维护这一处：任务名 -> 强制禁用 feature 名集合
 FORCED_OFF_FEATURES_BY_TASK: dict[str, set[str]] = {
-    'main': {'auto_plant', 'auto_upgrade', 'auto_fertilize'},
+    'main': { 'auto_upgrade', 'auto_fertilize'},
     'share': {'auto_task'},
 }
 

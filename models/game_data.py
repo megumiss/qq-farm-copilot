@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
-
-from utils.app_paths import ensure_user_configs, resolve_config_file
+from utils.app_paths import load_config_json_array
 
 
 def _parse_grow_phases_seconds(grow_phases: str) -> list[int]:
@@ -46,14 +44,12 @@ def _calc_grow_time_seconds(grow_phases: str, seasons: int) -> int:
 
 
 def _load_crops_from_plant_json() -> list[tuple]:
-    """Build CROPS tuple list from `configs/Plant.json`.
+    """Build CROPS tuple list from `configs/plants.json`.
 
     Tuple format:
       (name, seed_id, land_level_need, grow_time_seconds, exp, fruit_count)
     """
-    ensure_user_configs()
-    plant_path = resolve_config_file('Plant.json', prefer_user=True)
-    data = json.loads(plant_path.read_text(encoding='utf-8'))
+    data = load_config_json_array('plants.json', prefer_user=False)
 
     crops: list[tuple] = []
     for item in data:

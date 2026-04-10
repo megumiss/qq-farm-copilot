@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import queue
 import traceback
 from typing import Any
@@ -14,10 +15,26 @@ from core.engine.bot.local_engine import LocalBotEngine
 from models.config import AppConfig
 
 
-def _configure_worker_logger(event_queue, enable_debug: bool) -> None:
+def _configure_worker_logger(
+    event_queue,
+    enable_debug: bool,
+    *,
+    runtime_paths: dict[str, Any] | None = None,
+    instance_id: str = 'default',
+) -> None:
     """按配置重建 worker 日志输出级别。"""
     level = 'DEBUG' if bool(enable_debug) else 'INFO'
     logger.remove()
+    logs_dir = str((runtime_paths or {}).get('logs_dir') or 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    logger.add(
+        os.path.join(logs_dir, f'qq_farm_copilot_worker_{instance_id}_{{time:YYYY-MM-DD}}.log'),
+        rotation='00:00',
+        retention='7 days',
+        level=level,
+        format='{time:YYYY-MM-DD HH:mm:ss} | {level:<7} | {message}',
+        encoding='utf-8',
+    )
     logger.add(
         lambda m: _safe_put(event_queue, {'type': 'log', 'data': str(m).strip()}),
         level=level,
@@ -65,11 +82,22 @@ def _make_command_result(cmd_id: str, cmd: str, ok: bool, error: str = '') -> di
     }
 
 
-def bot_worker_main(initial_config: dict[str, Any], command_queue, event_queue) -> None:
+def bot_worker_main(
+    initial_config: dict[str, Any],
+    command_queue,
+    event_queue,
+    runtime_paths: dict[str, Any] | None = None,
+    instance_id: str = 'default',
+) -> None:
     """worker 进程主循环。"""
     config = _load_config(initial_config)
-    _configure_worker_logger(event_queue, config.safety.debug_log_enabled)
-    engine = LocalBotEngine(config)
+    _configure_worker_logger(
+        event_queue,
+        config.safety.debug_log_enabled,
+        runtime_paths=runtime_paths,
+        instance_id=instance_id,
+    )
+    engine = LocalBotEngine(config, runtime_paths=runtime_paths, instance_id=instance_id)
 
     def _forward_image_event(event_type: str, image: Any) -> None:
         raw = _image_to_png_bytes(image)
@@ -158,7 +186,12 @@ def bot_worker_main(initial_config: dict[str, Any], command_queue, event_queue) 
 
                 if cmd == 'update_config':
                     new_cfg = _load_config(payload)
-                    _configure_worker_logger(event_queue, new_cfg.safety.debug_log_enabled)
+                    _configure_worker_logger(
+                        event_queue,
+                        new_cfg.safety.debug_log_enabled,
+                        runtime_paths=runtime_paths,
+                        instance_id=instance_id,
+                    )
                     engine.update_config(new_cfg)
                     _safe_put(event_queue, _make_command_result(cmd_id, cmd, True))
                     continue

@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from gui.labels import load_ui_labels
 from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, TaskTriggerType
+from utils.app_paths import load_config_json_object
 
 
 class TaskPanel(QWidget):
@@ -37,7 +37,7 @@ class TaskPanel(QWidget):
         """初始化任务调度面板并加载配置。"""
         super().__init__(parent)
         self.config = config
-        panel_labels = load_ui_labels().get('task_panel', {})
+        panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('task_panel', {})
         self._task_title_map = panel_labels.get('task_titles', {})
         self._switch_label = str(panel_labels.get('switch_label', 'Switch:'))
         self._enabled_text = str(panel_labels.get('enabled', 'Enable'))
@@ -327,6 +327,13 @@ class TaskPanel(QWidget):
                 self._empty_policy.setCurrentIndex(i)
                 break
         self._max_failures.setValue(max(1, int(c.executor.max_failures)))
+
+    def set_config(self, config: AppConfig):
+        """替换配置对象并刷新界面。"""
+        self.config = config
+        self._loading = True
+        self._load_config()
+        self._loading = False
 
     @staticmethod
     def _split_interval_for_display(seconds: int) -> tuple[int, int]:

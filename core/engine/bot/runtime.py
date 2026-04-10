@@ -136,7 +136,9 @@ class BotRuntimeMixin:
             self.log_message.emit('未找到 assets 按钮模板，请先运行 button_extract 工具')
             return False
 
-        window = self.window_manager.find_window(self.config.window_title_keyword)
+        window = self.window_manager.find_window(
+            self.config.window_title_keyword, self.config.window_select_rule, current_platform_value
+        )
         if not window:
             self.log_message.emit('未找到QQ农场窗口，请先打开微信小程序中的QQ农场')
             return False
@@ -155,7 +157,9 @@ class BotRuntimeMixin:
         platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         self.window_manager.resize_window(pos_value, platform_value)
         time.sleep(0.5)
-        window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
+        window = self.window_manager.refresh_window_info(
+            self.config.window_title_keyword, self.config.window_select_rule, platform_value
+        )
         self.log_message.emit(
             f'窗口已调整（整窗外框目标：540x960 + 非客户区增量）-> 实际外框 {window.width}x{window.height}'
         )

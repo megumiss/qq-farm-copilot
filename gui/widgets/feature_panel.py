@@ -13,8 +13,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from gui.labels import load_ui_labels
 from models.config import AppConfig
+from utils.app_paths import load_config_json_object
 from utils.feature_policy import is_feature_forced_off
 
 
@@ -41,7 +41,7 @@ class FeaturePanel(QWidget):
         """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.config = config
-        panel_labels = load_ui_labels().get('feature_panel', {})
+        panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('feature_panel', {})
         self._task_title_map = panel_labels.get('task_titles', {})
         self._feature_label_map = panel_labels.get('feature_labels', {})
         self._enabled_text = str(panel_labels.get('enabled', 'Enable'))
@@ -142,3 +142,10 @@ class FeaturePanel(QWidget):
                 cb.setToolTip('')
                 cb.setStyleSheet('')
                 cb.setChecked(bool(feature_map.get(feature_name, False)))
+
+    def set_config(self, config: AppConfig):
+        """替换配置对象并刷新界面。"""
+        self.config = config
+        self._loading = True
+        self._load_config()
+        self._loading = False

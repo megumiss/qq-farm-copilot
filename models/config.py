@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
-from utils.app_paths import ensure_user_configs, resolve_config_file, user_configs_dir
+from utils.app_paths import ensure_user_configs, instance_config_file, resolve_config_file
 
 
 class PlantMode(str, Enum):
@@ -185,6 +185,7 @@ class AppConfig(BaseModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
     window_title_keyword: str = 'QQ经典农场'
+    window_select_rule: str = 'auto'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
     tasks: dict[str, TaskScheduleItemConfig] = Field(default_factory=dict)
@@ -194,6 +195,15 @@ class AppConfig(BaseModel):
 
     _config_path: str = PrivateAttr(default='')
     _template_path: str = PrivateAttr(default='')
+
+    @staticmethod
+    def _atomic_write_json(path: str | Path, data: dict) -> None:
+        """以原子替换方式写入 JSON。"""
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + f'.tmp.{os.getpid()}')
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        os.replace(tmp, target)
 
     @staticmethod
     def _read_json_file(path: str) -> dict:
@@ -216,16 +226,19 @@ class AppConfig(BaseModel):
     @classmethod
     def _resolve_config_path(cls, path: str | None = None) -> str:
         """解析并计算用户配置文件路径。"""
-        raw = str(path or 'configs/config.json').strip()
+        raw = str(path or '').strip()
+        if not raw:
+            return str(instance_config_file('default'))
+
         candidate = Path(raw)
         if candidate.is_absolute():
             return str(candidate)
 
         norm = raw.replace('\\', '/')
         if norm.startswith('configs/'):
-            ensure_user_configs()
-            return str(user_configs_dir() / norm.split('/', 1)[1])
-        return str(candidate)
+            # 不再依赖旧版共享 configs 目录，统一回落到 default 实例配置。
+            return str(instance_config_file('default'))
+        return str(candidate.resolve())
 
     @classmethod
     def _deep_merge_dict(cls, base: dict, override: dict) -> dict:
@@ -237,6 +250,29 @@ class AppConfig(BaseModel):
             else:
                 out[key] = value
         return out
+
+    @classmethod
+    def _same_structure_and_order(cls, left, right) -> bool:
+        """递归比较配置内容与键顺序是否一致。"""
+        if type(left) is not type(right):
+            return False
+        if isinstance(left, dict):
+            left_keys = list(left.keys())
+            right_keys = list(right.keys())
+            if left_keys != right_keys:
+                return False
+            for key in left_keys:
+                if not cls._same_structure_and_order(left[key], right[key]):
+                    return False
+            return True
+        if isinstance(left, list):
+            if len(left) != len(right):
+                return False
+            for idx, item in enumerate(left):
+                if not cls._same_structure_and_order(item, right[idx]):
+                    return False
+            return True
+        return left == right
 
     @field_validator('tasks', mode='before')
     @classmethod
@@ -253,6 +289,23 @@ class AppConfig(BaseModel):
         except Exception:
             pass
         return {}
+
+    @field_validator('window_select_rule', mode='before')
+    @classmethod
+    def _normalize_window_select_rule(cls, value):
+        """规范化 `window_select_rule` 输入值。"""
+        text = str(value or 'auto').strip().lower()
+        if not text or text == 'auto':
+            return 'auto'
+        if text.startswith('index:'):
+            suffix = text.split(':', 1)[1]
+            try:
+                index = int(suffix)
+            except Exception:
+                return 'auto'
+            if index >= 0:
+                return f'index:{index}'
+        return 'auto'
 
     @classmethod
     def load(cls, path: str = 'configs/config.json', template_path: str | None = None) -> 'AppConfig':
@@ -272,6 +325,10 @@ class AppConfig(BaseModel):
             user_data = cls._read_json_file(config_file)
             data = cls._deep_merge_dict(template_data, user_data)
             config = cls(**data)
+            # 自动同步模板新增字段与键顺序，避免老用户本地配置顺序/结构漂移。
+            normalized = config.model_dump()
+            if not cls._same_structure_and_order(user_data, normalized):
+                cls._atomic_write_json(config_file, normalized)
         else:
             if template_data:
                 config = cls(**template_data)
@@ -284,6 +341,4 @@ class AppConfig(BaseModel):
     def save(self, path: str | None = None):
         """将当前配置对象写回文件。"""
         p = self._resolve_config_path(path or self._config_path or 'configs/config.json')
-        os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
-        with open(p, 'w', encoding='utf-8') as f:
-            json.dump(self.model_dump(), f, ensure_ascii=False, indent=2)
+        self._atomic_write_json(p, self.model_dump())

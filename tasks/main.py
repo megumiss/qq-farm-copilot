@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import math
+
 from loguru import logger
 
 from core.base.timer import Timer
 from core.engine.task.registry import TaskResult
 from core.exceptions import BuySeedError
 from core.ui.assets import *
-from core.ui.page import page_main, page_shop
+from core.ui.page import GOTO_MAIN, page_main, page_shop
 from models.config import PlantMode
 from models.farm_state import ActionType
 from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
@@ -18,7 +20,8 @@ from utils.shop_item_ocr import ShopItemOCR
 SHOP_LIST_SWIPE_START = (270, 300)
 SHOP_LIST_SWIPE_END = (270, 860)
 
-LAND_LIST = [LAND_EMPTY, LAND_EMPTY_2, LAND_EMPTY_3]
+LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
+LAND_MATCH_Y_RANGE = (350, 850)
 
 
 class TaskMain(TaskBase):
@@ -144,96 +147,198 @@ class TaskMain(TaskBase):
         """自动播种"""
         logger.info('自动播种流程: 开始')
         self.ui.ui_ensure(page_main)
-        self._buy_seeds(self.engine._resolve_crop_name())
+        # self._buy_seeds(self.engine._resolve_crop_name())
 
-        # TODO 点击空白处
+        # 点击空白处
+        self.ui.device.click_button(GOTO_MAIN)
         self.ui.device.screenshot()
-
-        # TODO 检查地块左右两侧标记
-        # TODO 如果地块偏移，则向反方向滑动，最多重复三次
+        # 检查土地位置
+        if not self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False) or not self.ui.appear(
+            BTN_LAND_LEFT, offset=30, threshold=0.9, static=False
+        ):
+            # TODO 如果地块偏移，
+            # self.ui.device.screenshot()
+            logger.error('土地存在遮挡，请调整画面位置')
+            return
 
         # 判断是否需要播种
-        self.ui.device.screenshot()
-        has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
-        if not has_land:
-            logger.info('无需播种')
-            return None
+        # has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
+        # if not has_land:
+        #     logger.info('无需播种')
+        #     return
 
         self._plant_all(self.engine._resolve_crop_name())
 
+    @staticmethod
+    def _get_icon_land_buttons() -> list[Button]:
+        """返回 assets 中所有 `icon_land_` 按钮定义。"""
+        buttons = [btn for name, btn in ASSET_NAME_TO_CONST.items() if str(name).startswith('icon_land_')]
+        buttons.sort(key=lambda btn: str(btn.name))
+        return buttons
+
+    @staticmethod
+    def _bbox_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
+        """计算两个框的 IoU。"""
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1 = max(ax1, bx1)
+        iy1 = max(ay1, by1)
+        ix2 = min(ax2, bx2)
+        iy2 = min(ay2, by2)
+        iw = max(0, ix2 - ix1)
+        ih = max(0, iy2 - iy1)
+        inter = iw * ih
+        if inter <= 0:
+            return 0.0
+        area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
+        area_b = max(1, (bx2 - bx1) * (by2 - by1))
+        return inter / float(area_a + area_b - inter)
+
+    @staticmethod
+    def _bbox_center(area: tuple[int, int, int, int]) -> tuple[float, float]:
+        """返回框中心点。"""
+        x1, y1, x2, y2 = area
+        return (x1 + x2) / 2.0, (y1 + y2) / 2.0
+
+    def _is_same_land_bbox(self, a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
+        """地块去重判定：IoU 或中心点距离接近。"""
+        if self._bbox_iou(a, b) >= 0.35:
+            return True
+        ax, ay = self._bbox_center(a)
+        bx, by = self._bbox_center(b)
+        return math.hypot(ax - bx, ay - by) <= 10.0
+
+    def _collect_land_coords_for_plant(
+        self,
+        threshold: float = 0.85,
+        y_range: tuple[int, int] | None = None,
+    ) -> list[tuple[int, int]]:
+        """匹配并去重地块模板，按 y 轴范围过滤后返回全部地块中心坐标。"""
+        self.ui.device.screenshot()
+
+        land_buttons = self._get_icon_land_buttons()
+        if not land_buttons:
+            logger.warning('自动播种流程: 未找到 icon_land 模板')
+            return []
+
+        priority = {
+            'icon_land_gold': 40,
+            'icon_land_gold_2': 40,
+            'icon_land_red': 30,
+            'icon_land_black': 20,
+            'icon_land_stand': 10,
+        }
+
+        raw_hits: list[dict] = []
+        for button in land_buttons:
+            matches = self.ui.match_template_multi(button, threshold=float(threshold))
+            for det in matches:
+                x1, y1, x2, y2 = map(int, det.area)
+                raw_hits.append(
+                    {
+                        'name': str(button.name),
+                        'area': (x1, y1, x2, y2),
+                        'priority': int(priority.get(str(button.name), 0)),
+                    }
+                )
+
+        raw_total = len(raw_hits)
+        if y_range is not None:
+            y_min, y_max = int(y_range[0]), int(y_range[1])
+            if y_min > y_max:
+                y_min, y_max = y_max, y_min
+            filtered_hits: list[dict] = []
+            for hit in raw_hits:
+                _, y1, _, y2 = hit['area']
+                center_y = (y1 + y2) // 2
+                if y_min <= center_y <= y_max:
+                    filtered_hits.append(hit)
+            raw_hits = filtered_hits
+
+        raw_hits.sort(key=lambda item: (-item['priority'], item['area'][1], item['area'][0]))
+
+        deduped: list[dict] = []
+        for cand in raw_hits:
+            if any(self._is_same_land_bbox(cand['area'], old['area']) for old in deduped):
+                continue
+            deduped.append(cand)
+
+        coords = []
+        for det in deduped:
+            x1, y1, x2, y2 = det['area']
+            coords.append(((x1 + x2) // 2, (y1 + y2) // 2))
+        coords.sort(key=lambda p: (p[1], p[0]))
+
+        logger.info(
+            '自动播种流程: 地块匹配完成 | 模板={} raw_total={} raw_in_range={} dedup={} coords={} y_range={}',
+            len(land_buttons),
+            raw_total,
+            len(raw_hits),
+            len(deduped),
+            len(coords),
+            y_range,
+        )
+        return coords
+
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
-        all_actions: list[str] = []
+        land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
+        if not land_coords:
+            logger.warning('自动播种流程: 未匹配到有效地块坐标，跳过播种')
+            return
 
-        cv_img = self.ui.device.screenshot()
-        # 切换为icon模板
-        dets = self.engine.cv_detector.detect_templates(
-            cv_img,
-            template_names=['land_empty', 'land_empty_2', 'land_empty_3'],
-            default_threshold=0.89,
-            thresholds={'land_empty': 0.89, 'land_empty_2': 0.89, 'land_empty_3': 0.89},
-        )
-        lands = [d for d in dets if d.name.startswith('land_empty')]
-        if not lands:
-            return all_actions
+        while 1:
+            self.ui.device.screenshot()
+            # 检查种子选择框出现
+            if self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False):
+                break
+            if not self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False):
+                land_x, land_y = land_coords[0]
+                self.engine.device.click_point(int(land_x), int(land_y), desc='点击可播种地块')
+                self.ui.device.sleep(0.2)
 
-        self.ui.device.click_point(int(lands[0].x), int(lands[0].y), desc='点击空地')
-
+        # 选择种子
         seed_det = None
-        for _ in range(2):
+        while 1:
             cv_img = self.ui.device.screenshot()
-            if cv_img is None:
-                return all_actions
-            seed_dets = self.engine.cv_detector.detect_seed_template(cv_img, crop_name_or_template=crop_name)
+            # 使用原始模板图匹配种子
+            seed_dets = self.engine.cv_detector.detect_seed_template(
+                cv_img, threshold=0.8, crop_name_or_template=crop_name
+            )
             if seed_dets:
                 seed_det = seed_dets[0]
                 break
+            if self.ui.appear_then_click(
+                BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, interval=1, static=False
+            ):
+                self.ui.device.sleep(0.2)
+                continue
+            # 种子选择框右侧按钮消失
+            if not self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False):
+                # logger.error('未匹配到种子，请联系作者调整模板')
+                break
 
-        if not seed_det:
+        # 没有找到种子
+        if seed_det is None:
             buy_result = self._buy_seeds(crop_name)
             if buy_result:
-                all_actions.append(buy_result)
-                return all_actions + self._plant_all(crop_name)
-            return all_actions
+                return self._plant_all(crop_name)
 
-        if not self.engine.action_executor or not self.engine.device:
-            return all_actions
-
-        planted_count = 0
         dragging = False
         try:
-            if not self.engine.device.drag_down_point(int(seed_det.x), int(seed_det.y), duration=0.05):
-                return all_actions
+            self.engine.device.drag_down_point(int(seed_det.x), int(seed_det.y), duration=0.05)
             dragging = True
-            if not self.ui.device.sleep(0.1):
-                return all_actions
+            self.ui.device.sleep(0.1)
 
-            for land in lands:
-                if not self.engine.device.drag_move_point(int(land.x), int(land.y), duration=0.1):
-                    break
-                if not self.ui.device.sleep(0.15):
-                    break
-                planted_count += 1
+            for land_x, land_y in land_coords:
+                self.engine.device.drag_move_point(int(land_x), int(land_y), duration=0.1)
+                self.ui.device.sleep(0.15)
         finally:
             if dragging:
                 self.engine.device.drag_up()
+                logger.info('自动播种流程: 播种完成')
 
-        if planted_count > 0:
-            all_actions.append(f'播种{crop_name}×{planted_count}')
-
-        self.ui.device.sleep(0.5)
-        cv_check = self.ui.device.screenshot()
-        if cv_check is not None:
-            if BTN_SHOP_CLOSE is not None and self.ui.appear(BTN_SHOP_CLOSE, offset=30, threshold=0.8, static=False):
-                self._close_shop_and_buy(crop_name, all_actions)
-
-            if BTN_FERTILIZE_POPUP is not None and self.ui.appear(
-                BTN_FERTILIZE_POPUP, offset=30, threshold=0.8, static=False
-            ):
-                x, y = self.engine._resolve_goto_main_point()
-                self.engine.device.click_point(x, y, desc='点击回主按钮')
-
-        return all_actions
+        return
 
     def _close_shop_and_buy(self, crop_name: str, actions_done: list[str]):
         """关闭商店后立刻执行一次补种购买。"""
@@ -282,7 +387,7 @@ class TaskMain(TaskBase):
                 logger.error("购买流程: 已到达商店首页且未找到种子 '{}'", crop_name)
                 raise BuySeedError
 
-            self.ui.device.swipe(SHOP_LIST_SWIPE_START, SHOP_LIST_SWIPE_END, speed=30, delay=1,hold=0.1)
+            self.ui.device.swipe(SHOP_LIST_SWIPE_START, SHOP_LIST_SWIPE_END, speed=30, delay=1, hold=0.1)
             ocr_match, has_white_radish = self._scan_shop_page_for_seed(crop_name)
             if ocr_match.target:
                 logger.info('购买流程: 已定位目标 | 商品={}', crop_name)

@@ -23,8 +23,8 @@ from tasks.friend import TaskFriend
 from tasks.main import TaskMain
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
+from utils.app_paths import load_config_json_object
 from utils.feature_policy import get_forced_off_features
-from utils.ui_labels import load_ui_labels
 
 
 class BotExecutorMixin:
@@ -34,7 +34,7 @@ class BotExecutorMixin:
     @lru_cache(maxsize=1)
     def _task_title_map() -> dict[str, str]:
         """读取任务中文标题映射。"""
-        data = load_ui_labels()
+        data = load_config_json_object('ui_labels.json', prefer_user=False)
         panel = data.get('task_panel', {})
         if not isinstance(panel, dict):
             return {}
@@ -413,7 +413,9 @@ class BotExecutorMixin:
         if self.device:
             try:
                 folder = self.device.save_error_screenshots(
-                    task_name=task_name, error_text=tb_text, base_dir='logs/error'
+                    task_name=task_name,
+                    error_text=tb_text,
+                    base_dir=getattr(self, '_error_dir', 'logs/error'),
                 )
                 logger.error(f'异常截图已保存: {folder}')
             except Exception as save_exc:

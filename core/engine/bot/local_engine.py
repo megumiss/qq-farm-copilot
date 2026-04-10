@@ -18,3 +18,6 @@ class LocalBotEngine(BotInitMixin, BotExecutorMixin, BotRuntimeMixin, BotVisionM
     state_changed = pyqtSignal(str)
     stats_updated = pyqtSignal(dict)
     detection_result = pyqtSignal(object)
+
+    def __init__(self, config, *, runtime_paths=None, instance_id: str = 'default'):
+        super().__init__(config, runtime_paths=runtime_paths, instance_id=instance_id)

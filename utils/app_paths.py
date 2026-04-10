@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 APP_DIR_NAME = 'QQFarmCopilot'
+INSTANCES_DIR_NAME = 'instances'
+PROFILES_META_FILENAME = 'profiles.json'
+_USER_CONFIG_COPY_EXCLUDES = {'config.template.json', 'plants.json', 'ui_labels.json', 'button_aliases.json'}
 
 
 def _project_root() -> Path:
@@ -39,6 +44,49 @@ def user_app_dir() -> Path:
     return Path.home() / f'.{APP_DIR_NAME}'
 
 
+def profiles_meta_file() -> Path:
+    """返回实例元数据文件路径。"""
+    return user_app_dir() / PROFILES_META_FILENAME
+
+
+def user_instances_dir() -> Path:
+    """返回实例根目录。"""
+    return user_app_dir() / INSTANCES_DIR_NAME
+
+
+def instance_dir(instance_id: str) -> Path:
+    """返回实例目录。"""
+    name = str(instance_id or '').strip()
+    if not name:
+        name = 'default'
+    return user_instances_dir() / name
+
+
+def instance_configs_dir(instance_id: str) -> Path:
+    """返回实例 configs 目录。"""
+    return instance_dir(instance_id) / 'configs'
+
+
+def instance_config_file(instance_id: str) -> Path:
+    """返回实例 config.json 路径。"""
+    return instance_configs_dir(instance_id) / 'config.json'
+
+
+def instance_logs_dir(instance_id: str) -> Path:
+    """返回实例 logs 目录。"""
+    return instance_dir(instance_id) / 'logs'
+
+
+def instance_screenshots_dir(instance_id: str) -> Path:
+    """返回实例 screenshots 目录。"""
+    return instance_dir(instance_id) / 'screenshots'
+
+
+def instance_error_dir(instance_id: str) -> Path:
+    """返回实例错误截图目录。"""
+    return instance_logs_dir(instance_id) / 'error'
+
+
 def user_configs_dir() -> Path:
     """返回用户可写 configs 目录。"""
     return user_app_dir() / 'configs'
@@ -54,6 +102,8 @@ def ensure_user_configs() -> Path:
         return dst_dir
 
     for src in src_dir.glob('*.json'):
+        if src.name in _USER_CONFIG_COPY_EXCLUDES:
+            continue
         dst = dst_dir / src.name
         if dst.exists():
             continue
@@ -85,3 +135,29 @@ def resolve_config_file(filename: str, prefer_user: bool = True) -> Path:
 def resolve_runtime_path(*parts: str) -> Path:
     """返回运行时资源目录下的相对路径。"""
     return bundled_root_dir().joinpath(*parts)
+
+
+def load_config_json(filename: str, prefer_user: bool = True) -> Any:
+    """按统一路径规则读取配置 JSON。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    if not path.exists():
+        raise FileNotFoundError(f'config json not found: {path}')
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def load_config_json_object(filename: str, prefer_user: bool = True) -> dict[str, Any]:
+    """读取配置 JSON，并要求根节点为对象。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    data = load_config_json(filename, prefer_user=prefer_user)
+    if not isinstance(data, dict):
+        raise ValueError(f'{path.name} root must be object: {path}')
+    return data
+
+
+def load_config_json_array(filename: str, prefer_user: bool = True) -> list[Any]:
+    """读取配置 JSON，并要求根节点为数组。"""
+    path = resolve_config_file(filename, prefer_user=prefer_user)
+    data = load_config_json(filename, prefer_user=prefer_user)
+    if not isinstance(data, list):
+        raise ValueError(f'{path.name} root must be array: {path}')
+    return data
