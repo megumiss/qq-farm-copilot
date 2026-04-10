@@ -179,7 +179,7 @@ QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
 
 
 class InstanceRailItemDelegate(QStyledItemDelegate):
-    """在实例窄轨项右上角绘制状态圆点。"""
+    """在实例窄轨项左侧固定位置绘制状态圆点。"""
 
     @staticmethod
     def _state_color(state: str) -> QColor:
@@ -195,11 +195,11 @@ class InstanceRailItemDelegate(QStyledItemDelegate):
         state = str(index.data(RAIL_ROLE_INSTANCE_STATE) or 'idle')
         dot_color = self._state_color(state)
         dot_radius = 4
-        cx = int(option.rect.right()) - 9
-        cy = int(option.rect.top()) + 8
+        cx = int(option.rect.left()) + 9
+        cy = int(option.rect.center().y())
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setPen(QColor('#ffffff'))
         painter.setBrush(dot_color)
         painter.drawEllipse(cx - dot_radius, cy - dot_radius, dot_radius * 2, dot_radius * 2)
         painter.restore()
@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         ratio = self.devicePixelRatioF()
         base_min_width = int(540 / ratio) + 550
         base_init_width = int(540 / ratio) + 670
-        rail_width = 64
+        rail_width = 68
         self.setMinimumWidth(base_min_width)
         self.resize(base_init_width, 100)
         self.setStyleSheet(_build_stylesheet())
@@ -326,50 +326,50 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
             }
             QPushButton#instanceRailToggle {
-                background: #f8fafc;
-                border: 1px solid #dbe3ef;
+                background: #f9fafb;
+                border: 1px solid #e2e8f0;
                 color: #334155;
-                border-radius: 8px;
-                font-weight: 700;
+                border-radius: 7px;
+                font-weight: 600;
                 padding: 0 2px;
             }
             QPushButton#instanceRailToggle:hover {
-                background: #eef2ff;
-                border-color: #c7d2fe;
-                color: #1e40af;
+                background: #f1f5f9;
+                border-color: #cbd5e1;
+                color: #0f172a;
             }
             QListWidget#instanceRailList {
                 background: #f8fafc;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
-                padding: 2px;
+                padding: 4px;
                 outline: none;
             }
             QListWidget#instanceRailList::item {
-                min-height: 24px;
+                min-height: 26px;
                 border-radius: 6px;
-                padding: 2px 0;
-                color: #475569;
-                font-size: 11px;
+                padding: 2px 6px 2px 15px;
+                color: #334155;
+                font-size: 10px;
                 font-weight: 600;
-                text-align: center;
+                text-align: left;
             }
             QListWidget#instanceRailList::item:hover:!selected {
-                background: #eef2f7;
+                background: #f1f5f9;
             }
             QListWidget#instanceRailList::item:selected {
-                background: #dbeafe;
-                color: #1d4ed8;
+                background: #edf2ff;
+                color: #1e3a8a;
             }
             """
         )
         rail_layout = QVBoxLayout(self._instance_rail)
-        rail_layout.setContentsMargins(6, 8, 6, 8)
+        rail_layout.setContentsMargins(8, 8, 8, 8)
         rail_layout.setSpacing(8)
         self._instance_rail_toggle = QPushButton('管理')
         self._instance_rail_toggle.setObjectName('instanceRailToggle')
         self._instance_rail_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._instance_rail_toggle.setFixedHeight(32)
+        self._instance_rail_toggle.setFixedHeight(30)
         self._instance_rail_toggle.clicked.connect(self._toggle_instance_drawer)
         rail_layout.addWidget(self._instance_rail_toggle, 0)
 
@@ -638,7 +638,7 @@ class MainWindow(QMainWindow):
             item.setData(RAIL_ROLE_INSTANCE_ID, ws.instance_id)
             item.setData(RAIL_ROLE_INSTANCE_STATE, ws.state)
             item.setToolTip(f'实例: {ws.name}\n状态: {state_text}\n最近更新: {updated}')
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             self._instance_rail_list.addItem(item)
             if ws.instance_id == self._active_instance_id:
                 current_row = row
