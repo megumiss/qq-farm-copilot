@@ -23,11 +23,9 @@ class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
 
     def _get_effective_run_mode(self, *, emit_hint: bool = False) -> RunMode:
-        """返回生效运行模式（仅 QQ 支持后台模式）。"""
-        mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
-        if emit_hint and mode != self.config.safety.run_mode:
-            self.log_message.emit('提示：仅QQ平台支持后台模式，已自动使用前台模式')
-        return mode
+        """返回生效运行模式。"""
+        _ = emit_hint
+        return resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
 
     def update_config(self, config: AppConfig):
         """更新配置并将变更同步到执行器。"""

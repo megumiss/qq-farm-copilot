@@ -2,7 +2,7 @@
 
 > ⚠️ 重构中：当前版本部分功能暂不可用
 
-基于 OpenCV + PyQt6 的 QQ 农场自动化工具，支持PC端QQ（后台、多开）和微信平台。
+基于 OpenCV + PyQt6 的 QQ 农场自动化工具，支持 PC 端 QQ和微信平台多开和后台运行。
 
 ## 使用提示
 
@@ -38,9 +38,23 @@
 - [ ] QQSvip礼包领取
 - [x] 好友农场偷菜
 - [x] 好友农场帮忙
+- [ ] 自动同步等级
 - [x] 任务调度时间自定义
-- [x] QQ平台后台运行
-- [x] QQ平台多开，QQ、微信双开
+- [x] 支持QQ/微信平台后台运行
+- [x] 支持QQ/微信平台多开
+
+
+## 后台/多开说明
+
+1. 启动程序后，右侧竖向实例栏可进行实例管理（新增/删除/切换/克隆/重命名）。
+2. 每个实例有独立配置与运行目录：
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\logs\`
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\screenshots\`
+3. 切换实例后，中间面板显示并控制当前实例；开始/暂停/停止/立即执行仅作用于当前实例。
+4. 多开场景建议先在每个实例的设置中手动选择窗口。
+5. 微信选择后台模式运行时，有可能会把窗口拉到前台，暂不清楚原因
+
 
 ## 环境要求
 
@@ -94,17 +108,6 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 - `F9`：暂停 / 恢复
 - `F10`：停止
-
-## 多开说明
-
-1. 启动程序后，右侧竖向实例栏可进行实例管理（新增/删除/切换/克隆/重命名）。
-2. 每个实例有独立配置与运行目录：
-   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
-   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\logs\`
-   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\screenshots\`
-3. 切换实例后，中间面板显示并控制当前实例；开始/暂停/停止/立即执行仅作用于当前实例。
-4. 多开场景建议先在每个实例的设置中手动选择窗口。
-5. QQ平台平台支持多开，微信平台不支持，QQ（后台）和微信（前台）可同时运行。
 
 
 ## 配置说明

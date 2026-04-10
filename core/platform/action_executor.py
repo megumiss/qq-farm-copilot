@@ -140,10 +140,10 @@ class ActionExecutor:
         cx, cy = client
         lparam = self._make_lparam(cx, cy)
         hwnd = wintypes.HWND(self._hwnd)
-        user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
-        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        user32.SendMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
+        user32.SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
         time.sleep(0.03)
-        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+        user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
         self._bg_last_client_pos = (cx, cy)
         return True
 
@@ -221,7 +221,7 @@ class ActionExecutor:
         cx, cy = client
         lparam = self._make_lparam(cx, cy)
         wparam = MK_LBUTTON if self._bg_dragging else 0
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_MOUSEMOVE, wparam, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_MOUSEMOVE, wparam, lparam)
         self._bg_last_client_pos = (cx, cy)
         if duration > 0:
             time.sleep(float(duration))
@@ -246,7 +246,7 @@ class ActionExecutor:
             return False
         cx, cy = self._bg_last_client_pos
         lparam = self._make_lparam(cx, cy)
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONDOWN, MK_LBUTTON, lparam)
         self._bg_dragging = True
         return True
 
@@ -269,7 +269,7 @@ class ActionExecutor:
             return False
         cx, cy = self._bg_last_client_pos
         lparam = self._make_lparam(cx, cy)
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONUP, 0, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONUP, 0, lparam)
         self._bg_dragging = False
         return True
 

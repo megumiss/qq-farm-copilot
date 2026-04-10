@@ -53,15 +53,14 @@ class RunMode(str, Enum):
 
 def is_background_mode_supported(window_platform: WindowPlatform | str) -> bool:
     """判断当前平台是否支持后台模式。"""
-    platform_value = window_platform.value if hasattr(window_platform, 'value') else str(window_platform)
-    return str(platform_value).lower() == WindowPlatform.QQ.value
+    _ = window_platform
+    return True
 
 
 def resolve_effective_run_mode(run_mode: RunMode | str, window_platform: WindowPlatform | str) -> RunMode:
-    """根据平台约束计算生效运行模式（仅 QQ 支持后台）。"""
+    """根据配置计算生效运行模式。"""
+    _ = window_platform
     mode = run_mode if isinstance(run_mode, RunMode) else RunMode(str(run_mode))
-    if mode == RunMode.BACKGROUND and not is_background_mode_supported(window_platform):
-        return RunMode.FOREGROUND
     return mode
 
 
