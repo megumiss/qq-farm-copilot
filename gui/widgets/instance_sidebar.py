@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -21,6 +22,7 @@ class InstanceSidebar(QWidget):
     """实例列表与实例操作栏。"""
 
     instance_selected = pyqtSignal(str)
+    collapse_requested = pyqtSignal()
     create_requested = pyqtSignal()
     delete_requested = pyqtSignal(str)
     clone_requested = pyqtSignal(str)
@@ -32,9 +34,7 @@ class InstanceSidebar(QWidget):
         super().__init__(parent)
         self._id_to_state: dict[str, str] = {}
         self._id_to_name: dict[str, str] = {}
-        self._sidebar_width = 112
         self._build_ui()
-        self.setFixedWidth(self._sidebar_width)
 
     def _build_ui(self) -> None:
         self.setObjectName('instanceSidebar')
@@ -49,6 +49,18 @@ class InstanceSidebar(QWidget):
                 color: #334155;
                 font-weight: 700;
                 font-size: 13px;
+            }
+            QPushButton#instanceCollapseBtn {
+                background: #f8fafc;
+                border: 1px solid #dbe3ef;
+                color: #334155;
+                border-radius: 6px;
+                padding: 0 8px;
+                font-weight: 700;
+            }
+            QPushButton#instanceCollapseBtn:hover {
+                background: #eef2ff;
+                border-color: #c7d2fe;
             }
             QListWidget#instanceList {
                 border: 1px solid #e2e8f0;
@@ -95,15 +107,23 @@ class InstanceSidebar(QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
         self._title = QLabel('实例')
         self._title.setObjectName('instanceTitle')
-        root.addWidget(self._title)
+        title_row.addWidget(self._title, 1)
+        self._btn_collapse = QPushButton('收起')
+        self._btn_collapse.setObjectName('instanceCollapseBtn')
+        self._btn_collapse.setFixedHeight(26)
+        self._btn_collapse.clicked.connect(self.collapse_requested.emit)
+        title_row.addWidget(self._btn_collapse, 0)
+        root.addLayout(title_row)
 
         self._list = QListWidget()
         self._list.setObjectName('instanceList')
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
-        self._list.setMinimumWidth(self._sidebar_width - 16)
         root.addWidget(self._list, 1)
 
         self._actions_wrap = QFrame()

@@ -14,6 +14,7 @@ from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath,
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -248,6 +250,7 @@ class MainWindow(QMainWindow):
         ratio = self.devicePixelRatioF()
         base_min_width = int(540 / ratio) + 550
         base_init_width = int(540 / ratio) + 670
+        rail_width = 52
         self.setMinimumWidth(base_min_width)
         self.resize(base_init_width, 100)
         self.setStyleSheet(_build_stylesheet())
@@ -261,8 +264,6 @@ class MainWindow(QMainWindow):
         root = QHBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
-
-        from PyQt6.QtWidgets import QSizePolicy
 
         self._screenshot_label = QLabel('启动后显示\n实时截图')
         self._screenshot_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -280,18 +281,81 @@ class MainWindow(QMainWindow):
         self._workspace_stack = QStackedWidget()
         root.addWidget(self._workspace_stack, 1)
 
+        self._instance_rail = QFrame()
+        self._instance_rail.setObjectName('instanceRail')
+        self._instance_rail.setFixedWidth(rail_width)
+        self._instance_rail.setStyleSheet(
+            """
+            QFrame#instanceRail {
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+            }
+            QPushButton#instanceRailToggle {
+                background: #f8fafc;
+                border: 1px solid #dbe3ef;
+                color: #334155;
+                border-radius: 8px;
+                font-weight: 700;
+                padding: 0 2px;
+            }
+            QPushButton#instanceRailToggle:hover {
+                background: #eef2ff;
+                border-color: #c7d2fe;
+                color: #1e40af;
+            }
+            QLabel#instanceRailHint {
+                color: #94a3b8;
+                font-size: 11px;
+            }
+            """
+        )
+        rail_layout = QVBoxLayout(self._instance_rail)
+        rail_layout.setContentsMargins(6, 8, 6, 8)
+        rail_layout.setSpacing(8)
+        self._instance_rail_toggle = QPushButton('实例')
+        self._instance_rail_toggle.setObjectName('instanceRailToggle')
+        self._instance_rail_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._instance_rail_toggle.setFixedHeight(32)
+        self._instance_rail_toggle.clicked.connect(self._toggle_instance_drawer)
+        rail_layout.addWidget(self._instance_rail_toggle, 0)
+        self._instance_rail_hint = QLabel('>')
+        self._instance_rail_hint.setObjectName('instanceRailHint')
+        self._instance_rail_hint.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        rail_layout.addWidget(self._instance_rail_hint, 0)
+        rail_layout.addStretch()
+        root.addWidget(self._instance_rail, 0)
+
         self._instance_sidebar = InstanceSidebar()
         self._instance_sidebar.instance_selected.connect(self._switch_instance)
+        self._instance_sidebar.collapse_requested.connect(lambda: self._set_instance_drawer_visible(False))
         self._instance_sidebar.create_requested.connect(self._on_instance_create)
         self._instance_sidebar.delete_requested.connect(self._on_instance_delete)
         self._instance_sidebar.clone_requested.connect(self._on_instance_clone)
         self._instance_sidebar.rename_requested.connect(self._on_instance_rename)
-        root.addWidget(self._instance_sidebar)
+        self._instance_drawer = QFrame(central)
+        self._instance_drawer.setObjectName('instanceDrawer')
+        self._instance_drawer.setStyleSheet(
+            """
+            QFrame#instanceDrawer {
+                background: rgba(255, 255, 255, 0.98);
+                border: 1px solid #dbe3ef;
+                border-radius: 10px;
+            }
+            """
+        )
+        self._instance_drawer.setFixedWidth(236)
+        drawer_layout = QVBoxLayout(self._instance_drawer)
+        drawer_layout.setContentsMargins(6, 6, 6, 6)
+        drawer_layout.setSpacing(0)
+        drawer_layout.addWidget(self._instance_sidebar, 1)
+        self._instance_drawer.hide()
 
-        sidebar_extra = self._instance_sidebar.width() + 10
-        self.setMinimumWidth(base_min_width + sidebar_extra)
-        if self.width() < base_init_width + sidebar_extra:
-            self.resize(base_init_width + sidebar_extra, self.height())
+        rail_extra = rail_width + 10
+        self.setMinimumWidth(base_min_width + rail_extra)
+        if self.width() < base_init_width + rail_extra:
+            self.resize(base_init_width + rail_extra, self.height())
+        QTimer.singleShot(0, self._layout_instance_drawer)
 
     @staticmethod
     def _runtime_paths(session: InstanceSession) -> dict[str, str]:
@@ -473,6 +537,35 @@ class MainWindow(QMainWindow):
         self._instance_sidebar.set_instances(items)
         if self._active_instance_id:
             self._instance_sidebar.set_active_instance(self._active_instance_id)
+
+    def _layout_instance_drawer(self) -> None:
+        """按当前窗口尺寸定位右侧实例抽屉（覆盖主区，不挤压布局）。"""
+        central = self.centralWidget()
+        if central is None or not hasattr(self, '_instance_drawer'):
+            return
+        margin = 12
+        rail_geo = self._instance_rail.geometry()
+        drawer_w = int(self._instance_drawer.width())
+        drawer_h = max(260, int(central.height()) - margin * 2)
+        anchor_x = int(rail_geo.x()) if rail_geo.width() > 0 else int(central.width()) - margin
+        x = max(margin, anchor_x - drawer_w - 8)
+        y = margin
+        self._instance_drawer.setGeometry(x, y, drawer_w, drawer_h)
+        if self._instance_drawer.isVisible():
+            self._instance_drawer.raise_()
+
+    def _set_instance_drawer_visible(self, visible: bool) -> None:
+        """显示/隐藏右侧实例抽屉。"""
+        self._layout_instance_drawer()
+        self._instance_drawer.setVisible(bool(visible))
+        if visible:
+            self._instance_drawer.raise_()
+        self._instance_rail_hint.setText('<' if visible else '>')
+        self._instance_rail_toggle.setText('收起' if visible else '实例')
+
+    def _toggle_instance_drawer(self) -> None:
+        """切换右侧实例抽屉显隐。"""
+        self._set_instance_drawer_visible(not self._instance_drawer.isVisible())
 
     def _set_window_title_for_active(self) -> None:
         ws = self._workspaces.get(self._active_instance_id)
@@ -857,6 +950,7 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._layout_instance_drawer()
         if not hasattr(self, '_centered'):
             screen = self.screen().availableGeometry()
             size = self.frameGeometry()
@@ -873,5 +967,6 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._layout_instance_drawer()
         if self._last_screenshot is not None:
             self._update_screenshot(self._last_screenshot, force=True)
