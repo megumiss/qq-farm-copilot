@@ -10,7 +10,7 @@ import time
 import keyboard
 from PIL import Image
 from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl
-from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QStyledItemDelegate,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -139,6 +140,8 @@ APP_WINDOW_TITLE = 'QQ Farm Copilot（免费软件，谨防倒卖）'
 APP_SETTINGS_ORG = 'QQFarmCopilot'
 APP_SETTINGS_NAME = 'QQFarmCopilot'
 FREE_NOTICE_ENABLED_KEY = 'ui/free_notice_enabled'
+RAIL_ROLE_INSTANCE_ID = int(Qt.ItemDataRole.UserRole)
+RAIL_ROLE_INSTANCE_STATE = RAIL_ROLE_INSTANCE_ID + 1
 INSTANCE_DIALOG_STYLE = """
 QMessageBox, QInputDialog {
     background-color: #f8fafc;
@@ -173,6 +176,33 @@ QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
     border-color: #c7d2fe;
 }
 """
+
+
+class InstanceRailItemDelegate(QStyledItemDelegate):
+    """在实例窄轨项右上角绘制状态圆点。"""
+
+    @staticmethod
+    def _state_color(state: str) -> QColor:
+        state_key = str(state or 'idle').strip().lower()
+        if state_key == 'running':
+            return QColor('#22c55e')
+        if state_key == 'paused':
+            return QColor('#f59e0b')
+        return QColor('#94a3b8')
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        super().paint(painter, option, index)
+        state = str(index.data(RAIL_ROLE_INSTANCE_STATE) or 'idle')
+        dot_color = self._state_color(state)
+        dot_radius = 4
+        cx = int(option.rect.right()) - 9
+        cy = int(option.rect.top()) + 8
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(dot_color)
+        painter.drawEllipse(cx - dot_radius, cy - dot_radius, dot_radius * 2, dot_radius * 2)
+        painter.restore()
 
 
 @dataclass
@@ -230,6 +260,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.instance_manager = instance_manager
         self._workspaces: dict[str, InstanceWorkspace] = {}
+        self._instance_state_changed_at: dict[str, float] = {}
         self._active_instance_id: str = ''
         self._last_screenshot: Image.Image | None = None
         self._last_screenshot_time = 0.0
@@ -351,6 +382,7 @@ class MainWindow(QMainWindow):
         self._instance_rail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._instance_rail_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._instance_rail_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._instance_rail_list.setItemDelegate(InstanceRailItemDelegate(self._instance_rail_list))
         self._instance_rail_list.itemSelectionChanged.connect(self._on_rail_instance_selected)
         rail_layout.addWidget(self._instance_rail_list, 1)
 
@@ -566,6 +598,7 @@ class MainWindow(QMainWindow):
         for session in self.instance_manager.iter_sessions():
             ws = self._workspaces.get(session.instance_id)
             state = ws.state if ws else 'idle'
+            self._instance_state_changed_at.setdefault(session.instance_id, time.time())
             items.append({'id': session.instance_id, 'name': session.name, 'state': state})
         self._instance_sidebar.set_instances(items)
         if self._active_instance_id:
@@ -580,6 +613,22 @@ class MainWindow(QMainWindow):
             return '--'
         return text if len(text) <= 4 else f'{text[:4]}…'
 
+    @staticmethod
+    def _state_text(state: str) -> str:
+        """状态英文值转中文。"""
+        return {
+            'running': '运行中',
+            'paused': '已暂停',
+            'idle': '空闲',
+        }.get(str(state or 'idle').strip().lower(), '未知')
+
+    def _format_state_changed_time(self, instance_id: str) -> str:
+        """格式化实例状态最近更新时间。"""
+        ts = float(self._instance_state_changed_at.get(str(instance_id or ''), 0.0) or 0.0)
+        if ts <= 0:
+            return '--'
+        return time.strftime('%H:%M:%S', time.localtime(ts))
+
     def _refresh_instance_rail_list(self) -> None:
         """刷新窄轨实例列表，支持折叠状态直接切换。"""
         self._instance_rail_list.blockSignals(True)
@@ -592,8 +641,11 @@ class MainWindow(QMainWindow):
                 continue
             short = self._rail_short_name(ws.name)
             item = QListWidgetItem(short)
-            item.setData(Qt.ItemDataRole.UserRole, ws.instance_id)
-            item.setToolTip(f'实例: {ws.name}\nID: {ws.instance_id}\n状态: {ws.state}')
+            state_text = self._state_text(ws.state)
+            updated = self._format_state_changed_time(ws.instance_id)
+            item.setData(RAIL_ROLE_INSTANCE_ID, ws.instance_id)
+            item.setData(RAIL_ROLE_INSTANCE_STATE, ws.state)
+            item.setToolTip(f'实例: {ws.name}\n状态: {state_text}\n最近更新: {updated}')
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._instance_rail_list.addItem(item)
             if ws.instance_id == self._active_instance_id:
@@ -608,7 +660,7 @@ class MainWindow(QMainWindow):
         item = self._instance_rail_list.currentItem()
         if item is None:
             return
-        target_id = str(item.data(Qt.ItemDataRole.UserRole) or '')
+        target_id = str(item.data(RAIL_ROLE_INSTANCE_ID) or '')
         if not target_id or target_id == self._active_instance_id:
             return
         self._switch_instance(target_id)
@@ -735,6 +787,13 @@ class MainWindow(QMainWindow):
         ws.btn_stop.setEnabled(running)
         ws.btn_pause.setText('恢复' if ws.state == 'paused' else '暂停')
 
+    def _mark_instance_state_changed(self, instance_id: str) -> None:
+        """记录实例状态更新时间。"""
+        iid = str(instance_id or '')
+        if not iid:
+            return
+        self._instance_state_changed_at[iid] = time.time()
+
     def _reset_process_logger_to_app_scope(self) -> None:
         ws = self._get_active_session()
         enable_debug = bool(ws and ws.session.config.safety.debug_log_enabled)
@@ -759,8 +818,10 @@ class MainWindow(QMainWindow):
         if ws is None:
             return
         ws.state = str(state or 'idle')
+        self._mark_instance_state_changed(instance_id)
         self._instance_sidebar.update_instance_state(instance_id, ws.state, ws.name)
         self._sync_buttons(ws)
+        self._refresh_instance_rail_list()
 
     def _on_workspace_config_changed(self, instance_id: str, config: AppConfig) -> None:
         ws = self._workspaces.get(instance_id)
@@ -778,8 +839,10 @@ class MainWindow(QMainWindow):
             return
         if ws.engine.start():
             ws.state = 'running'
+            self._mark_instance_state_changed(ws.instance_id)
             self._sync_buttons(ws)
             self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+            self._refresh_instance_rail_list()
 
     def _on_pause(self, instance_id: str | None = None) -> None:
         iid = str(instance_id or self._active_instance_id or '')
@@ -792,8 +855,10 @@ class MainWindow(QMainWindow):
         else:
             ws.engine.resume()
             ws.state = 'running'
+        self._mark_instance_state_changed(ws.instance_id)
         self._sync_buttons(ws)
         self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+        self._refresh_instance_rail_list()
 
     def _on_stop(self, instance_id: str | None = None) -> None:
         iid = str(instance_id or self._active_instance_id or '')
@@ -802,9 +867,11 @@ class MainWindow(QMainWindow):
             return
         ws.engine.stop()
         ws.state = 'idle'
+        self._mark_instance_state_changed(ws.instance_id)
         ws.status_panel.update_stats(ws.engine.scheduler.get_stats())
         self._sync_buttons(ws)
         self._instance_sidebar.update_instance_state(ws.instance_id, ws.state, ws.name)
+        self._refresh_instance_rail_list()
 
     def _on_run_once(self, instance_id: str | None = None) -> None:
         iid = str(instance_id or self._active_instance_id or '')
@@ -897,6 +964,8 @@ class MainWindow(QMainWindow):
         ws.engine.update_config(session.config)
         self._workspaces.pop(old_id, None)
         self._workspaces[ws.instance_id] = ws
+        old_state_ts = float(self._instance_state_changed_at.pop(old_id, 0.0) or 0.0)
+        self._instance_state_changed_at[ws.instance_id] = old_state_ts if old_state_ts > 0 else time.time()
         self._refresh_instance_sidebar()
         self._switch_instance(ws.instance_id)
 
@@ -923,6 +992,7 @@ class MainWindow(QMainWindow):
         self._workspace_stack.removeWidget(ws.container)
         ws.container.deleteLater()
         self._workspaces.pop(instance_id, None)
+        self._instance_state_changed_at.pop(instance_id, None)
         self._refresh_instance_sidebar()
         active = self.instance_manager.get_active()
         if active is not None:
