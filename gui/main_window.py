@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         ratio = self.devicePixelRatioF()
         base_min_width = int(540 / ratio) + 550
         base_init_width = int(540 / ratio) + 670
-        rail_width = 68
+        rail_width = 100
         self.setMinimumWidth(base_min_width)
         self.resize(base_init_width, 100)
         self.setStyleSheet(_build_stylesheet())
@@ -376,6 +376,7 @@ class MainWindow(QMainWindow):
         self._instance_rail_list = QListWidget()
         self._instance_rail_list.setObjectName('instanceRailList')
         self._instance_rail_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._instance_rail_list.setTextElideMode(Qt.TextElideMode.ElideNone)
         self._instance_rail_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._instance_rail_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._instance_rail_list.setItemDelegate(InstanceRailItemDelegate(self._instance_rail_list))
@@ -603,7 +604,7 @@ class MainWindow(QMainWindow):
         text = str(name or '').strip()
         if not text:
             return '--'
-        return text if len(text) <= 4 else f'{text[:4]}…'
+        return text[:10]
 
     @staticmethod
     def _state_text(state: str) -> str:
