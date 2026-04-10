@@ -53,10 +53,10 @@ def main():
     icon_path = _resolve_app_icon_path()
     app.setWindowIcon(QIcon(icon_path))
 
-    # 延迟导入
-    from gui.main_window import MainWindow
+    # 延迟导入 GUI 加载器
+    from gui.window_loader import build_main_window
 
-    window = MainWindow(config)
+    window = build_main_window(config)
     window.show()
 
     sys.exit(app.exec())
