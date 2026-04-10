@@ -70,6 +70,7 @@ def get_lands_from_land_anchor(
     Returns:
         Full land-cell info list.
         Label rule follows the original tools logic: `label = f"{col}-{rows-r}"`.
+        Output order is sorted by `(col, row)` ascending, e.g. `1-1, 1-2, ...`.
     """
     if land_right_anchor is None or land_left_anchor is None:
         return []
@@ -106,11 +107,9 @@ def get_lands_from_land_anchor(
     row_step_x = vx * scale_row
     row_step_y = vy * scale_row
 
-    lands: list[LandCell] = []
-    order = 0
+    lands_raw: list[LandCell] = []
     for r in range(cell_rows):
         for c in range(cell_cols):
-            order += 1
             x00 = start[0] + col_step_x * float(c) + row_step_x * float(r)
             y00 = start[1] + col_step_y * float(c) + row_step_y * float(r)
             x01 = x00 + col_step_x
@@ -131,9 +130,9 @@ def get_lands_from_land_anchor(
             )
             logical_row = cell_rows - r
             logical_col = c + 1
-            lands.append(
+            lands_raw.append(
                 LandCell(
-                    order=order,
+                    order=0,
                     row=logical_row,
                     col=logical_col,
                     label=f'{logical_col}-{logical_row}',
@@ -142,4 +141,15 @@ def get_lands_from_land_anchor(
                 )
             )
 
-    return lands
+    lands_sorted = sorted(lands_raw, key=lambda cell: (cell.col, cell.row))
+    return [
+        LandCell(
+            order=idx,
+            row=cell.row,
+            col=cell.col,
+            label=cell.label,
+            center=cell.center,
+            vertices=cell.vertices,
+        )
+        for idx, cell in enumerate(lands_sorted, start=1)
+    ]

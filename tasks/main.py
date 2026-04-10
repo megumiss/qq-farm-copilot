@@ -151,15 +151,21 @@ class TaskMain(TaskBase):
 
         # 点击空白处
         self.ui.device.click_button(GOTO_MAIN)
-        self.ui.device.screenshot()
-        # 检查土地位置
-        if not self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False) or not self.ui.appear(
-            BTN_LAND_LEFT, offset=30, threshold=0.9, static=False
-        ):
-            # TODO 如果地块偏移，
-            # self.ui.device.screenshot()
-            logger.error('土地存在遮挡，请调整画面位置')
-            return
+        while 1:
+            self.ui.device.screenshot()
+            if self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False) and self.ui.appear(
+                BTN_LAND_LEFT, offset=30, threshold=0.9, static=False
+            ):
+                break
+            # 检查土地位置
+            if not self.ui.appear(BTN_LAND_RIGHT, offset=30, threshold=0.9, static=False):
+                self.ui.device.swipe((270, 220), (240, 220), speed=30, delay=1, hold=0.1)
+                logger.error('土地存在遮挡，画面左移')
+                continue
+            if not self.ui.appear(BTN_LAND_LEFT, offset=30, threshold=0.9, static=False):
+                self.ui.device.swipe((240, 220), (270, 220), speed=30, delay=1, hold=0.1)
+                logger.error('土地存在遮挡，画面右移')
+                continue
 
         # 判断是否需要播种
         # has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
@@ -213,7 +219,7 @@ class TaskMain(TaskBase):
         threshold: float = 0.85,
         y_range: tuple[int, int] | None = None,
     ) -> list[tuple[int, int]]:
-        """匹配并去重地块模板，按 y 轴范围过滤后返回全部地块中心坐标。"""
+        """匹配并去重空白地块模板，按 y 轴范围过滤后返回全部地块中心坐标。"""
         self.ui.device.screenshot()
 
         land_buttons = self._get_icon_land_buttons()
@@ -280,22 +286,58 @@ class TaskMain(TaskBase):
         )
         return coords
 
+    @staticmethod
+    def _select_center_land_coord(coords: list[tuple[int, int]]) -> tuple[int, int] | None:
+        """优先选最上方地块，再选 x 最靠近中心的地块。"""
+        if not coords:
+            return None
+        avg_x = sum(x for x, _ in coords) / float(len(coords))
+        min_y = min(y for _, y in coords)
+        top_row = [point for point in coords if point[1] == min_y]
+        return min(top_row, key=lambda p: abs(p[0] - avg_x))
+
+    def _get_labor_anchor_location(self) -> tuple[int, int] | None:
+        """识别劳动最光荣锚点位置，用于估计画面平移。"""
+        self.ui.device.screenshot()
+        return self.ui.appear_location(BTN_LABOR_IS_GLORIOUS, offset=30, threshold=0.7, static=False)
+
+    @staticmethod
+    def _shift_land_coords(coords: list[tuple[int, int]], dx: float, dy: float) -> list[tuple[int, int]]:
+        """按平移量修正地块坐标。"""
+        return [(int(round(x + dx)), int(round(y + dy))) for x, y in coords]
+
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
+        # get_lands_from_land_anchor()
         land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
         if not land_coords:
-            logger.warning('自动播种流程: 未匹配到有效地块坐标，跳过播种')
+            logger.info('自动播种流程: 未发现空土地，跳过播种')
             return
 
+        before_labor_anchor = self._get_labor_anchor_location()
+        seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
         while 1:
             self.ui.device.screenshot()
             # 检查种子选择框出现
             if self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False):
                 break
             if not self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False):
-                land_x, land_y = land_coords[0]
+                land_x, land_y = seed_popup_land
                 self.engine.device.click_point(int(land_x), int(land_y), desc='点击可播种地块')
                 self.ui.device.sleep(0.2)
+
+        after_labor_anchor = self._get_labor_anchor_location()
+        if before_labor_anchor is not None and after_labor_anchor is not None:
+            dx = float(after_labor_anchor[0] - before_labor_anchor[0])
+            dy = float(after_labor_anchor[1] - before_labor_anchor[1])
+            drift = math.hypot(dx, dy)
+            if drift > 3.0:
+                logger.info(
+                    '自动播种流程: 触发种子框后画面偏移 {:.1f}px（anchor=btn_labor_is_glorious），已修正播种坐标', drift
+                )
+            land_coords = self._shift_land_coords(land_coords, dx, dy)
+        else:
+            logger.warning('自动播种流程: 劳动最光荣锚点识别失败，继续使用原始地块坐标')
 
         # 选择种子
         seed_det = None
@@ -326,7 +368,7 @@ class TaskMain(TaskBase):
 
         dragging = False
         try:
-            self.engine.device.drag_down_point(int(seed_det.x), int(seed_det.y), duration=0.05)
+            self.engine.device.drag_down_point(int(seed_det.x), int(seed_det.y), duration=0.1)
             dragging = True
             self.ui.device.sleep(0.1)
 
