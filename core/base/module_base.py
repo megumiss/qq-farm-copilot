@@ -191,11 +191,84 @@ class ModuleBase:
         threshold: float = 0.75,
         roi: tuple[int, int, int, int] | None = None,
     ) -> list[Button]:
-        """icon_ 模板多命中识别（对齐 NIKKE 的 TEMPLATE.match_multi 使用方式）。"""
+        """icon_ 模板多命中识别（内部切换为 NIKKE `match_multi` 逻辑）。"""
         template_name = str(getattr(icon_button, 'template_name', '') or '')
         if not template_name.startswith('icon_'):
             return []
-        return self.match_template_multi(icon_button, threshold=threshold, roi=roi)
+
+        image = self.device.image
+        if image is None:
+            return []
+
+        icon_button.ensure_template()
+        template = icon_button.image
+        if template is None:
+            return []
+
+        search = image
+        offset_x = 0
+        offset_y = 0
+        if roi is not None:
+            x1, y1, x2, y2 = [int(v) for v in roi]
+            sh, sw = image.shape[:2]
+            x1 = max(0, min(x1, sw - 1))
+            y1 = max(0, min(y1, sh - 1))
+            x2 = max(x1 + 1, min(x2, sw))
+            y2 = max(y1 + 1, min(y2, sh))
+            if x2 <= x1 or y2 <= y1:
+                return []
+            search = image[y1:y2, x1:x2]
+            offset_x = x1
+            offset_y = y1
+
+        th, tw = template.shape[:2]
+        sh, sw = search.shape[:2]
+        if th > sh or tw > sw:
+            return []
+
+        # 对齐 NIKKE Template.match_multi：matchTemplate + similarity 筛选。
+        match_result = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
+        points = np.array(np.where(match_result > float(threshold))).T[:, ::-1]
+        grouped = self._group_points_like_nikke(points, threshold=3)
+
+        out: list[Button] = []
+        for point in grouped:
+            x = int(point[0]) + offset_x
+            y = int(point[1]) + offset_y
+            area = (x, y, x + tw, y + th)
+            dynamic = Button(
+                area=area,
+                color=icon_button.color,
+                button=area,
+                file=icon_button.file,
+                name=icon_button.name,
+            )
+            out.append(dynamic)
+        return out
+
+    @staticmethod
+    def _group_points_like_nikke(points: np.ndarray, threshold: int = 3) -> np.ndarray:
+        """按 NIKKE Points.group 规则做点聚类（曼哈顿距离）。"""
+        if points is None or len(points) == 0:
+            return np.empty((0, 2), dtype=int)
+
+        grouped: list[list[int]] = []
+        remaining = np.array(points, dtype=int)
+        if remaining.ndim == 1:
+            remaining = np.array([remaining], dtype=int)
+        if len(remaining) == 1:
+            return np.array([remaining[0]], dtype=int)
+
+        while len(remaining):
+            p0 = remaining[0]
+            p1 = remaining[1:]
+            distance = np.sum(np.abs(p1 - p0), axis=1)
+            merged = np.append(p1[distance <= threshold], [p0], axis=0)
+            mean_point = np.round(np.mean(merged, axis=0)).astype(int).tolist()
+            grouped.append(mean_point)
+            remaining = p1[distance > threshold]
+
+        return np.array(grouped, dtype=int)
 
     def match_icon_result(
         self,
