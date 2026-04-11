@@ -89,6 +89,7 @@
     "warehouse_first": true,
     "preferred_crop": "白萝卜",
     "player_level": 10,
+    "level_ocr_enabled": true,
     "window_platform": "qq",
     "window_position": "left_center"
   },

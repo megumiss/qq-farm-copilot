@@ -39,7 +39,7 @@
 - [x] QQSVIP礼包领取
 - [x] 好友农场偷菜
 - [x] 好友农场帮忙
-- [ ] 自动同步等级
+- [x] 自动同步等级
 - [x] 任务调度时间自定义
 - [x] 支持QQ/微信平台后台运行
 - [x] 支持QQ/微信平台多开
@@ -122,9 +122,14 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
-- `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种）
+- `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种）、等级 OCR 开关
 - `executor`：空队列策略、默认间隔、最大失败次数
 - `tasks`：动态任务字典
+
+等级 OCR 相关（`planting`）：
+
+- `level_ocr_enabled`：是否启用播种前等级 OCR（对应设置面板“等级”右侧“自动同步”开关）
+- 等级 OCR 的 QQ/微信识别区域由代码常量维护（见 `tasks/main.py`）
 
 `tasks` 示例：
 

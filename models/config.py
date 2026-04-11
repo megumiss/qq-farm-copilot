@@ -177,8 +177,19 @@ class PlantingConfig(BaseModel):
     warehouse_first: bool = True
     preferred_crop: str = '白萝卜'
     player_level: int = 10
+    level_ocr_enabled: bool = True
     window_platform: WindowPlatform = WindowPlatform.QQ
     window_position: WindowPosition = WindowPosition.LEFT_CENTER
+
+    @field_validator('player_level', mode='before')
+    @classmethod
+    def _normalize_player_level(cls, value):
+        """规范化 `player_level` 输入值。"""
+        try:
+            level = int(value)
+        except Exception:
+            level = 1
+        return max(1, min(999, level))
 
 
 class AppConfig(BaseModel):

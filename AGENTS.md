@@ -13,6 +13,7 @@
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `number_box_detector` 选择最左种子
+- 等级同步：播种前执行等级 OCR；由 `config.planting.level_ocr_enabled` 控制，识别后回写 `config.planting.player_level`；QQ/微信 ROI 使用 `tasks/main.py` 内常量
 - 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 
@@ -135,6 +136,8 @@
 
 - `main`
 : 主流程任务，内部先巡查维护，再按页面分发子任务。
+
+- `main` 在自动播种前会先尝试等级 OCR（可由 `config.planting.level_ocr_enabled` 关闭）。
 
 - `main` 在主页面的子任务顺序（命中即短路）：
 1. `plant`

@@ -50,16 +50,27 @@ def _safe_put(event_queue, payload: dict[str, Any]) -> None:
         pass
 
 
-def _load_config(raw: Any) -> AppConfig:
+def _load_config(raw: Any, *, config_path: str | None = None) -> AppConfig:
     """从 dict/AppConfig 构建配置对象。"""
+    cfg: AppConfig
     if isinstance(raw, AppConfig):
-        return raw
-    if isinstance(raw, dict):
+        cfg = raw
+    elif isinstance(raw, dict):
         try:
-            return AppConfig.model_validate(raw)
+            cfg = AppConfig.model_validate(raw)
         except Exception:
-            return AppConfig(**raw)
-    return AppConfig()
+            cfg = AppConfig(**raw)
+    else:
+        cfg = AppConfig()
+
+    resolved = str(config_path or '').strip()
+    if resolved:
+        try:
+            cfg._config_path = AppConfig._resolve_config_path(resolved)
+            cfg._template_path = AppConfig._resolve_template_path(cfg._config_path)
+        except Exception:
+            pass
+    return cfg
 
 
 def _image_to_png_bytes(image: Any) -> bytes | None:
@@ -90,7 +101,7 @@ def bot_worker_main(
     instance_id: str = 'default',
 ) -> None:
     """worker 进程主循环。"""
-    config = _load_config(initial_config)
+    config = _load_config(initial_config, config_path=str((runtime_paths or {}).get('config_path') or ''))
     _configure_worker_logger(
         event_queue,
         config.safety.debug_log_enabled,
@@ -109,10 +120,12 @@ def bot_worker_main(
     engine.emit_preview = lambda image: _forward_image_event('screenshot', image)
     engine.emit_detection_preview = lambda image: _forward_image_event('detection', image)
     engine.emit_stats = lambda stats: _safe_put(event_queue, {'type': 'stats', 'data': dict(stats or {})})
+    engine.emit_config_event = lambda cfg: _safe_put(event_queue, {'type': 'config', 'data': dict(cfg or {})})
 
     engine.log_message.connect(lambda text: _safe_put(event_queue, {'type': 'log', 'data': str(text)}))
     engine.state_changed.connect(lambda state: _safe_put(event_queue, {'type': 'state', 'data': str(state)}))
     engine.stats_updated.connect(lambda stats: _safe_put(event_queue, {'type': 'stats', 'data': dict(stats or {})}))
+    engine.config_updated.connect(lambda cfg: _safe_put(event_queue, {'type': 'config', 'data': dict(cfg or {})}))
 
     engine.screenshot_updated.connect(
         lambda image: _safe_put(
@@ -185,7 +198,7 @@ def bot_worker_main(
                     continue
 
                 if cmd == 'update_config':
-                    new_cfg = _load_config(payload)
+                    new_cfg = _load_config(payload, config_path=str((runtime_paths or {}).get('config_path') or ''))
                     _configure_worker_logger(
                         event_queue,
                         new_cfg.safety.debug_log_enabled,

@@ -16,6 +16,7 @@ from models.config import PlantMode
 from models.farm_state import ActionType
 from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from tasks.base import TaskBase
+from utils.level_ocr import LevelOCR
 from utils.number_box_detector import NumberBoxDetector
 from utils.shop_item_ocr import ShopItemOCR
 
@@ -27,6 +28,8 @@ LAND_MATCH_Y_RANGE = (350, 850)
 FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS = 0.5
 FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS = 1.0
 FIRST_CLICK_SIDE_MARGIN_RATIO = 0.2
+LEVEL_OCR_REGION_QQ = (130, 102, 160, 125)
+LEVEL_OCR_REGION_WECHAT = (67, 102, 97, 125)
 
 
 class TaskMain(TaskBase):
@@ -38,6 +41,7 @@ class TaskMain(TaskBase):
         self._expand_failed = False
         self.shop_ocr = ShopItemOCR()
         self.number_box_detector = NumberBoxDetector(ui=self.ui)
+        self.level_ocr = LevelOCR()
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：在 run 内按 feature 显式控制每个子方法。"""
@@ -63,6 +67,7 @@ class TaskMain(TaskBase):
 
         # 自动播种
         if self.has_feature(features, 'auto_plant'):
+            self._sync_player_level_before_plant()
             self._run_feature_plant()
 
         # TODO 自动施肥
@@ -74,6 +79,102 @@ class TaskMain(TaskBase):
             self._run_feature_upgrade()
 
         return self.ok()
+
+    def _get_level_ocr_region(self, frame_shape: tuple[int, ...]) -> tuple[int, int, int, int] | None:
+        """按平台读取等级 OCR 常量区域并裁剪到截图范围内。"""
+        planting = self.engine.config.planting
+        platform = getattr(planting, 'window_platform', 'qq')
+        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        if platform_value == 'wechat':
+            raw_region = LEVEL_OCR_REGION_WECHAT
+        else:
+            raw_region = LEVEL_OCR_REGION_QQ
+
+        try:
+            x1, y1, x2, y2 = [int(v) for v in raw_region]
+        except Exception:
+            return None
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        frame_h = int(frame_shape[0]) if len(frame_shape) >= 1 else 0
+        frame_w = int(frame_shape[1]) if len(frame_shape) >= 2 else 0
+        if frame_w <= 1 or frame_h <= 1:
+            return None
+
+        x1 = max(0, min(x1, frame_w - 1))
+        y1 = max(0, min(y1, frame_h - 1))
+        x2 = max(x1 + 1, min(x2, frame_w))
+        y2 = max(y1 + 1, min(y2, frame_h))
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return x1, y1, x2, y2
+
+    def _sync_player_level_before_plant(self) -> int | None:
+        """播种前识别主界面等级并回写配置。"""
+        planting = self.engine.config.planting
+        if not bool(getattr(planting, 'level_ocr_enabled', True)):
+            return None
+
+        cv_img = self.ui.device.screenshot()
+        if cv_img is None:
+            return None
+
+        roi = self._get_level_ocr_region(cv_img.shape)
+        if roi is None:
+            logger.warning('等级识别: ROI 无效，跳过本轮识别')
+            return None
+
+        level, score, raw_text = self.level_ocr.detect_level(
+            cv_img,
+            region=roi,
+        )
+        if level is None:
+            logger.debug('等级识别: 未匹配等级 | roi={} raw={}', roi, raw_text)
+            return None
+
+        old_level = int(getattr(planting, 'player_level', 1))
+        if level == old_level:
+            logger.debug('等级识别: 等级未变化 | Lv{} score={:.3f}', level, score)
+            return level
+
+        planting.player_level = int(level)
+        try:
+            self.engine.config.save()
+        except Exception as exc:
+            logger.warning('等级识别: 等级已更新但保存配置失败 | Lv{} -> Lv{} | error={}', old_level, level, exc)
+        else:
+            config_path = str(getattr(self.engine.config, '_config_path', '') or '')
+            logger.info(
+                '等级识别: 等级已更新 | Lv{} -> Lv{} | roi={} score={:.3f} raw={} config={}',
+                old_level,
+                level,
+                roi,
+                score,
+                raw_text,
+                config_path or 'default-config-path',
+            )
+            self._emit_config_updated()
+        return level
+
+    def _emit_config_updated(self) -> None:
+        """向主进程广播配置已更新，触发设置面板刷新。"""
+        payload = dict(self.engine.config.model_dump())
+        direct_sender = getattr(self.engine, 'emit_config_event', None)
+        if callable(direct_sender):
+            try:
+                direct_sender(payload)
+                return
+            except Exception as exc:
+                logger.debug('等级识别: 直连广播配置更新失败: {}', exc)
+
+        signal = getattr(self.engine, 'config_updated', None)
+        if signal is None or not hasattr(signal, 'emit'):
+            return
+        try:
+            signal.emit(payload)
+        except Exception as exc:
+            logger.debug('等级识别: 广播配置更新失败: {}', exc)
 
     def _run_feature_harvest(self) -> str | None:
         """一键收获"""
@@ -334,7 +435,7 @@ class TaskMain(TaskBase):
         number_boxes: list,
         *,
         threshold: float = 0.80,
-        near_distance: float = 30.0,
+        near_distance: float = 50.0,
     ) -> set[int]:
         """识别 seed_btn 模板并返回需排除的数字框序号集合。"""
         if not number_boxes:

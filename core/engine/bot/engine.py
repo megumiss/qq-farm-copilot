@@ -65,6 +65,7 @@ class BotEngine(QObject):
     state_changed = pyqtSignal(str)
     stats_updated = pyqtSignal(dict)
     detection_result = pyqtSignal(object)
+    config_updated = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -199,6 +200,11 @@ class BotEngine(QObject):
             image = self._decode_image(payload)
             if image is not None:
                 self.detection_result.emit(image)
+            return
+
+        if etype == 'config':
+            if isinstance(payload, dict):
+                self.config_updated.emit(dict(payload))
             return
 
         if etype == 'command_result':
