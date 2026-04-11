@@ -23,7 +23,6 @@ a = Analysis(
         'gui.widgets.feature_panel',
         'gui.widgets.instance_sidebar',
         'gui.widgets.log_panel',
-        'gui.widgets.settings_panel',
         'gui.widgets.status_panel',
         'gui.widgets.task_panel',
         'models.config',
