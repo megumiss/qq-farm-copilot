@@ -31,8 +31,10 @@ class NumberBoxDetector:
         x_max_px: int = 500,
         y_min_px: int = 400,
         y_max_px: int = 750,
+        max_box_width_px: int = 30,
+        left_anchor_max_right_gap_px: int = 35,
         iou_dedup_threshold: float = 0.35,
-        digit_template_threshold: float = 0.9,
+        digit_template_threshold: float = 0.7,
         digit_iou_dedup_threshold: float = 0.50,
     ):
         self.ui = ui
@@ -40,6 +42,8 @@ class NumberBoxDetector:
         self.x_max_px = int(x_max_px)
         self.y_min_px = int(y_min_px)
         self.y_max_px = int(y_max_px)
+        self.max_box_width_px = int(max_box_width_px)
+        self.left_anchor_max_right_gap_px = int(left_anchor_max_right_gap_px)
         self.iou_dedup_threshold = float(iou_dedup_threshold)
         self.digit_template_threshold = float(digit_template_threshold)
         self.digit_iou_dedup_threshold = float(digit_iou_dedup_threshold)
@@ -105,12 +109,32 @@ class NumberBoxDetector:
 
         from core.ui.assets import ASSET_NAME_TO_CONST
 
+        left_anchor_button = ASSET_NAME_TO_CONST.get('icon_num_left')
+        left_anchor_boxes: list[tuple[int, int, int, int]] = []
+        if left_anchor_button is not None:
+            left_matches = self.ui.match_icon_multi(
+                left_anchor_button,
+                threshold=float(self.digit_template_threshold),
+                roi=detect_roi,
+            )
+            for det in left_matches:
+                lx1, ly1, lx2, ly2 = [int(v) for v in det.area]
+                lx1 = max(rx1, lx1)
+                ly1 = max(ry1, ly1)
+                lx2 = min(rx2, lx2)
+                ly2 = min(ry2, ly2)
+                if lx2 <= lx1 or ly2 <= ly1:
+                    continue
+                left_anchor_boxes.append((lx1, ly1, lx2, ly2))
+        if not left_anchor_boxes:
+            return []
+
         for name in template_names:
             button = ASSET_NAME_TO_CONST.get(name)
             digit = self._parse_digit_template_name(name)
             if button is None or digit is None:
                 continue
-            matches = self.ui.match_template_multi(
+            matches = self.ui.match_icon_multi(
                 button,
                 threshold=float(self.digit_template_threshold),
                 roi=detect_roi,
@@ -123,7 +147,9 @@ class NumberBoxDetector:
                 y2 = min(ry2, y2)
                 if x2 <= x1 or y2 <= y1:
                     continue
-                # match_template_multi 返回结果已按置信度排序；用顺序构造稳定分数用于后续去重优先级。
+                if not self._is_digit_near_left_anchor((x1, y1, x2, y2), left_anchor_boxes):
+                    continue
+                # match_icon_multi 返回结果已按置信度排序；用顺序构造稳定分数用于后续去重优先级。
                 confidence = float(self.digit_template_threshold) - float(idx) * 1e-4
                 candidates.append((x1, y1, x2, y2, confidence, digit))
 
@@ -152,33 +178,22 @@ class NumberBoxDetector:
         deduped.sort(key=lambda item: (int((item[1] + item[3]) / 2), int((item[0] + item[2]) / 2)))
         return deduped
 
-    @staticmethod
-    def _normalize_box_sizes(
-        boxes: list[tuple[int, int, int, int]],
-        frame_w: int,
-        frame_h: int,
-    ) -> list[tuple[int, int, int, int]]:
-        if not boxes:
-            return []
-        widths = [b[2] - b[0] for b in boxes]
-        heights = [b[3] - b[1] for b in boxes]
-        ref_w = max(34, min(int(round(float(np.median(widths)))), 52))
-        ref_h = max(20, min(int(round(float(np.median(heights)))), 38))
-
-        out: list[tuple[int, int, int, int]] = []
-        for x1, y1, x2, y2 in boxes:
-            cx = int(round((x1 + x2) / 2.0))
-            cy = int(round((y1 + y2) / 2.0))
-            nx1 = int(round(cx - ref_w / 2.0))
-            ny1 = int(round(cy - ref_h / 2.0))
-            nx2 = int(nx1 + ref_w)
-            ny2 = int(ny1 + ref_h)
-            nx1 = max(0, nx1)
-            ny1 = max(0, ny1)
-            nx2 = min(frame_w, nx2)
-            ny2 = min(frame_h, ny2)
-            out.append((nx1, ny1, nx2, ny2))
-        return out
+    def _is_digit_near_left_anchor(
+        self,
+        digit_box: tuple[int, int, int, int],
+        left_anchor_boxes: list[tuple[int, int, int, int]],
+    ) -> bool:
+        dx1, dy1, dx2, dy2 = [int(v) for v in digit_box]
+        dcy = int(round((dy1 + dy2) / 2.0))
+        for lx1, ly1, lx2, ly2 in left_anchor_boxes:
+            lcy = int(round((ly1 + ly2) / 2.0))
+            gap_right = int(dx1 - lx2)
+            if gap_right < 0 or gap_right > int(self.left_anchor_max_right_gap_px):
+                continue
+            if abs(dcy - lcy) > max(14, int(round((ly2 - ly1) * 0.75))):
+                continue
+            return True
+        return False
 
     def _aggregate_digit_hits_to_number_boxes(
         self,
@@ -205,12 +220,21 @@ class NumberBoxDetector:
                 grouped_runs.append([box])
                 continue
 
-            last_box = grouped_runs[-1][-1]
+            curr_run = grouped_runs[-1]
+            last_box = curr_run[-1]
             cur_cy = int(round((box[1] + box[3]) / 2.0))
             last_cy = int(round((last_box[1] + last_box[3]) / 2.0))
             horizontal_gap = int(box[0] - last_box[2])
-            if abs(cur_cy - last_cy) <= row_tol and horizontal_gap <= merge_gap:
-                grouped_runs[-1].append(box)
+            run_x1 = min(item[0] for item in curr_run)
+            run_x2 = max(item[2] for item in curr_run)
+            merged_width = int(max(run_x2, box[2]) - min(run_x1, box[0]))
+            can_merge = (
+                abs(cur_cy - last_cy) <= row_tol
+                and 0 <= horizontal_gap <= merge_gap
+                and merged_width <= int(self.max_box_width_px)
+            )
+            if can_merge:
+                curr_run.append(box)
             else:
                 grouped_runs.append([box])
 
@@ -223,23 +247,18 @@ class NumberBoxDetector:
             y1 = min(box[1] for box in run)
             x2 = max(box[2] for box in run)
             y2 = max(box[3] for box in run)
-            cx = int(round((x1 + x2) / 2.0))
-            cy = int(round((y1 + y2) / 2.0))
-            run_width = int(x2 - x1)
-            run_height = int(y2 - y1)
-
-            target_w = int(max(24, min(52, round(float(run_width) * 2.6))))
-            target_h = int(max(20, min(38, round(float(run_height) * 2.8))))
-            bx1 = int(round(cx - target_w / 2.0))
-            by1 = int(round(cy - target_h / 2.0))
-            bx2 = int(bx1 + target_w)
-            by2 = int(by1 + target_h)
+            bx1 = int(x1)
+            by1 = int(y1)
+            bx2 = int(x2)
+            by2 = int(y2)
 
             bx1 = max(rx1, bx1)
             by1 = max(ry1, by1)
             bx2 = min(rx2, bx2)
             by2 = min(ry2, by2)
             if bx2 <= bx1 or by2 <= by1:
+                continue
+            if (bx2 - bx1) > int(self.max_box_width_px):
                 continue
             out.append((bx1, by1, bx2, by2))
 
@@ -267,7 +286,7 @@ class NumberBoxDetector:
             rx1 = 0
             ry1 = max(0, min(h - 1, int(self.y_min_px - 80)))
             rx2 = w
-            ry2 = max(ry1 + 1, min(h, int(self.y_max_px + 120)))
+            ry2 = max(ry1 + 1, min(h, int(self.y_max_px)))
             primary_roi = (rx1, ry1, rx2, ry2)
         else:
             x1, y1, x2, y2 = [int(v) for v in roi]
@@ -307,8 +326,7 @@ class NumberBoxDetector:
             y_min=y_min,
             y_max=y_max,
         )
-        boxes.sort(key=lambda box: box[0])
-        selected = self._normalize_box_sizes(boxes, frame_w=w, frame_h=h)
+        selected = sorted(boxes, key=lambda box: box[0])
 
         out: list[NumberBox] = []
         for idx, box in enumerate(selected, start=1):
