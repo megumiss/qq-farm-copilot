@@ -435,7 +435,7 @@ class TaskMain(TaskBase):
         number_boxes: list,
         *,
         threshold: float = 0.80,
-        near_distance: float = 30.0,
+        near_distance: float = 50.0,
     ) -> set[int]:
         """识别 seed_btn 模板并返回需排除的数字框序号集合。"""
         if not number_boxes:
