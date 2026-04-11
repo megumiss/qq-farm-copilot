@@ -15,7 +15,6 @@ class StatusPanel(QWidget):
         panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('status_panel', {})
         self._group_titles = panel_labels.get('group_titles', {})
         self._cell_labels = panel_labels.get('labels', {})
-        self._page_name_map = panel_labels.get('page_names', {})
         self._state_text_map = panel_labels.get('state_text', {})
         self._labels = {}
         self._init_ui()
@@ -35,8 +34,10 @@ class StatusPanel(QWidget):
         status_layout.setVerticalSpacing(8)
         self._add_cell(status_layout, 0, 0, self._cell_labels.get('state', 'State'), 'state', '● --')
         self._add_cell(status_layout, 0, 1, self._cell_labels.get('elapsed', 'Elapsed'), 'elapsed', '--')
-        self._add_cell(status_layout, 0, 2, self._cell_labels.get('next_check', 'Next check'), 'next_farm', '--')
-        self._add_cell(status_layout, 0, 3, self._cell_labels.get('page', 'Page'), 'current_page', '--')
+        self._add_cell(
+            status_layout, 0, 2, self._cell_labels.get('current_platform', 'Current platform'), 'platform', '--'
+        )
+        self._add_cell(status_layout, 0, 3, self._cell_labels.get('window_id', 'Window ID'), 'window_id', '--')
         status_group.setLayout(status_layout)
         outer.addWidget(status_group)
 
@@ -51,8 +52,8 @@ class StatusPanel(QWidget):
         self._add_cell(task_layout, 0, 1, self._cell_labels.get('running_tasks', 'Running'), 'running_tasks', '0')
         self._add_cell(task_layout, 0, 2, self._cell_labels.get('pending_tasks', 'Pending'), 'pending_tasks', '0')
         self._add_cell(task_layout, 0, 3, self._cell_labels.get('waiting_tasks', 'Waiting'), 'waiting_tasks', '0')
-        self._add_cell(task_layout, 1, 0, self._cell_labels.get('failure_count', 'Failures'), 'failure_count', '0')
-        self._add_cell(task_layout, 1, 1, self._cell_labels.get('last_tick_ms', 'Last tick'), 'last_tick_ms', '--')
+        self._add_cell(task_layout, 1, 0, self._cell_labels.get('next_task', 'Next task'), 'next_task', '--')
+        self._add_cell(task_layout, 1, 1, self._cell_labels.get('next_run', 'Next run'), 'next_run', '--')
         task_group.setLayout(task_layout)
         outer.addWidget(task_group)
 
@@ -89,13 +90,6 @@ class StatusPanel(QWidget):
         grid.addWidget(wrapper, row, col)
         self._labels[key] = value
 
-    def _localize_page(self, raw_page) -> str:
-        """执行 `localize page` 相关处理。"""
-        text = str(raw_page or '--').strip()
-        if not text:
-            return '--'
-        return self._page_name_map.get(text, text)
-
     def update_stats(self, stats: dict):
         """更新 `stats` 状态。"""
         state = stats.get('state', 'idle')
@@ -109,13 +103,13 @@ class StatusPanel(QWidget):
         self._labels['state'].setText(text)
         self._labels['state'].setStyleSheet(f'color: {color}; font-size: 12px; font-weight: bold;')
         self._labels['elapsed'].setText(stats.get('elapsed', '--'))
-        self._labels['next_farm'].setText(stats.get('next_farm_check', '--'))
-        self._labels['current_page'].setText(self._localize_page(stats.get('current_page', '--')))
+        self._labels['platform'].setText(str(stats.get('current_platform', '--')))
+        self._labels['window_id'].setText(str(stats.get('window_id', '--')))
         self._labels['current_task'].setText(str(stats.get('current_task', '--')))
-        self._labels['failure_count'].setText(str(stats.get('failure_count', 0)))
         self._labels['running_tasks'].setText(str(stats.get('running_tasks', 0)))
         self._labels['pending_tasks'].setText(str(stats.get('pending_tasks', 0)))
         self._labels['waiting_tasks'].setText(str(stats.get('waiting_tasks', 0)))
-        self._labels['last_tick_ms'].setText(str(stats.get('last_tick_ms', '--')))
+        self._labels['next_task'].setText(str(stats.get('next_task', '--')))
+        self._labels['next_run'].setText(str(stats.get('next_run', '--')))
         for key in ('harvest', 'plant', 'water', 'weed', 'bug', 'sell'):
             self._labels[key].setText(str(stats.get(key, 0)))

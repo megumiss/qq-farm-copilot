@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 from datetime import datetime, timedelta
 from functools import lru_cache
@@ -197,7 +198,7 @@ class BotExecutorMixin:
                 if parsed_next_run is not None:
                     next_run = parsed_next_run
                 elif getattr(cfg, 'trigger', TaskTriggerType.INTERVAL) == TaskTriggerType.DAILY:
-                    next_run = now + timedelta(seconds=self._task_seconds_by_trigger(task_name, now))
+                    next_run = self._next_daily_target_time(cfg.daily_time, now)
 
             out[task_name] = TaskItem(
                 name=task_name,
@@ -227,8 +228,8 @@ class BotExecutorMixin:
         return rect, None
 
     @staticmethod
-    def _seconds_to_next_daily(daily_time: str, now: datetime | None = None) -> int:
-        """计算距离下一次每日触发时间的秒数。"""
+    def _next_daily_target_time(daily_time: str, now: datetime | None = None) -> datetime:
+        """计算下一次每日触发的目标时间点（绝对时间）。"""
         current = now or datetime.now()
         text = str(daily_time or '00:01')
         try:
@@ -239,14 +240,15 @@ class BotExecutorMixin:
         target = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if target <= current:
             target = target + timedelta(days=1)
-        return max(1, int((target - current).total_seconds()))
+        return target
 
     @staticmethod
-    def _task_next_ts(item: TaskItem | None) -> float:
-        """读取任务的下一次执行时间戳（禁用任务返回 0）。"""
-        if not item or not item.enabled:
-            return 0.0
-        return item.next_run.timestamp()
+    def _seconds_to_next_daily(daily_time: str, now: datetime | None = None) -> int:
+        """计算距离下一次每日触发时间的秒数。"""
+        current = now or datetime.now()
+        target = BotExecutorMixin._next_daily_target_time(daily_time, current)
+        # 避免 int 向下取整造成 1 秒偏差（例如 00:01 变成次日 00:00:59）。
+        return max(1, int(math.ceil((target - current).total_seconds())))
 
     @staticmethod
     def _format_task_next_run(item: TaskItem | None) -> str:
@@ -255,13 +257,22 @@ class BotExecutorMixin:
             return '--'
         return item.next_run.strftime('%H:%M:%S')
 
+    def _snapshot_next_task_name(self, snapshot: TaskSnapshot) -> str:
+        """读取快照内下一次将执行的任务名（无任务返回 `--`）。"""
+        if snapshot.pending_tasks:
+            return self._task_display_name(snapshot.pending_tasks[0].name)
+        if snapshot.waiting_tasks:
+            return self._task_display_name(snapshot.waiting_tasks[0].name)
+        return '--'
+
     @staticmethod
-    def _snapshot_next_due_ts(snapshot: TaskSnapshot) -> float:
-        """读取快照内“最早的下一次执行时间戳”（无任务返回 0）。"""
-        items = [*snapshot.pending_tasks, *snapshot.waiting_tasks]
-        if not items:
-            return 0.0
-        return min(item.next_run.timestamp() for item in items)
+    def _snapshot_next_run_text(snapshot: TaskSnapshot) -> str:
+        """读取快照内下一次执行时间文本（无任务返回 `--`）。"""
+        if snapshot.pending_tasks:
+            return snapshot.pending_tasks[0].next_run.strftime('%m-%d %H:%M:%S')
+        if snapshot.waiting_tasks:
+            return snapshot.waiting_tasks[0].next_run.strftime('%m-%d %H:%M:%S')
+        return '--'
 
     def _task_seconds_by_trigger(self, task_name: str, now: datetime | None = None) -> int:
         """按任务触发类型返回下次调度间隔秒数。"""
@@ -420,17 +431,13 @@ class BotExecutorMixin:
         """接收执行器快照并更新 GUI 统计面板。"""
         if not self._accept_executor_events:
             return
-        next_due_ts = self._snapshot_next_due_ts(snapshot)
         self.scheduler.update_runtime_metrics(
-            current_task=snapshot.running_task or '--',
-            failure_count=self._runtime_failure_count,
+            current_task=self._task_display_name(snapshot.running_task) if snapshot.running_task else '--',
+            next_task=self._snapshot_next_task_name(snapshot),
+            next_run=self._snapshot_next_run_text(snapshot),
             running_tasks=1 if snapshot.running_task else 0,
             pending_tasks=len(snapshot.pending_tasks),
             waiting_tasks=len(snapshot.waiting_tasks),
-        )
-        self.scheduler.set_next_checks(
-            farm_ts=next_due_ts,
-            friend_ts=self._task_next_ts(self._executor_tasks.get('friend')),
         )
         self._emit_stats_now()
 
@@ -448,12 +455,10 @@ class BotExecutorMixin:
             and getattr(cfg, 'trigger', TaskTriggerType.INTERVAL) == TaskTriggerType.DAILY
             and self._task_executor is not None
         ):
-            self._task_executor.task_delay(task_name, seconds=self._task_seconds_by_trigger(task_name))
-
-        if result.success:
-            self._runtime_failure_count = 0
-        else:
-            self._runtime_failure_count += 1
+            self._task_executor.task_delay(
+                task_name,
+                target_time=self._next_daily_target_time(cfg.daily_time),
+            )
 
         if not result.success and task_name in self._task_error_delay_overrides and self._task_executor is not None:
             delay_seconds = max(1, int(self._task_error_delay_overrides.pop(task_name)))
@@ -475,9 +480,6 @@ class BotExecutorMixin:
             msg = f'{msg} | 错误: {result.error}'
         logger.info(msg)
 
-        self.scheduler.update_runtime_metrics(
-            failure_count=self._runtime_failure_count,
-        )
         self._emit_stats_now()
 
     def _on_executor_task_error(self, task_name: str, exc: Exception, tb_text: str):

@@ -34,7 +34,6 @@ class BotInitMixin:
         self._instance_id = str(instance_id or 'default')
         self._runtime_paths = dict(runtime_paths or {})
         self._error_dir = str(self._runtime_paths.get('error_dir') or 'logs/error')
-        self._runtime_failure_count = 0
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()

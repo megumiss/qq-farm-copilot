@@ -62,24 +62,20 @@
     "labels": {
       "state": "状态",
       "elapsed": "已运行",
-      "next_check": "下次检查",
-      "page": "页面",
+      "current_platform": "当前平台",
+      "window_id": "窗口ID",
       "current_task": "当前任务",
       "running_tasks": "运行队列",
       "pending_tasks": "待执行",
       "waiting_tasks": "等待中",
-      "failure_count": "失败次数",
-      "last_tick_ms": "上次耗时",
+      "next_task": "下个任务",
+      "next_run": "下次运行",
       "harvest": "收获",
       "plant": "播种",
       "water": "浇水",
       "weed": "除草",
       "bug": "除虫",
       "sell": "出售"
-    },
-    "page_names": {
-      "--": "--",
-      "unknown": "未知页面"
     },
     "state_text": {
       "idle": "● 未启动",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
 from enum import Enum
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -42,16 +41,15 @@ class TaskScheduler(QObject):
             'sell': 0,
             'total_actions': 0,
         }
-        self._next_farm_check: float = 0.0
-        self._next_friend_check: float = 0.0
         self._runtime_metrics = {
-            'current_page': '--',
+            'current_platform': '--',
+            'window_id': '--',
             'current_task': '--',
-            'failure_count': 0,
+            'next_task': '--',
+            'next_run': '--',
             'running_tasks': 0,
             'pending_tasks': 0,
             'waiting_tasks': 0,
-            'last_tick_ms': '--',
         }
 
     @property
@@ -85,12 +83,6 @@ class TaskScheduler(QObject):
             **self._stats,
             **self._runtime_metrics,
             'elapsed': f'{hours}小时{minutes}分',
-            'next_farm_check': datetime.fromtimestamp(self._next_farm_check).strftime('%H:%M:%S')
-            if self._next_farm_check
-            else '--',
-            'next_friend_check': datetime.fromtimestamp(self._next_friend_check).strftime('%H:%M:%S')
-            if self._next_friend_check
-            else '--',
             'state': self._state.value,
         }
 
@@ -113,29 +105,18 @@ class TaskScheduler(QObject):
         self._set_state(target)
         self.stats_updated.emit(self.get_stats())
 
-    def set_next_checks(self, *, farm_ts: float | None = None, friend_ts: float | None = None):
-        """设置 `next_checks` 参数。"""
-        changed = False
-        if farm_ts is not None and self._next_farm_check != farm_ts:
-            self._next_farm_check = float(farm_ts)
-            changed = True
-        if friend_ts is not None and self._next_friend_check != friend_ts:
-            self._next_friend_check = float(friend_ts)
-            changed = True
-        if changed:
-            self.stats_updated.emit(self.get_stats())
-
     def update_runtime_metrics(self, **kwargs):
         """更新 `runtime_metrics` 状态。"""
         changed = False
         for key in (
-            'current_page',
+            'current_platform',
+            'window_id',
             'current_task',
-            'failure_count',
+            'next_task',
+            'next_run',
             'running_tasks',
             'pending_tasks',
             'waiting_tasks',
-            'last_tick_ms',
         ):
             if key in kwargs and self._runtime_metrics.get(key) != kwargs[key]:
                 self._runtime_metrics[key] = kwargs[key]

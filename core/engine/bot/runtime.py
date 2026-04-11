@@ -124,8 +124,6 @@ class BotRuntimeMixin:
         self._fatal_error_stop_requested = False
         self._task_error_delay_overrides.clear()
         self._task_error_type_names.clear()
-        # [启动阶段] 重置运行会话与计数器。
-        self._runtime_failure_count = 0
         current_platform = getattr(self.config.planting, 'window_platform', 'qq')
         current_platform_value = current_platform.value if hasattr(current_platform, 'value') else str(current_platform)
         Button.set_template_platform(normalize_template_platform(current_platform_value))
@@ -192,14 +190,20 @@ class BotRuntimeMixin:
 
         self.scheduler.stop()
         self.scheduler.force_state('running')
+        window_id_text = '--'
+        try:
+            window_id_text = f'0x{int(getattr(window, "hwnd", 0)):X}'
+        except Exception:
+            window_id_text = '--'
         self.scheduler.update_runtime_metrics(
             current_task='--',
-            current_page='unknown',
-            failure_count=self._runtime_failure_count,
+            next_task='--',
+            next_run='--',
+            current_platform=str(current_platform_value or '--'),
+            window_id=window_id_text,
             running_tasks=0,
             pending_tasks=0,
             waiting_tasks=0,
-            last_tick_ms='--',
         )
         self._init_executor()
 
@@ -216,14 +220,14 @@ class BotRuntimeMixin:
 
         self.scheduler.update_runtime_metrics(
             current_task='--',
-            current_page='--',
-            failure_count=self._runtime_failure_count,
+            next_task='--',
+            next_run='--',
+            current_platform='--',
+            window_id='--',
             running_tasks=0,
             pending_tasks=0,
             waiting_tasks=0,
-            last_tick_ms='--',
         )
-        self.scheduler.set_next_checks(farm_ts=0.0, friend_ts=0.0)
         # 兜底刷新：确保UI在点击停止后立即看到最新状态。
         self.state_changed.emit('idle')
         self.stats_updated.emit(self.scheduler.get_stats())
