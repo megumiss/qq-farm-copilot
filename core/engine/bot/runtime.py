@@ -15,7 +15,7 @@ from core.ui.page import (
 )
 from core.ui.ui import UI
 from models.config import AppConfig, PlantMode, RunMode, resolve_effective_run_mode
-from models.game_data import get_best_crop_for_level
+from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from utils.template_paths import normalize_template_platform
 
 
@@ -23,11 +23,9 @@ class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
 
     def _get_effective_run_mode(self, *, emit_hint: bool = False) -> RunMode:
-        """返回生效运行模式（仅 QQ 支持后台模式）。"""
-        mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
-        if emit_hint and mode != self.config.safety.run_mode:
-            self.log_message.emit('提示：仅QQ平台支持后台模式，已自动使用前台模式')
-        return mode
+        """返回生效运行模式。"""
+        _ = emit_hint
+        return resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
 
     def update_config(self, config: AppConfig):
         """更新配置并将变更同步到执行器。"""
@@ -48,16 +46,24 @@ class BotRuntimeMixin:
         if planting.strategy == PlantMode.BEST_EXP_RATE:
             best = get_best_crop_for_level(planting.player_level)
             if best:
-                return best[0]
+                planting.preferred_crop = best[0]
+        elif planting.strategy == PlantMode.LATEST_LEVEL:
+            latest = get_latest_crop_for_level(planting.player_level)
+            if latest:
+                planting.preferred_crop = latest[0]
         return planting.preferred_crop
 
     def _resolve_crop_name(self) -> str:
-        """根据策略决定种植作物"""
+        """解析并返回当前播种作物。"""
         crop_name = self._resolve_crop_name_quiet()
         if self.config.planting.strategy == PlantMode.BEST_EXP_RATE:
             best = get_best_crop_for_level(self.config.planting.player_level)
             if best:
-                logger.info(f'策略选择: {best[0]} (经验效率 {best[4] / best[3]:.4f}/秒)')
+                logger.info(f'策略自动最优: {best[0]} (经验效率 {best[4] / best[3]:.4f}/秒)')
+        elif self.config.planting.strategy == PlantMode.LATEST_LEVEL:
+            latest = get_latest_crop_for_level(self.config.planting.player_level)
+            if latest:
+                logger.info(f'策略自动最新: {latest[0]} (解锁等级 Lv{latest[2]})')
         return crop_name
 
     def _clear_screen(self, rect: tuple):
@@ -128,7 +134,9 @@ class BotRuntimeMixin:
             self.log_message.emit('未找到 assets 按钮模板，请先运行 button_extract 工具')
             return False
 
-        window = self.window_manager.find_window(self.config.window_title_keyword)
+        window = self.window_manager.find_window(
+            self.config.window_title_keyword, self.config.window_select_rule, current_platform_value
+        )
         if not window:
             self.log_message.emit('未找到QQ农场窗口，请先打开微信小程序中的QQ农场')
             return False
@@ -147,7 +155,9 @@ class BotRuntimeMixin:
         platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         self.window_manager.resize_window(pos_value, platform_value)
         time.sleep(0.5)
-        window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
+        window = self.window_manager.refresh_window_info(
+            self.config.window_title_keyword, self.config.window_select_rule, platform_value
+        )
         self.log_message.emit(
             f'窗口已调整（整窗外框目标：540x960 + 非客户区增量）-> 实际外框 {window.width}x{window.height}'
         )
@@ -189,7 +199,6 @@ class BotRuntimeMixin:
             running_tasks=0,
             pending_tasks=0,
             waiting_tasks=0,
-            last_result='--',
             last_tick_ms='--',
         )
         self._init_executor()
@@ -212,7 +221,6 @@ class BotRuntimeMixin:
             running_tasks=0,
             pending_tasks=0,
             waiting_tasks=0,
-            last_result='--',
             last_tick_ms='--',
         )
         self.scheduler.set_next_checks(farm_ts=0.0, friend_ts=0.0)

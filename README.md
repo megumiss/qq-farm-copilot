@@ -2,15 +2,22 @@
 
 > ⚠️ 重构中：当前版本部分功能暂不可用
 
-基于 OpenCV + PyQt6 的 QQ 农场自动化工具，支持PC端QQ（后台）和微信平台。
+基于 OpenCV + PyQt6 的 QQ 农场自动化工具，支持 PC 端 QQ和微信平台多开和后台运行。
+
+## 使用提示
+
+- 本软件完全免费，若付费购买请立即退款。
+- 请认准项目主页获取版本与说明，谨防二次售卖、捆绑分发与虚假收费。
+- 项目地址：`https://github.com/megumiss/qq-farm-copilot`
+- 本项目基于 [qq-farm-auto](https://github.com/Z7ANN/qq-farm-auto)，重构了后端架构
 
 ## 当前实现概览
 
 - 架构：`BotEngine` + `TaskExecutor` + UI 页面识别（`core/ui`）
 - 调度：统一任务执行器，支持 `INTERVAL` / `DAILY`
-- 任务配置：`configs/config.json` 中 `tasks` 为**动态字典**
+- 实例配置：`%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json` 中 `tasks` 为**动态字典**
 - 任务优先级：`tasks.<task>.priority`（数字越小越先执行）
-- UI：左侧实时截图，右侧状态/任务调度/任务功能/设置
+- UI：左侧实时截图、中间实例运行面板、最右侧竖向实例栏（新增/删除/切换/克隆/重命名）
 
 当前内置任务（通过 `_run_task_*` 自动发现）：
 
@@ -22,8 +29,8 @@
 ## 已实现功能
 
 - [x] 一键收获 / 除草 / 除虫 / 浇水
-- [ ] 自动购买种子
-- [ ] 自动播种
+- [x] 自动购买种子
+- [x] 自动播种
 - [ ] 自动扩建 / 升级土地
 - [x] 仓库批量出售
 - [ ] 任务奖励领取
@@ -32,8 +39,23 @@
 - [x] QQSVIP礼包领取
 - [x] 好友农场偷菜
 - [x] 好友农场帮忙
+- [ ] 自动同步等级
 - [x] 任务调度时间自定义
-- [x] QQ平台后台运行
+- [x] 支持QQ/微信平台后台运行
+- [x] 支持QQ/微信平台多开
+
+
+## 后台/多开说明
+
+1. 启动程序后，右侧竖向实例栏可进行实例管理（新增/删除/切换/克隆/重命名）。
+2. 每个实例有独立配置与运行目录：
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\logs\`
+   - `%APPDATA%\QQFarmCopilot\instances\<instance_id>\screenshots\`
+3. 切换实例后，中间面板显示并控制当前实例；开始/暂停/停止/立即执行仅作用于当前实例。
+4. 多开场景建议先在每个实例的设置中手动选择窗口。
+5. 微信选择后台模式运行时，有可能会把窗口拉到前台，暂不清楚原因
+
 
 ## 环境要求
 
@@ -45,12 +67,15 @@
 
 ### 方式一：下载 Release（推荐）
 
-1. 打开仓库 `Releases` 页面，下载最新的：
+下载链接：
+- [https://github.com/megumiss/qq-farm-copilot/releases/latest](https://github.com/megumiss/qq-farm-copilot/releases/latest)
+
+1. 打开上方链接，下载最新的：
    - `QQFarmCopilot-<tag>-windows-x64.exe`
 2. 将 `exe` 放到任意目录后双击运行。
-3. 首次运行会自动在用户目录生成配置文件：
-   - `%APPDATA%\QQFarmCopilot\configs\config.json`
-   - `%APPDATA%\QQFarmCopilot\configs\ui_labels.json`
+3. 首次运行会自动在用户目录生成实例元数据与默认实例配置：
+   - `%APPDATA%\QQFarmCopilot\profiles.json`
+   - `%APPDATA%\QQFarmCopilot\instances\default\configs\config.json`
 4. 打开 QQ 农场窗口，点击程序内“开始”。
 
 
@@ -76,22 +101,28 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ### 首次运行建议检查
 
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
-2. `planting.window_platform` 与当前平台一致（QQ / 微信）。
-3. 游戏窗口已打开且未最小化。
+2. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
+3. `planting.window_platform` 与当前平台一致（QQ / 微信）。
+4. 游戏窗口已打开且未最小化。
 
 热键：
 
 - `F9`：暂停 / 恢复
 - `F10`：停止
 
+
 ## 配置说明
 
-主配置文件：`configs/config.json`
+实例主配置文件（按实例隔离）：
+
+- `%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json`
 
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
-- `planting`：种植策略、等级、平台、窗口位置
+- `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
+- `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
+- `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种）
 - `executor`：空队列策略、默认间隔、最大失败次数
 - `tasks`：动态任务字典
 
@@ -108,7 +139,9 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "failure_interval_seconds": 30,
     "features": {
       "auto_harvest": true,
-      "auto_plant": true
+      "auto_plant": false,
+      "auto_upgrade": false,
+      "auto_fertilize": false
     }
   },
   "share": {
@@ -119,7 +152,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "interval_seconds": 86400,
     "failure_interval_seconds": 300,
     "features": {
-      "auto_task": true
+      "auto_task": false
     }
   },
   "gift": {
@@ -138,7 +171,16 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 }
 ```
 
+<<<<<<< HEAD
 说明：`gift.features.auto_svip_gift`、`gift.features.auto_mall_gift`、`gift.features.auto_mail` 默认均启用；其中 `auto_mail` 依赖 `menu_goto_mail` 按钮模板，未提供模板时会自动跳过邮件领取步骤。
+=======
+固定禁用项（运行时强制关闭）：
+
+- `main.auto_plant`
+- `main.auto_upgrade`
+- `main.auto_fertilize`
+- `share.auto_task`
+>>>>>>> 1c35b32aa0404b8810eea1147099964f32f2f987
 
 调度规则：
 
@@ -148,10 +190,15 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ## UI 面板
 
-- 状态：运行状态、当前任务、队列数量、统计
-- 任务调度：任务开关、间隔/每日时间、执行器策略
-- 任务设置：`tasks.<task>.features` 开关
-- 设置：窗口关键词、平台、位置、种植策略
+- 左侧：当前实例截图预览
+- 中间：当前实例状态、日志、任务调度、任务设置、设置（保留原逻辑）
+- 右侧实例栏（竖向）：新增、删除、切换、克隆、重命名
+- 启停控制：仍在中间面板内，按当前实例执行
+
+### UI 文案配置
+
+- 任务/功能/状态面板文案读取 `configs/ui_labels.json`（内置配置）。
+- 修改文案后需要重新运行程序，运行中不会热重建已创建面板。
 
 > 说明：`priority` 目前在配置文件中维护，未在面板提供编辑控件。
 
@@ -159,7 +206,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>` 方法
 2. 在 `configs/config.json` 的 `tasks` 增加 `<name>` 配置
-3. （可选）在 `gui/configs/ui_labels.json` 增加任务与功能文案
+3. （可选）在 `configs/ui_labels.json` 增加任务与功能文案
 
 执行器会自动发现 `_run_task_*` 并参与调度。
 
@@ -177,7 +224,6 @@ core/
 configs/
   config.template.json
   config.json
-  ui_labels.json
 tools/
   template_collector.py
   button_extract.py

@@ -21,5 +21,5 @@ class TaskShare(TaskBase):
         self.engine._clear_screen(rect)
         self.ui.ui_ensure(page_main, confirm_wait=0.5)
 
-        out = self._reward.run(rect=rect, features=self.get_features('share'))
-        return self.ok(actions=list(out.actions))
+        self._reward.run(rect=rect, features=self.get_features('share'))
+        return self.ok()

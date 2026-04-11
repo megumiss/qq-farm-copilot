@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from models.config import AppConfig
-from utils.app_paths import ensure_user_configs, resolve_runtime_path, user_configs_dir
+from core.instance.manager import InstanceManager
+from utils.app_paths import resolve_runtime_path, user_app_dir
 from utils.logger import setup_logger
 
 
@@ -36,15 +36,15 @@ def _set_windows_app_id() -> None:
 
 
 def main():
-    # 初始化日志
-    setup_logger()
+    # 初始化实例管理器
+    instance_manager = InstanceManager()
+    instance_manager.load()
+    active = instance_manager.get_active()
+    enable_debug = bool(active and active.config.safety.debug_log_enabled)
+    log_dir = str(user_app_dir() / 'logs')
 
-    # 初始化用户配置目录（Windows: %APPDATA%/QQFarmCopilot/configs）
-    ensure_user_configs()
-
-    # 加载配置
-    config_path = user_configs_dir() / 'config.json'
-    config = AppConfig.load(str(config_path))
+    # 初始化日志（主进程日志）
+    setup_logger(log_dir=log_dir, enable_debug=enable_debug)
 
     # 启动GUI
     _set_windows_app_id()
@@ -53,10 +53,10 @@ def main():
     icon_path = _resolve_app_icon_path()
     app.setWindowIcon(QIcon(icon_path))
 
-    # 延迟导入
-    from gui.main_window import MainWindow
+    # 延迟导入 GUI 加载器
+    from gui.window_loader import build_main_window
 
-    window = MainWindow(config)
+    window = build_main_window(instance_manager)
     window.show()
 
     sys.exit(app.exec())
@@ -64,4 +64,8 @@ def main():
 
 if __name__ == '__main__':
     mp.freeze_support()
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # 在调试器或终端主动中断时静默退出，避免额外抛出 SystemExit 干扰开发体验。
+        pass

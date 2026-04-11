@@ -2,7 +2,7 @@
 
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QGroupBox, QSizePolicy
 
-from gui.labels import load_ui_labels
+from utils.app_paths import load_config_json_object
 
 
 class StatusPanel(QWidget):
@@ -12,7 +12,7 @@ class StatusPanel(QWidget):
         """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        panel_labels = load_ui_labels().get('status_panel', {})
+        panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('status_panel', {})
         self._group_titles = panel_labels.get('group_titles', {})
         self._cell_labels = panel_labels.get('labels', {})
         self._page_name_map = panel_labels.get('page_names', {})
@@ -53,7 +53,6 @@ class StatusPanel(QWidget):
         self._add_cell(task_layout, 0, 3, self._cell_labels.get('waiting_tasks', 'Waiting'), 'waiting_tasks', '0')
         self._add_cell(task_layout, 1, 0, self._cell_labels.get('failure_count', 'Failures'), 'failure_count', '0')
         self._add_cell(task_layout, 1, 1, self._cell_labels.get('last_tick_ms', 'Last tick'), 'last_tick_ms', '--')
-        self._add_cell(task_layout, 1, 2, self._cell_labels.get('last_result', 'Last result'), 'last_result', '--')
         task_group.setLayout(task_layout)
         outer.addWidget(task_group)
 
@@ -118,6 +117,5 @@ class StatusPanel(QWidget):
         self._labels['pending_tasks'].setText(str(stats.get('pending_tasks', 0)))
         self._labels['waiting_tasks'].setText(str(stats.get('waiting_tasks', 0)))
         self._labels['last_tick_ms'].setText(str(stats.get('last_tick_ms', '--')))
-        self._labels['last_result'].setText(str(stats.get('last_result', '--')))
         for key in ('harvest', 'plant', 'water', 'weed', 'bug', 'sell'):
             self._labels[key].setText(str(stats.get(key, 0)))

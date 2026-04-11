@@ -13,6 +13,8 @@ class LogSignal(QObject):
 
 
 _log_signal = LogSignal()
+_current_log_dir = 'logs'
+_debug_enabled = False
 
 
 def get_log_signal() -> LogSignal:
@@ -27,30 +29,46 @@ def _gui_sink(message):
         _log_signal.new_log.emit(text)
 
 
-def setup_logger(log_dir: str = 'logs'):
+def _resolve_log_level(enable_debug: bool) -> str:
+    """根据配置返回日志级别。"""
+    return 'DEBUG' if bool(enable_debug) else 'INFO'
+
+
+def setup_logger(log_dir: str = 'logs', *, enable_debug: bool = False):
     """初始化日志系统"""
     import os
 
-    os.makedirs(log_dir, exist_ok=True)
+    global _current_log_dir, _debug_enabled
+
+    _current_log_dir = str(log_dir or 'logs')
+    _debug_enabled = bool(enable_debug)
+    level = _resolve_log_level(_debug_enabled)
+
+    os.makedirs(_current_log_dir, exist_ok=True)
 
     logger.remove()
     # 控制台输出（无控制台的 windowed exe 下，sys.stderr 可能为 None）
     if getattr(sys, 'stderr', None) is not None:
         logger.add(
             sys.stderr,
-            level='DEBUG',
+            level=level,
             format='<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}',
         )
     # 文件输出
     logger.add(
-        f'{log_dir}/qq_farm_copilot_{{time:YYYY-MM-DD}}.log',
+        f'{_current_log_dir}/qq_farm_copilot_{{time:YYYY-MM-DD}}.log',
         rotation='00:00',
         retention='7 days',
-        level='DEBUG',
+        level=level,
         format='{time:YYYY-MM-DD HH:mm:ss} | {level:<7} | {message}',
         encoding='utf-8',
     )
     # GUI输出
-    logger.add(_gui_sink, level='INFO', format='{time:HH:mm:ss} | {level:<7} | {message}')
+    logger.add(_gui_sink, level=level, format='{time:HH:mm:ss} | {level:<7} | {message}')
 
     return logger
+
+
+def update_logger_level(enable_debug: bool):
+    """按新配置重建日志输出级别。"""
+    return setup_logger(_current_log_dir, enable_debug=enable_debug)

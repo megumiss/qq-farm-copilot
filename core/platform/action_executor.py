@@ -1,6 +1,7 @@
 """操作执行器 - 支持后台消息点击与前台回退。"""
 
 import ctypes
+import math
 import random
 import time
 from ctypes import wintypes
@@ -10,7 +11,8 @@ from loguru import logger
 
 from models.config import RunMode
 from models.farm_state import Action, OperationResult
-from utils.run_mode_decorator import Config as DecoratorConfig, UNSET
+from utils.run_mode_decorator import UNSET
+from utils.run_mode_decorator import Config as DecoratorConfig
 
 # Windows 消息常量
 WM_MOUSEMOVE = 0x0200
@@ -138,10 +140,10 @@ class ActionExecutor:
         cx, cy = client
         lparam = self._make_lparam(cx, cy)
         hwnd = wintypes.HWND(self._hwnd)
-        user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
-        user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        user32.SendMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
+        user32.SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
         time.sleep(0.03)
-        user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+        user32.SendMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
         self._bg_last_client_pos = (cx, cy)
         return True
 
@@ -219,7 +221,7 @@ class ActionExecutor:
         cx, cy = client
         lparam = self._make_lparam(cx, cy)
         wparam = MK_LBUTTON if self._bg_dragging else 0
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_MOUSEMOVE, wparam, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_MOUSEMOVE, wparam, lparam)
         self._bg_last_client_pos = (cx, cy)
         if duration > 0:
             time.sleep(float(duration))
@@ -244,7 +246,7 @@ class ActionExecutor:
             return False
         cx, cy = self._bg_last_client_pos
         lparam = self._make_lparam(cx, cy)
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONDOWN, MK_LBUTTON, lparam)
         self._bg_dragging = True
         return True
 
@@ -267,7 +269,7 @@ class ActionExecutor:
             return False
         cx, cy = self._bg_last_client_pos
         lparam = self._make_lparam(cx, cy)
-        user32.PostMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONUP, 0, lparam)
+        user32.SendMessageW(wintypes.HWND(self._hwnd), WM_LBUTTONUP, 0, lparam)
         self._bg_dragging = False
         return True
 
@@ -282,8 +284,16 @@ class ActionExecutor:
         if not pos or 'x' not in pos or 'y' not in pos:
             return OperationResult(action=action, success=False, message='缺少点击坐标', timestamp=time.time())
 
+        exec_pos = action.extra.get('live_click_position', {}) if isinstance(action.extra, dict) else {}
+        if exec_pos and 'x' in exec_pos and 'y' in exec_pos:
+            target_rel_x = int(exec_pos['x'])
+            target_rel_y = int(exec_pos['y'])
+        else:
+            target_rel_x = int(pos['x'])
+            target_rel_y = int(pos['y'])
+
         # 转换坐标
-        abs_x, abs_y = self.relative_to_absolute(int(pos['x']), int(pos['y']))
+        abs_x, abs_y = self.relative_to_absolute(target_rel_x, target_rel_y)
         # 检查坐标是否在窗口范围内
         if not (
             self._window_left <= abs_x <= self._window_left + self._window_width
@@ -323,17 +333,18 @@ class ActionExecutor:
 
         return results
 
+    @DecoratorConfig.when(RUN_MODE=RunMode.BACKGROUND)
     def swipe_absolute(
         self,
         p1: tuple[int, int],
         p2: tuple[int, int],
         *,
         speed: float = 15.0,
-        inertia: bool = False,
+        hold: float = 0.0,
         rel_p1: tuple[int, int] | None = None,
         rel_p2: tuple[int, int] | None = None,
     ) -> bool:
-        """执行鼠标滑动（兼容前台/后台模式）。"""
+        """执行鼠标滑动（后台模式）。"""
         try:
             x1, y1 = int(p1[0]), int(p1[1])
             x2, y2 = int(p2[0]), int(p2[1])
@@ -345,58 +356,23 @@ class ActionExecutor:
             logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
             return False
 
-        distance = max(abs(x2 - x1), abs(y2 - y1))
+        distance = math.hypot(x2 - x1, y2 - y1)
         if distance <= 0:
             return True
 
-        speed_value = max(1.0, float(speed))
-        if inertia:
-            total_duration = max(0.05, min(0.45, distance / (speed_value * 220.0)))
-            steps = max(4, min(18, distance // 20))
-        else:
-            # 无惯性模式：增加轨迹采样并降低末段速度，减少抬手瞬间速度。
-            total_duration = max(0.15, min(0.95, distance / (speed_value * 140.0)))
-            steps = max(8, min(36, distance // 12))
-
-        if not self.move_abs(x1, y1, duration=0.01):
-            return False
-        if not self.mouse_down():
-            return False
-
-        ok = True
-        try:
-            # 分段时长：越到后段越慢（ease-out），用于主动去惯性。
-            duration_weights: list[float] = []
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                duration_weights.append(0.7 + 1.6 * t if not inertia else 1.0)
-            total_weight = sum(duration_weights) if duration_weights else 1.0
-
-            for i in range(1, int(steps) + 1):
-                t = i / float(steps)
-                if inertia:
-                    ratio = t
-                else:
-                    ratio = 1.0 - pow(1.0 - t, 2.2)
-                tx = int(round(x1 + (x2 - x1) * ratio))
-                ty = int(round(y1 + (y2 - y1) * ratio))
-                step_duration = total_duration * duration_weights[i - 1] / total_weight
-                if not self.move_abs(tx, ty, duration=step_duration):
-                    ok = False
-                    break
-            if ok and not inertia:
-                # 末端回拉-回位：主动抵消拖拽末速度（比单纯延时更有效）。
-                sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
-                sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
-                pull = max(2, min(10, int(distance * 0.03)))
-                back_x = x2 - sign_x * pull
-                back_y = y2 - sign_y * pull
-                if self._in_window(back_x, back_y):
-                    self.move_abs(back_x, back_y, duration=0.03)
-                    self.move_abs(x2, y2, duration=0.04)
-                time.sleep(0.03)
-        finally:
-            self.mouse_up()
+        speed = max(0.1, float(speed))
+        hold = max(0.0, float(hold))
+        ok = self._swipe_decel_profile(
+            x1=x1,
+            y1=y1,
+            x2=x2,
+            y2=y2,
+            distance=distance,
+            speed=speed,
+            hold=hold,
+            rel_p1=rel_p1,
+            rel_p2=rel_p2,
+        )
 
         if rel_p1 is None:
             log_p1 = (x1, y1)
@@ -411,4 +387,161 @@ class ActionExecutor:
             logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
         else:
             logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+        return ok
+
+    @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
+    def swipe_absolute(
+        self,
+        p1: tuple[int, int],
+        p2: tuple[int, int],
+        *,
+        speed: float = 15.0,
+        hold: float = 0.0,
+        rel_p1: tuple[int, int] | None = None,
+        rel_p2: tuple[int, int] | None = None,
+    ) -> bool:
+        """执行鼠标滑动（前台模式）。"""
+        try:
+            x1, y1 = int(p1[0]), int(p1[1])
+            x2, y2 = int(p2[0]), int(p2[1])
+        except Exception:
+            logger.error('滑动失败: 坐标格式非法')
+            return False
+
+        if not self._in_window(x1, y1) or not self._in_window(x2, y2):
+            logger.warning(f'滑动越界: ({x1}, {y1}) -> ({x2}, {y2})')
+            return False
+
+        distance = math.hypot(x2 - x1, y2 - y1)
+        if distance <= 0:
+            return True
+
+        speed_value = max(0.1, float(speed)) * 1.8
+        hold_value = max(0.0, float(hold))
+        duration_scale = 33.0
+        duration = distance / speed_value / 1000.0 * duration_scale
+        duration = max(0.05, min(0.35, float(duration)))
+
+        if rel_p1 is None:
+            log_p1 = (x1, y1)
+        else:
+            log_p1 = (int(rel_p1[0]), int(rel_p1[1]))
+        if rel_p2 is None:
+            log_p2 = (x2, y2)
+        else:
+            log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
+
+        try:
+            pyautogui.moveTo(x1, y1, duration=0.0)
+            pyautogui.mouseDown()
+            pyautogui.moveTo(x2, y2, duration=duration)
+            if hold_value > 0:
+                time.sleep(hold_value)
+            pyautogui.mouseUp()
+            logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
+            return True
+        except Exception as e:
+            try:
+                pyautogui.mouseUp()
+            except Exception:
+                pass
+            logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]}) | 错误: {e}')
+            return False
+
+    def _swipe_decel_profile(
+        self,
+        *,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        distance: float,
+        speed: float,
+        hold: float,
+        rel_p1: tuple[int, int] | None = None,
+        rel_p2: tuple[int, int] | None = None,
+    ) -> bool:
+        """执行统一减速滑动轨迹（前后台共用）。"""
+        duration_scale = 33.0
+        total_duration = distance / speed / 1000.0 * duration_scale
+        max_duration = 0.56
+        min_duration = 0.08
+        if total_duration > max_duration:
+            total_duration = max_duration
+        if total_duration < min_duration:
+            total_duration = min_duration
+
+        tail_ratio = 0.35
+        total_steps = max(14, min(60, int(distance / 12)))
+        tail_steps = max(8, int(total_steps * tail_ratio))
+        head_steps = max(8, total_steps - tail_steps)
+        tail_weight = 2.0
+        weighted_steps = float(head_steps) + float(tail_steps) * tail_weight
+        head_step_duration = total_duration / weighted_steps
+        tail_step_duration = head_step_duration * tail_weight
+        planned_duration = head_steps * head_step_duration + tail_steps * tail_step_duration
+
+        if not self.move_abs(x1, y1, duration=0.0):
+            return False
+        time.sleep(0.03)
+        if not self.mouse_down():
+            return False
+
+        ok = True
+        try:
+            head_ratio = 1.0 - tail_ratio
+            for i in range(1, head_steps + 1):
+                ratio = head_ratio * (i / float(head_steps))
+                tx = int(round(x1 + (x2 - x1) * ratio))
+                ty = int(round(y1 + (y2 - y1) * ratio))
+                if not self.move_abs(tx, ty, duration=head_step_duration):
+                    ok = False
+                    break
+
+            if ok:
+                for i in range(1, tail_steps + 1):
+                    ratio = head_ratio + tail_ratio * (i / float(tail_steps))
+                    tx = int(round(x1 + (x2 - x1) * ratio))
+                    ty = int(round(y1 + (y2 - y1) * ratio))
+                    if not self.move_abs(tx, ty, duration=tail_step_duration):
+                        ok = False
+                        break
+
+            if ok and distance >= 120:
+                sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
+                sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+                brake_px = max(1, min(3, int(distance * 0.0045)))
+                back_x = x2 - sign_x * brake_px
+                back_y = y2 - sign_y * brake_px
+                if self._in_window(back_x, back_y):
+                    self.move_abs(back_x, back_y, duration=0.012)
+                    self.move_abs(x2, y2, duration=0.016)
+
+            if ok:
+                if hold > 0:
+                    stop_frames = max(1, min(80, int(hold / 0.016)))
+                    stop_dt = hold / float(stop_frames)
+                else:
+                    stop_frames = 6
+                    stop_dt = 0.012
+                axis_x = abs(x2 - x1) >= abs(y2 - y1)
+                settle_sign_x = 0 if x2 == x1 else (1 if x2 > x1 else -1)
+                settle_sign_y = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+                settle_amp = 2 if distance >= 420 else 1
+                for _ in range(stop_frames):
+                    if axis_x:
+                        settle_x = x2 - settle_sign_x * settle_amp
+                        settle_y = y2
+                    else:
+                        settle_x = x2
+                        settle_y = y2 - settle_sign_y * settle_amp
+                    if not self.move_abs(settle_x, settle_y, duration=stop_dt * 0.5):
+                        ok = False
+                        break
+                    if not self.move_abs(x2, y2, duration=stop_dt * 0.5):
+                        ok = False
+                        break
+        finally:
+            self.mouse_up()
+
         return ok

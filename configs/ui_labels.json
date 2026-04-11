@@ -70,7 +70,6 @@
       "waiting_tasks": "等待中",
       "failure_count": "失败次数",
       "last_tick_ms": "上次耗时",
-      "last_result": "上次结果",
       "harvest": "收获",
       "plant": "播种",
       "water": "浇水",

@@ -21,16 +21,28 @@ from utils.template_paths import DEFAULT_TEMPLATE_PLATFORM, normalize_template_p
 class BotInitMixin:
     """Bot 初始化装配逻辑。"""
 
-    def __init__(self, config: AppConfig):
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        runtime_paths: dict[str, str] | None = None,
+        instance_id: str = 'default',
+    ):
         """初始化对象并准备运行所需状态。"""
         super().__init__()
         self.config = config
+        self._instance_id = str(instance_id or 'default')
+        self._runtime_paths = dict(runtime_paths or {})
+        self._error_dir = str(self._runtime_paths.get('error_dir') or 'logs/error')
         self._runtime_failure_count = 0
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()
         effective_mode = resolve_effective_run_mode(config.safety.run_mode, config.planting.window_platform)
-        self.screen_capture = ScreenCapture(run_mode=effective_mode)
+        self.screen_capture = ScreenCapture(
+            save_dir=str(self._runtime_paths.get('screenshots_dir') or 'screenshots'),
+            run_mode=effective_mode,
+        )
 
         # [2] 图像识别层
         # 非 seed 模板识别改走 assets，detector 仅保留 seed 识别并固定默认平台。

@@ -1,14 +1,15 @@
 {
   "window_title_keyword": "QQ经典农场",
+  "window_select_rule": "auto",
   "safety": {
     "random_delay_min": 0.1,
     "random_delay_max": 0.3,
     "click_offset_range": 5,
     "max_actions_per_round": 20,
-    "run_mode": "background"
+    "run_mode": "background",
+    "debug_log_enabled": false
   },
   "screenshot": {
-    "quality": 80,
     "save_history": true,
     "max_history_count": 50
   },
@@ -22,11 +23,11 @@
       "failure_interval_seconds": 30,
       "features": {
         "auto_harvest": true,
-        "auto_plant": true,
+        "auto_plant": false,
         "auto_weed": true,
         "auto_water": true,
         "auto_bug": true,
-        "auto_upgrade": true,
+        "auto_upgrade": false,
         "auto_fertilize": false
       }
     },
@@ -38,8 +39,8 @@
       "daily_time": "00:00",
       "failure_interval_seconds": 60,
       "features": {
-        "auto_help": true,
         "auto_steal": false,
+        "auto_help": true,
         "auto_accept_request": true
       }
     },
@@ -51,7 +52,7 @@
       "daily_time": "00:00",
       "failure_interval_seconds": 300,
       "features": {
-        "auto_task": true
+        "auto_task": false
       }
     },
     "gift": {
@@ -84,7 +85,8 @@
     "max_failures": 3
   },
   "planting": {
-    "strategy": "best_exp_rate",
+    "strategy": "latest_level",
+    "warehouse_first": true,
     "preferred_crop": "白萝卜",
     "player_level": 10,
     "window_platform": "qq",

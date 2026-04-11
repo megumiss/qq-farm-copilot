@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -29,7 +29,6 @@ class TaskResult:
     """封装 `TaskResult` 任务的执行入口与步骤。"""
 
     success: bool
-    actions: list[str] = field(default_factory=list)
     next_run_seconds: int | None = None
     need_recover: bool = False
     error: str = ''

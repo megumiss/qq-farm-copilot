@@ -30,7 +30,7 @@ class TaskSell(TaskBase):
 
         if not self._batch_sell_once():
             return self.ok()
-        return self.ok(actions=['批量出售果实'])
+        return self.ok()
 
     def _batch_sell_once(self) -> bool:
         """仓库内执行一次批量出售。"""

@@ -29,10 +29,10 @@ class Action(BaseModel):
 
     type: str
     target_plot: int = 0
-    click_position: dict = {}  # {"x": 像素x, "y": 像素y}
+    click_position: dict = {}  # 预览图坐标 {"x": 像素x, "y": 像素y}
     priority: int = 0
     description: str = ''
-    extra: dict = {}  # 额外参数，如种子名称等
+    extra: dict = {}  # 额外参数，如实际点击坐标等
 
 
 class OperationResult(BaseModel):

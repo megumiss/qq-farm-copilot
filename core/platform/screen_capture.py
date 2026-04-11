@@ -39,7 +39,9 @@ class ScreenCapture:
     @staticmethod
     def _make_screenshot_path(save_dir: str, prefix: str = 'farm') -> str:
         ts = time.strftime('%Y%m%d_%H%M%S')
-        filename = f'{prefix}_{ts}.png'
+        ms = int((time.time() % 1) * 1000)
+        pid = os.getpid()
+        filename = f'{prefix}_{ts}_{ms:03d}_{pid}.png'
         return os.path.join(save_dir, filename)
 
     def capture_region(self, rect: tuple[int, int, int, int]) -> Image.Image | None:
@@ -149,7 +151,8 @@ class ScreenCapture:
                 logger.error(f'PrintWindow截屏失败: GetDIBits 行数异常 ({rows}/{height})')
                 return None
 
-            return Image.frombytes('RGB', (width, height), buffer.raw, 'raw', 'BGRX')
+            image = Image.frombytes('RGB', (width, height), buffer.raw, 'raw', 'BGRX')
+            return self._crop_print_image_to_client(hwnd, image, rect)
         except Exception as e:
             logger.error(f'PrintWindow截屏失败: {e}')
             return None
@@ -159,6 +162,42 @@ class ScreenCapture:
             gdi32.DeleteObject(bitmap)
             gdi32.DeleteDC(mem_dc)
             user32.ReleaseDC(wintypes.HWND(hwnd), hwnd_dc)
+
+    @staticmethod
+    def _crop_print_image_to_client(hwnd: int, image: Image.Image, window_rect: wintypes.RECT) -> Image.Image:
+        """将 PrintWindow 整窗图裁为客户区，统一前后台截图坐标系。"""
+        if not hwnd or image is None:
+            return image
+
+        try:
+            user32 = ctypes.windll.user32
+            client_rect = wintypes.RECT()
+            if not bool(user32.GetClientRect(wintypes.HWND(hwnd), ctypes.byref(client_rect))):
+                return image
+
+            client_w = int(client_rect.right - client_rect.left)
+            client_h = int(client_rect.bottom - client_rect.top)
+            if client_w <= 0 or client_h <= 0:
+                return image
+
+            client_origin = wintypes.POINT(0, 0)
+            if not bool(user32.ClientToScreen(wintypes.HWND(hwnd), ctypes.byref(client_origin))):
+                return image
+
+            left = int(client_origin.x - int(window_rect.left))
+            top = int(client_origin.y - int(window_rect.top))
+            right = left + client_w
+            bottom = top + client_h
+
+            img_w, img_h = image.size
+            if left < 0 or top < 0 or right > img_w or bottom > img_h:
+                return image
+            if left == 0 and top == 0 and right == img_w and bottom == img_h:
+                return image
+
+            return image.crop((left, top, right, bottom))
+        except Exception:
+            return image
 
     def capture(self, rect: tuple[int, int, int, int], hwnd: int | None = None) -> Image.Image | None:
         """按运行模式截图。"""

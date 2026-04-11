@@ -38,7 +38,6 @@ class _SchedulerSnapshot:
             'running_tasks': 0,
             'pending_tasks': 0,
             'waiting_tasks': 0,
-            'last_result': '--',
             'last_tick_ms': '--',
             'elapsed': '--',
             'next_farm_check': '--',
@@ -67,11 +66,20 @@ class BotEngine(QObject):
     stats_updated = pyqtSignal(dict)
     detection_result = pyqtSignal(object)
 
-    def __init__(self, config: AppConfig):
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        runtime_paths: dict[str, str] | None = None,
+        instance_id: str = 'default',
+        allow_idle_prewarm: bool = True,
+    ):
         super().__init__()
         self.config = config
+        self.instance_id = str(instance_id or 'default')
+        self.runtime_paths = dict(runtime_paths or {})
         self.scheduler = _SchedulerSnapshot()
-        self._allow_idle_prewarm = True
+        self._allow_idle_prewarm = bool(allow_idle_prewarm)
         self._window_manager = WindowManager()
 
         self._ctx = mp.get_context('spawn')
@@ -122,7 +130,13 @@ class BotEngine(QObject):
             self._event_queue = self._ctx.Queue()
             self._worker = self._ctx.Process(
                 target=bot_worker_main,
-                args=(self.config.model_dump(), self._command_queue, self._event_queue),
+                args=(
+                    self.config.model_dump(),
+                    self._command_queue,
+                    self._event_queue,
+                    dict(self.runtime_paths),
+                    self.instance_id,
+                ),
                 name='QQFarmWorker',
                 daemon=True,
             )
@@ -156,6 +170,7 @@ class BotEngine(QObject):
             text = str(payload or '').strip()
             if text:
                 self._relay_worker_log(text)
+                self.log_message.emit(text)
             return
 
         if etype == 'state':
@@ -302,16 +317,20 @@ class BotEngine(QObject):
     def _activate_target_window(self) -> None:
         """在主进程尝试拉起目标窗口到前台。"""
         try:
-            if self._window_manager.find_window(self.config.window_title_keyword):
+            platform = getattr(self.config.planting, 'window_platform', 'qq')
+            platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+            if self._window_manager.find_window(
+                self.config.window_title_keyword, self.config.window_select_rule, platform_value
+            ):
                 self._window_manager.activate_window()
         except Exception:
             pass
 
-    def stop(self):
+    def stop(self, *, keep_prewarm: bool = True):
         # 对齐 NIKKE：停止时进程级强停，不依赖业务侧协作取消。
         self._shutdown_worker(force=True)
         self.log_message.emit('Bot已停止')
-        if self._allow_idle_prewarm:
+        if keep_prewarm and self._allow_idle_prewarm:
             QTimer.singleShot(0, self._prewarm_worker)
 
     def pause(self):

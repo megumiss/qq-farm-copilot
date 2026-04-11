@@ -51,7 +51,6 @@ class TaskScheduler(QObject):
             'running_tasks': 0,
             'pending_tasks': 0,
             'waiting_tasks': 0,
-            'last_result': '--',
             'last_tick_ms': '--',
         }
 
@@ -136,7 +135,6 @@ class TaskScheduler(QObject):
             'running_tasks',
             'pending_tasks',
             'waiting_tasks',
-            'last_result',
             'last_tick_ms',
         ):
             if key in kwargs and self._runtime_metrics.get(key) != kwargs[key]:

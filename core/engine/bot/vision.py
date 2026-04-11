@@ -18,7 +18,11 @@ class BotVisionMixin:
 
     def _prepare_window(self) -> tuple | None:
         """刷新并激活窗口，返回当前有效截图区域。"""
-        window = self.window_manager.refresh_window_info(self.config.window_title_keyword)
+        platform = getattr(self.config.planting, 'window_platform', 'qq')
+        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        window = self.window_manager.refresh_window_info(
+            self.config.window_title_keyword, self.config.window_select_rule, platform_value
+        )
         if not window:
             return None
         effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
@@ -70,12 +74,13 @@ class BotVisionMixin:
             return None
         if not self.action_executor:
             return None
-        rel_x, rel_y = self.resolve_live_click_point(int(seed.x), int(seed.y))
+        live_x, live_y = self.resolve_live_click_point(int(seed.x), int(seed.y))
         action = Action(
             type=ActionType.PLANT,
-            click_position={'x': int(rel_x), 'y': int(rel_y)},
+            click_position={'x': int(seed.x), 'y': int(seed.y)},
             priority=0,
             description=f'播种{crop_name}',
+            extra={'live_click_position': {'x': int(live_x), 'y': int(live_y)}},
         )
         result = self.action_executor.execute_action(action)
         if not result.success:

@@ -38,16 +38,15 @@ class TaskBase:
         return self.has_feature(self.get_features(task_name), key, default=default)
 
     @staticmethod
-    def ok(*, actions: list[str] | None = None, next_run_seconds: int | None = None) -> TaskResult:
+    def ok(*, next_run_seconds: int | None = None) -> TaskResult:
         """构造成功结果。"""
-        return TaskResult(success=True, actions=list(actions or []), next_run_seconds=next_run_seconds, error='')
+        return TaskResult(success=True, next_run_seconds=next_run_seconds, error='')
 
     @staticmethod
-    def fail(error: str, *, actions: list[str] | None = None, next_run_seconds: int | None = None) -> TaskResult:
+    def fail(error: str, *, next_run_seconds: int | None = None) -> TaskResult:
         """构造失败结果。"""
         return TaskResult(
             success=False,
-            actions=list(actions or []),
             next_run_seconds=next_run_seconds,
             error=str(error or ''),
         )

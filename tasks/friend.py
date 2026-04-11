@@ -12,31 +12,26 @@ from core.ui.assets import (
     BTN_CLOSE,
     BTN_FRIEND_AGREED,
     BTN_FRIEND_APPLY,
+    BTN_FRIEND_RIGHT_FRAME,
     BTN_HOME,
     BTN_STEAL,
     BTN_VISIT_FIRST,
     BTN_WATER,
     BTN_WEED,
-    ICON_BUG_IN_FRIEND_DETAIL,
     ICON_BUG_IN_FRIEND_LIST,
-    ICON_STEAL_IN_FRIEND_DETAIL,
     ICON_STEAL_IN_FRIEND_LIST,
-    ICON_WATER_IN_FRIEND_DETAIL,
     ICON_WATER_IN_FRIEND_LIST,
-    ICON_WEED_IN_FRIEND_DETAIL,
     ICON_WEED_IN_FRIEND_LIST,
     MAIN_GOTO_FRIEND,
 )
-from core.ui.page import page_friend, page_main
+from core.ui.page import page_friend_list, page_main
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
-FRIEND_DETAIL_ICON_X_RANGE = (70, 540)
-FRIEND_DETAIL_ICON_Y_RANGE = (815, 855)
 FRIEND_PAGE_ICON_X_RANGE = (105, 410)
 FRIEND_PAGE_ICON_Y_RANGE = (260, 800)
-FRIEND_DETAIL_SWIPE_START = (405, 860)
-FRIEND_DETAIL_SWIPE_END = (150, 860)
+FRIEND_NEXT_OFFSET_X = 50
+FRIEND_NO_ACTION_EXIT_STREAK = 3
 
 
 class TaskFriend(TaskBase):
@@ -59,7 +54,7 @@ class TaskFriend(TaskBase):
             return self.ok()
 
         # 进入好友列表页
-        self.ui.ui_ensure(page_friend)
+        self.ui.ui_ensure(page_friend_list)
         # 处理微信好友请求
         if enable_accept_request:
             self.accept_friend()
@@ -72,7 +67,7 @@ class TaskFriend(TaskBase):
         self.back_to_home()
         logger.info('好友流程: 结束 | 动作={}', '、'.join(actions) if actions else '无动作')
 
-        return self.ok(actions=actions)
+        return self.ok()
 
     def _run_friend_progressive(self, *, enable_help: bool, enable_steal: bool) -> list[str]:
         """好友任务递进流程：进入详情后执行动作，再切到下一个可操作好友。"""
@@ -80,7 +75,7 @@ class TaskFriend(TaskBase):
         if not self._enter_friend_detail():
             return actions
 
-        self._run_friend_recursive(enable_help=enable_help, enable_steal=enable_steal, actions=actions)
+        self._run_friend_recursive(enable_help=enable_help, enable_steal=enable_steal, actions=actions, no_action=0)
         return actions
 
     @staticmethod
@@ -101,23 +96,45 @@ class TaskFriend(TaskBase):
             compact.append('好友互动')
         return compact
 
-    def _run_friend_recursive(self, *, enable_help: bool, enable_steal: bool, actions: list[str]):
-        """递归处理当前好友并切换到下一位可操作好友。"""
+    def _run_friend_recursive(self, *, enable_help: bool, enable_steal: bool, actions: list[str], no_action: int):
+        """递归处理好友：连续命中无操作按钮达到阈值后退出。"""
+        has_action = self._has_current_friend_actions(enable_help=enable_help, enable_steal=enable_steal)
+        if not has_action:
+            no_action += 1
+            logger.info('好友流程: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
+            if no_action >= FRIEND_NO_ACTION_EXIT_STREAK:
+                logger.info('好友流程: 连续无动作达到阈值，结束好友任务')
+                return
+        else:
+            no_action = 0
+            if enable_steal:
+                action = self._run_feature_steal()
+                if action:
+                    actions.append(action)
+            if enable_help:
+                action = self._run_feature_help()
+                if action:
+                    actions.append(action)
 
-        if enable_steal:
-            action = self._run_feature_steal()
-            if action:
-                actions.append(action)
-
-        if enable_help:
-            action = self._run_feature_help()
-            if action:
-                actions.append(action)
-
-        if not self._goto_next_operable_friend(enable_help=enable_help, enable_steal=enable_steal):
+        if not self._goto_next_friend():
+            logger.info('好友流程: 切换下一位好友失败，结束好友任务')
             return
 
-        self._run_friend_recursive(enable_help=enable_help, enable_steal=enable_steal, actions=actions)
+        self._run_friend_recursive(
+            enable_help=enable_help, enable_steal=enable_steal, actions=actions, no_action=no_action
+        )
+
+    def _has_current_friend_actions(self, *, enable_help: bool, enable_steal: bool) -> bool:
+        """判断当前好友界面是否有可执行操作按钮（使用 BTN 模板）。"""
+        self.ui.device.screenshot()
+        buttons: list[Button] = []
+        if enable_steal:
+            buttons.append(BTN_STEAL)
+        if enable_help:
+            buttons.extend([BTN_WATER, BTN_WEED, BTN_BUG])
+        if not buttons:
+            return False
+        return bool(self.ui.appear_any(buttons, offset=30, static=False))
 
     def _enter_friend_detail(self) -> bool:
         """从好友列表页进入某个好友详情页。"""
@@ -145,45 +162,29 @@ class TaskFriend(TaskBase):
         logger.info('好友流程: 未进入好友详情页，结束本轮')
         return False
 
-    def _goto_next_operable_friend(self, *, enable_help: bool, enable_steal: bool) -> bool:
-        """点击下一个可执行操作的好友。"""
+    def _goto_next_friend(self) -> bool:
+        """点击下一个好友：使用当前选中框模板位置 `x+50` 跳转。"""
         self.ui.device.stuck_record_clear()
         self.ui.device.click_record_clear()
 
         self.ui.device.screenshot()
+        current_location = self.ui.appear_location(BTN_FRIEND_RIGHT_FRAME, offset=30, threshold=0.83, static=False)
+        if not current_location:
+            logger.info('好友流程: 未识别到当前选中好友框')
+            return False
 
-        candidates = self._collect_operable_friend_icons(enable_help=enable_help, enable_steal=enable_steal)
-        if not candidates:
-            self.ui.device.swipe(FRIEND_DETAIL_SWIPE_START, FRIEND_DETAIL_SWIPE_END, speed=20, delay=0.5)
-            self.ui.device.screenshot()
-            candidates = self._collect_operable_friend_icons(enable_help=enable_help, enable_steal=enable_steal)
+        current_x, current_y = current_location
+        next_x = int(current_x + FRIEND_NEXT_OFFSET_X)
+        next_y = int(current_y)
+        if self.ui.device.click_point(next_x, next_y, desc='切换下一位好友'):
+            logger.info(
+                '好友流程: 切换下一位好友 | 当前框=({}, {}) 下一位=({}, {})', current_x, current_y, next_x, next_y
+            )
+            # self.ui.device.sleep(0.5)
+            return True
 
-        if candidates:
-            if self.ui.device.click_button(candidates[0]):
-                logger.info('好友流程: 切换下一位好友')
-                self.ui.device.sleep(0.5)
-                return True
-
-        logger.info('好友流程: 未找到下一位可操作好友')
+        logger.info('好友流程: 点击下一位好友失败')
         return False
-
-    def _collect_operable_friend_icons(self, *, enable_help: bool, enable_steal: bool) -> list[Button]:
-        """按启用功能收集下方横向列表中的可操作 icon（detail 模板）。"""
-        icons: list[Button] = []
-        if enable_steal:
-            icons.extend(self.ui.match_icon_multi(ICON_STEAL_IN_FRIEND_DETAIL, threshold=0.75))
-        if enable_help:
-            icons.extend(self.ui.match_icon_multi(ICON_WATER_IN_FRIEND_DETAIL, threshold=0.75))
-            icons.extend(self.ui.match_icon_multi(ICON_WEED_IN_FRIEND_DETAIL, threshold=0.75))
-            icons.extend(self.ui.match_icon_multi(ICON_BUG_IN_FRIEND_DETAIL, threshold=0.75))
-
-        if not icons:
-            return []
-        icons = self.ui.filter_buttons_in_area(
-            icons, x_range=FRIEND_DETAIL_ICON_X_RANGE, y_range=FRIEND_DETAIL_ICON_Y_RANGE
-        )
-        icons = self.ui.sort_buttons_by_location(icons, horizontal=True)
-        return icons
 
     def _collect_operable_friend_list_icons(
         self, *, enable_help: bool = False, enable_steal: bool = False
@@ -191,11 +192,11 @@ class TaskFriend(TaskBase):
         """收集好友列表页（纵向）上的可操作 icon（list 模板）。"""
         icons: list[Button] = []
         if enable_steal:
-            icons.extend(self.ui.match_icon_multi(ICON_STEAL_IN_FRIEND_LIST, threshold=0.75))
+            icons.extend(self.ui.match_icon_multi(ICON_STEAL_IN_FRIEND_LIST, threshold=0.85))
         if enable_help:
-            icons.extend(self.ui.match_icon_multi(ICON_WATER_IN_FRIEND_LIST, threshold=0.75))
-            icons.extend(self.ui.match_icon_multi(ICON_WEED_IN_FRIEND_LIST, threshold=0.75))
-            icons.extend(self.ui.match_icon_multi(ICON_BUG_IN_FRIEND_LIST, threshold=0.75))
+            icons.extend(self.ui.match_icon_multi(ICON_WATER_IN_FRIEND_LIST, threshold=0.85))
+            icons.extend(self.ui.match_icon_multi(ICON_WEED_IN_FRIEND_LIST, threshold=0.85))
+            icons.extend(self.ui.match_icon_multi(ICON_BUG_IN_FRIEND_LIST, threshold=0.85))
 
         if not icons:
             return []
