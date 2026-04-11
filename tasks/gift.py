@@ -36,7 +36,7 @@ class TaskGift(TaskBase):
         enable_svip = self.has_feature(features, 'auto_svip_gift', default=True)
         enable_mall = self.has_feature(features, 'auto_mall_gift', default=True)
         enable_mail = self.has_feature(features, 'auto_mail', default=True)
-        actions: list[str] = []
+        completed_steps: list[str] = []
         logger.info('礼包流程: 开始 | SVIP={} 商城={} 邮件={}', enable_svip, enable_mall, enable_mail)
 
         self.ui.ui_ensure(page_main)
@@ -44,21 +44,21 @@ class TaskGift(TaskBase):
         if enable_svip:
             qqsvip = self._run_qqsvip_gift()
             if qqsvip:
-                actions.append(qqsvip)
+                completed_steps.append(qqsvip)
 
         if enable_mall:
             mall = self._run_mall_gift()
             if mall:
-                actions.append(mall)
+                completed_steps.append(mall)
 
         if enable_mail:
             mail = self._run_mail_gift()
             if mail:
-                actions.append(mail)
+                completed_steps.append(mail)
 
         self.ui.ui_ensure(page_main)
-        logger.info('礼包流程: 结束 | 动作={}', '、'.join(actions) if actions else '无动作')
-        return self.ok(actions=actions)
+        logger.info('礼包流程: 结束 | 动作={}', '、'.join(completed_steps) if completed_steps else '无动作')
+        return self.ok()
 
     def _run_qqsvip_gift(self) -> str | None:
         """领取 QQSVIP 免费礼包。"""
