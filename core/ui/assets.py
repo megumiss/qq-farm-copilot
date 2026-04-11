@@ -6,11 +6,12 @@ from core.base.button import Button
 BTN_SEED_SELECT_POPUP_RIGHT = Button(area={'qq': (511, 608, 524, 636), 'wechat': (511, 608, 524, 636)}, color={'qq': (226, 206, 123), 'wechat': (226, 206, 123)}, button={'qq': (511, 608, 524, 636), 'wechat': (511, 608, 524, 636)}, file={'qq': 'templates/qq/btn/BTN_SEED_SELECT_POPUP_RIGHT.png', 'wechat': 'templates/qq/btn/BTN_SEED_SELECT_POPUP_RIGHT.png'}, name='BTN_SEED_SELECT_POPUP_RIGHT')
 BTN_BATCH_SELL = Button(area={'qq': (325, 867, 430, 901), 'wechat': (325, 867, 430, 901)}, color={'qq': (178, 196, 72), 'wechat': (178, 196, 72)}, button={'qq': (325, 867, 430, 901), 'wechat': (325, 867, 430, 901)}, file={'qq': 'templates/qq/btn/btn_batch_sell.png', 'wechat': 'templates/qq/btn/btn_batch_sell.png'}, name='btn_batch_sell')  # 批量出售
 BTN_BUG = Button(area={'qq': (332, 683, 372, 717), 'wechat': (332, 683, 372, 717)}, color={'qq': (152, 125, 112), 'wechat': (152, 125, 112)}, button={'qq': (332, 683, 372, 717), 'wechat': (332, 683, 372, 717)}, file={'qq': 'templates/qq/btn/btn_bug.png', 'wechat': 'templates/qq/btn/btn_bug.png'}, name='btn_bug')  # 一键除虫
-BTN_CLAIM = Button(area={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, color={'qq': (196, 204, 122), 'wechat': (196, 204, 122)}, button={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, file={'qq': 'templates/qq/btn/btn_claim.png', 'wechat': 'templates/qq/btn/btn_claim.png'}, name='btn_claim')  # 领取
+BTN_CLAIM = Button(area={'qq': (247, 619, 293, 644), 'wechat': (247, 619, 293, 644)}, color={'qq': (189, 199, 108), 'wechat': (189, 199, 108)}, button={'qq': (247, 619, 293, 644), 'wechat': (247, 619, 293, 644)}, file={'qq': 'templates/qq/btn/btn_claim.png', 'wechat': 'templates/qq/btn/btn_claim.png'}, name='btn_claim')
 BTN_CLICK_TO_CLOSE = Button(area={'qq': (207, 793, 331, 811), 'wechat': (207, 793, 331, 811)}, color={'qq': (148, 141, 129), 'wechat': (148, 141, 129)}, button={'qq': (207, 793, 331, 811), 'wechat': (207, 793, 331, 811)}, file={'qq': 'templates/qq/btn/btn_click_to_close.png', 'wechat': 'templates/qq/btn/btn_click_to_close.png'}, name='btn_click_to_close')
 BTN_CLOSE = Button(area={'qq': (493, 54, 527, 88), 'wechat': (493, 54, 527, 88)}, color={'qq': (236, 191, 165), 'wechat': (236, 191, 165)}, button={'qq': (493, 54, 527, 88), 'wechat': (493, 54, 527, 88)}, file={'qq': 'templates/qq/btn/btn_close.png', 'wechat': 'templates/qq/btn/btn_close.png'}, name='btn_close')  # 关闭
 BTN_COME_AGAIN = Button(area={'qq': (223, 590, 316, 613), 'wechat': (223, 590, 316, 613)}, color={'qq': (187, 199, 98), 'wechat': (187, 199, 98)}, button={'qq': (223, 590, 316, 613), 'wechat': (223, 590, 316, 613)}, file={'qq': 'templates/qq/btn/btn_come_again.png', 'wechat': 'templates/qq/btn/btn_come_again.png'}, name='btn_come_again')
 BTN_CONFIRM = Button(area={'qq': (349, 871, 403, 896), 'wechat': (349, 871, 403, 896)}, color={'qq': (182, 197, 86), 'wechat': (182, 197, 86)}, button={'qq': (349, 871, 403, 896), 'wechat': (349, 871, 403, 896)}, file={'qq': 'templates/qq/btn/btn_confirm.png', 'wechat': 'templates/qq/btn/btn_confirm.png'}, name='btn_confirm')  # 确认
+BTN_DIRECT_CLAIM = Button(area={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, color={'qq': (196, 204, 122), 'wechat': (196, 204, 122)}, button={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, file={'qq': 'templates/qq/btn/btn_direct_claim.png', 'wechat': 'templates/qq/btn/btn_direct_claim.png'}, name='btn_direct_claim')  # 领取
 BTN_EXPAND = Button(area={'qq': (160, 574, 192, 587), 'wechat': (160, 574, 192, 587)}, color={'qq': (182, 116, 57), 'wechat': (182, 116, 57)}, button={'qq': (160, 574, 192, 587), 'wechat': (160, 574, 192, 587)}, file={'qq': 'templates/qq/btn/btn_expand.png', 'wechat': 'templates/qq/btn/btn_expand.png'}, name='btn_expand')  # 扩建
 BTN_EXPAND_CONFIRM = Button(area={'qq': (245, 570, 295, 595), 'wechat': (245, 570, 295, 595)}, color={'qq': (190, 201, 105), 'wechat': (190, 201, 105)}, button={'qq': (245, 570, 295, 595), 'wechat': (245, 570, 295, 595)}, file={'qq': 'templates/qq/btn/btn_expand_confirm.png', 'wechat': 'templates/qq/btn/btn_expand_confirm.png'}, name='btn_expand_confirm')
 BTN_EXPAND_DIRECT_CONFIRM = Button(area={'qq': (245, 570, 295, 595), 'wechat': (245, 570, 295, 595)}, color={'qq': (190, 201, 105), 'wechat': (190, 201, 105)}, button={'qq': (245, 570, 295, 595), 'wechat': (245, 570, 295, 595)}, file={'qq': 'templates/qq/btn/btn_expand_direct_confirm.png', 'wechat': 'templates/qq/btn/btn_expand_direct_confirm.png'}, name='btn_expand_direct_confirm')
@@ -23,7 +24,9 @@ BTN_LABOR_IS_GLORIOUS = Button(area={'qq': (135, 440, 176, 452), 'wechat': (135,
 BTN_LAND_LEFT = Button(area={'qq': (43, 590, 59, 614), 'wechat': (43, 590, 59, 614)}, color={'qq': (192, 200, 87), 'wechat': (192, 200, 87)}, button={'qq': (43, 590, 59, 614), 'wechat': (43, 590, 59, 614)}, file={'qq': 'templates/qq/btn/btn_land_left.png', 'wechat': 'templates/qq/btn/btn_land_left.png'}, name='btn_land_left')
 BTN_LAND_RIGHT = Button(area={'qq': (482, 547, 498, 571), 'wechat': (482, 547, 498, 571)}, color={'qq': (171, 197, 84), 'wechat': (171, 197, 84)}, button={'qq': (482, 547, 498, 571), 'wechat': (482, 547, 498, 571)}, file={'qq': 'templates/qq/btn/btn_land_right.png', 'wechat': 'templates/qq/btn/btn_land_right.png'}, name='btn_land_right')
 BTN_LOGIN_AGAIN = Button(area={'qq': (325, 572, 423, 598), 'wechat': (325, 572, 423, 598)}, color={'qq': (195, 203, 121), 'wechat': (195, 203, 121)}, button={'qq': (325, 572, 423, 598), 'wechat': (325, 572, 423, 598)}, file={'qq': 'templates/qq/btn/btn_login_again.png', 'wechat': 'templates/qq/btn/btn_login_again.png'}, name='btn_login_again')
+BTN_MALL_FREE = Button(area={'qq': (122, 539, 183, 569), 'wechat': (122, 539, 183, 569)}, color={'qq': (146, 167, 48), 'wechat': (146, 167, 48)}, button={'qq': (122, 539, 183, 569), 'wechat': (122, 539, 183, 569)}, file={'qq': 'templates/qq/btn/btn_mall_free.png', 'wechat': 'templates/qq/btn/btn_mall_free.png'}, name='btn_mall_free')
 BTN_MATURE = Button(area={'qq': (261, 457, 278, 479), 'wechat': (261, 457, 278, 479)}, color={'qq': (201, 181, 78), 'wechat': (201, 181, 78)}, button={'qq': (261, 457, 278, 479), 'wechat': (261, 457, 278, 479)}, file={'qq': 'templates/qq/btn/btn_mature.png', 'wechat': 'templates/qq/btn/btn_mature.png'}, name='btn_mature')
+BTN_ONECLICK_OPEN = Button(area={'qq': (326, 805, 419, 829), 'wechat': (326, 805, 419, 829)}, color={'qq': (183, 197, 88), 'wechat': (183, 197, 88)}, button={'qq': (326, 805, 419, 829), 'wechat': (326, 805, 419, 829)}, file={'qq': 'templates/qq/btn/btn_oneclick_open.png', 'wechat': 'templates/qq/btn/btn_oneclick_open.png'}, name='btn_oneclick_open')
 BTN_ORDINARY_FERTILIZER = Button(area={'qq': (115, 610, 159, 642), 'wechat': (115, 610, 159, 642)}, color={'qq': (200, 134, 76), 'wechat': (200, 134, 76)}, button={'qq': (115, 610, 159, 642), 'wechat': (115, 610, 159, 642)}, file={'qq': 'templates/qq/btn/btn_ordinary_fertilizer.png', 'wechat': 'templates/qq/btn/btn_ordinary_fertilizer.png'}, name='btn_ordinary_fertilizer')
 BTN_ORGANIC_FERTILIZER = Button(area={'qq': (202, 613, 248, 640), 'wechat': (202, 613, 248, 640)}, color={'qq': (175, 139, 35), 'wechat': (175, 139, 35)}, button={'qq': (202, 613, 248, 640), 'wechat': (202, 613, 248, 640)}, file={'qq': 'templates/qq/btn/btn_organic_fertilizer.png', 'wechat': 'templates/qq/btn/btn_organic_fertilizer.png'}, name='btn_organic_fertilizer')
 BTN_PLANTING = Button(area={'qq': (233, 866, 307, 893), 'wechat': (233, 866, 307, 893)}, color={'qq': (190, 201, 107), 'wechat': (190, 201, 107)}, button={'qq': (233, 866, 307, 893), 'wechat': (233, 866, 307, 893)}, file={'qq': 'templates/qq/btn/btn_planting.png', 'wechat': 'templates/qq/btn/btn_planting.png'}, name='btn_planting')
@@ -63,6 +66,7 @@ ICON_WATER_IN_FRIEND_DETAIL = Button(area={'qq': (0, 0, 19, 11), 'wechat': (0, 0
 ICON_WATER_IN_FRIEND_LIST = Button(area={'qq': (0, 0, 25, 23), 'wechat': (0, 0, 25, 23)}, color={'qq': (184, 186, 190), 'wechat': (184, 186, 190)}, button={'qq': (0, 0, 25, 23), 'wechat': (0, 0, 25, 23)}, file={'qq': 'templates/qq/icon/icon_water_in_friend_list.png', 'wechat': 'templates/qq/icon/icon_water_in_friend_list.png'}, name='icon_water_in_friend_list')
 ICON_WEED_IN_FRIEND_DETAIL = Button(area={'qq': (0, 0, 14, 10), 'wechat': (0, 0, 14, 10)}, color={'qq': (106, 166, 61), 'wechat': (106, 166, 61)}, button={'qq': (0, 0, 14, 10), 'wechat': (0, 0, 14, 10)}, file={'qq': 'templates/qq/icon/icon_weed_in_friend_detail.png', 'wechat': 'templates/qq/icon/icon_weed_in_friend_detail.png'}, name='icon_weed_in_friend_detail')
 ICON_WEED_IN_FRIEND_LIST = Button(area={'qq': (0, 0, 22, 22), 'wechat': (0, 0, 22, 22)}, color={'qq': (180, 192, 151), 'wechat': (180, 192, 151)}, button={'qq': (0, 0, 22, 22), 'wechat': (0, 0, 22, 22)}, file={'qq': 'templates/qq/icon/icon_weed_in_friend_list.png', 'wechat': 'templates/qq/icon/icon_weed_in_friend_list.png'}, name='icon_weed_in_friend_list')
+MAIL_CHECK = Button(area={'qq': (245, 74, 295, 100), 'wechat': (245, 74, 295, 100)}, color={'qq': (231, 198, 172), 'wechat': (231, 198, 172)}, button={'qq': (245, 74, 295, 100), 'wechat': (245, 74, 295, 100)}, file={'qq': 'templates/qq/ui/mail_check.png', 'wechat': 'templates/qq/ui/mail_check.png'}, name='mail_check')
 MAIN_GOTO_FRIEND = Button(area={'qq': (448, 863, 493, 894), 'wechat': (448, 863, 493, 894)}, color={'qq': (221, 187, 122), 'wechat': (221, 187, 122)}, button={'qq': (448, 863, 493, 894), 'wechat': (448, 863, 493, 894)}, file={'qq': 'templates/qq/ui/main_goto_friend.png', 'wechat': 'templates/qq/ui/main_goto_friend.png'}, name='main_goto_friend')
 MAIN_GOTO_MALL = Button(area={'qq': (474, 164, 505, 189), 'wechat': (474, 164, 505, 189)}, color={'qq': (184, 182, 97), 'wechat': (184, 182, 97)}, button={'qq': (474, 164, 505, 189), 'wechat': (474, 164, 505, 189)}, file={'qq': 'templates/qq/ui/main_goto_mall.png', 'wechat': 'templates/qq/ui/main_goto_mall.png'}, name='main_goto_mall')
 MAIN_GOTO_MENU = Button(area={'qq': (32, 300, 49, 319), 'wechat': (32, 300, 49, 319)}, color={'qq': (229, 191, 127), 'wechat': (229, 191, 127)}, button={'qq': (32, 300, 49, 319), 'wechat': (32, 300, 49, 319)}, file={'qq': 'templates/qq/ui/main_goto_menu.png', 'wechat': 'templates/qq/ui/main_goto_menu.png'}, name='main_goto_menu')
@@ -74,6 +78,8 @@ MAIN_GOTO_WAREHOUSE = Button(area={'qq': (30, 861, 79, 895), 'wechat': (30, 861,
 MAIN_GOTO_WIKI = Button(area={'qq': (319, 868, 366, 895), 'wechat': (319, 868, 366, 895)}, color={'qq': (218, 163, 130), 'wechat': (218, 163, 130)}, button={'qq': (319, 868, 366, 895), 'wechat': (319, 868, 366, 895)}, file={'qq': 'templates/qq/ui/main_goto_wiki.png', 'wechat': 'templates/qq/ui/main_goto_wiki.png'}, name='main_goto_wiki')
 MALL_CHECK = Button(area={'qq': (117, 83, 174, 112), 'wechat': (117, 83, 174, 112)}, color={'qq': (193, 156, 137), 'wechat': (193, 156, 137)}, button={'qq': (117, 83, 174, 112), 'wechat': (117, 83, 174, 112)}, file={'qq': 'templates/qq/ui/mall_check.png', 'wechat': 'templates/qq/ui/mall_check.png'}, name='mall_check')
 MALL_GOTO_MAIN = Button(area={'qq': (44, 93, 82, 122), 'wechat': (44, 93, 82, 122)}, color={'qq': (230, 187, 117), 'wechat': (230, 187, 117)}, button={'qq': (44, 93, 82, 122), 'wechat': (44, 93, 82, 122)}, file={'qq': 'templates/qq/ui/mall_goto_main.png', 'wechat': 'templates/qq/ui/mall_goto_main.png'}, name='mall_goto_main')
+MENU_CHECK = Button(area={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, color={'qq': (244, 210, 136), 'wechat': (244, 210, 136)}, button={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, file={'qq': 'templates/qq/ui/menu_check.png', 'wechat': 'templates/qq/ui/menu_check.png'}, name='menu_check')
+MENU_GOTO_MAIL = Button(area={'qq': (30, 486, 44, 505), 'wechat': (30, 486, 44, 505)}, color={'qq': (237, 206, 137), 'wechat': (237, 206, 137)}, button={'qq': (30, 486, 44, 505), 'wechat': (30, 486, 44, 505)}, file={'qq': 'templates/qq/ui/menu_goto_mail.png', 'wechat': 'templates/qq/ui/menu_goto_mail.png'}, name='menu_goto_mail')  # 邮件
 MENU_GOTO_MAIN = Button(area={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, color={'qq': (244, 210, 136), 'wechat': (244, 210, 136)}, button={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, file={'qq': 'templates/qq/ui/menu_goto_main.png', 'wechat': 'templates/qq/ui/menu_goto_main.png'}, name='menu_goto_main')
 PET_CHECK = Button(area={'qq': (241, 77, 294, 105), 'wechat': (241, 77, 294, 105)}, color={'qq': (232, 199, 181), 'wechat': (232, 199, 181)}, button={'qq': (241, 77, 294, 105), 'wechat': (241, 77, 294, 105)}, file={'qq': 'templates/qq/ui/pet_check.png', 'wechat': 'templates/qq/ui/pet_check.png'}, name='pet_check')
 SEED_BTN_HEART_FRUIT = Button(area={'qq': (81, 613, 120, 637), 'wechat': (81, 613, 120, 637)}, color={'qq': (243, 176, 78), 'wechat': (243, 176, 78)}, button={'qq': (81, 613, 120, 637), 'wechat': (81, 613, 120, 637)}, file={'qq': 'templates/qq/seedbtn/seed_btn_heart_fruit.png', 'wechat': 'templates/qq/seedbtn/seed_btn_heart_fruit.png'}, name='seed_btn_heart_fruit')
@@ -91,6 +97,7 @@ ASSET_NAME_TO_CONST = {
     'btn_close': BTN_CLOSE,
     'btn_come_again': BTN_COME_AGAIN,
     'btn_confirm': BTN_CONFIRM,
+    'btn_direct_claim': BTN_DIRECT_CLAIM,
     'btn_expand': BTN_EXPAND,
     'btn_expand_confirm': BTN_EXPAND_CONFIRM,
     'btn_expand_direct_confirm': BTN_EXPAND_DIRECT_CONFIRM,
@@ -103,7 +110,9 @@ ASSET_NAME_TO_CONST = {
     'btn_land_left': BTN_LAND_LEFT,
     'btn_land_right': BTN_LAND_RIGHT,
     'btn_login_again': BTN_LOGIN_AGAIN,
+    'btn_mall_free': BTN_MALL_FREE,
     'btn_mature': BTN_MATURE,
+    'btn_oneclick_open': BTN_ONECLICK_OPEN,
     'btn_ordinary_fertilizer': BTN_ORDINARY_FERTILIZER,
     'btn_organic_fertilizer': BTN_ORGANIC_FERTILIZER,
     'btn_planting': BTN_PLANTING,
@@ -144,6 +153,7 @@ ASSET_NAME_TO_CONST = {
     'icon_water_in_friend_list': ICON_WATER_IN_FRIEND_LIST,
     'icon_weed_in_friend_detail': ICON_WEED_IN_FRIEND_DETAIL,
     'icon_weed_in_friend_list': ICON_WEED_IN_FRIEND_LIST,
+    'mail_check': MAIL_CHECK,
     'main_goto_friend': MAIN_GOTO_FRIEND,
     'main_goto_mall': MAIN_GOTO_MALL,
     'main_goto_menu': MAIN_GOTO_MENU,
@@ -155,6 +165,8 @@ ASSET_NAME_TO_CONST = {
     'main_goto_wiki': MAIN_GOTO_WIKI,
     'mall_check': MALL_CHECK,
     'mall_goto_main': MALL_GOTO_MAIN,
+    'menu_check': MENU_CHECK,
+    'menu_goto_mail': MENU_GOTO_MAIL,
     'menu_goto_main': MENU_GOTO_MAIN,
     'pet_check': PET_CHECK,
     'seed_btn_heart_fruit': SEED_BTN_HEART_FRUIT,

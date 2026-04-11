@@ -5,7 +5,7 @@ from __future__ import annotations
 import pyautogui
 
 from core.base.step_result import StepResult
-from core.ui.assets import ASSET_NAME_TO_CONST, BTN_CLAIM, BTN_CLOSE, BTN_CONFIRM, TASK_CHECK
+from core.ui.assets import ASSET_NAME_TO_CONST, BTN_CLOSE, BTN_CONFIRM, BTN_DIRECT_CLAIM, TASK_CHECK
 from tasks.base import TaskBase
 
 # TODO: `btn_share` asset 已删除，当前双倍分享领奖流程会自动跳过。
@@ -55,7 +55,7 @@ class TaskReward(TaskBase):
                 self.ui.device.sleep(0.5)
                 return actions
 
-            if self.ui.appear_then_click(BTN_CLAIM, offset=(30, 30), interval=1, threshold=0.8, static=False):
+            if self.ui.appear_then_click(BTN_DIRECT_CLAIM, offset=(30, 30), interval=1, threshold=0.8, static=False):
                 actions.append('领取任务奖励')
                 self.ui.device.sleep(0.3)
                 return actions

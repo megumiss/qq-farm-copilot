@@ -728,12 +728,12 @@ class TaskMain(TaskBase):
                 self._expand_failed = False
                 if self.ui.device.screenshot() is not None:
                     self.ui.appear_then_click_any(
-                        [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
+                        [BTN_CLOSE, BTN_CONFIRM, BTN_DIRECT_CLAIM], offset=30, interval=1, threshold=0.8, static=False
                     )
                 return action_name
 
             if self.ui.appear_then_click_any(
-                [BTN_CLOSE, BTN_CONFIRM, BTN_CLAIM], offset=30, interval=1, threshold=0.8, static=False
+                [BTN_CLOSE, BTN_CONFIRM, BTN_DIRECT_CLAIM], offset=30, interval=1, threshold=0.8, static=False
             ):
                 continue
 

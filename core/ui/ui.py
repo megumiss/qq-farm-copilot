@@ -30,6 +30,8 @@ class UI(Handler):
         page_task,
         page_warehouse,
         page_wiki,
+        page_mail,
+        page_menu,
     ]
 
     def __init__(
