@@ -534,7 +534,9 @@ class CVDetector:
         sh, sw = screenshot.shape[:2]
 
         category = tpl.get('category', 'unknown')
+        template_name = str(tpl.get('name', '') or '')
         scales = [1.0, 0.9, 0.8, 1.1, 1.2]
+        min_tpl_side = 4 if template_name.startswith('icon_num_') else 10
 
         # 控制单模板候选点数量，避免噪声模板在全屏产生过多候选拖慢流程。
         max_hits = 64 if category == 'land' else 8
@@ -543,7 +545,7 @@ class CVDetector:
             new_w = int(tw * scale)
             new_h = int(th * scale)
             # 尺寸非法（过小/超界）直接跳过该尺度。
-            if new_w >= sw or new_h >= sh or new_w < 10 or new_h < 10:
+            if new_w >= sw or new_h >= sh or new_w < min_tpl_side or new_h < min_tpl_side:
                 continue
 
             resized_tpl = cv2.resize(tpl_img, (new_w, new_h))

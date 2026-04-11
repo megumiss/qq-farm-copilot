@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 
 from loguru import logger
 
@@ -23,6 +24,9 @@ SHOP_LIST_SWIPE_END = (270, 860)
 
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
 LAND_MATCH_Y_RANGE = (350, 850)
+FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS = 0.5
+FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS = 1.0
+FIRST_CLICK_SIDE_MARGIN_RATIO = 0.2
 
 
 class TaskMain(TaskBase):
@@ -33,7 +37,7 @@ class TaskMain(TaskBase):
         super().__init__(engine, ui)
         self._expand_failed = False
         self.shop_ocr = ShopItemOCR()
-        self.number_box_detector = NumberBoxDetector()
+        self.number_box_detector = NumberBoxDetector(ui=self.ui)
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：在 run 内按 feature 显式控制每个子方法。"""
@@ -305,6 +309,16 @@ class TaskMain(TaskBase):
         top_row = [point for point in coords if point[1] == min_y]
         return min(top_row, key=lambda p: abs(p[0] - avg_x))
 
+    @staticmethod
+    def _get_first_click_labor_delay_seconds(land_x: int, frame_width: int) -> float:
+        """按首次点击坐标估算识别劳动最光荣前的等待时间。"""
+        if frame_width <= 0:
+            return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
+        side_margin = int(frame_width * FIRST_CLICK_SIDE_MARGIN_RATIO)
+        if land_x <= side_margin or land_x >= (frame_width - side_margin):
+            return FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS
+        return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
+
     def _get_labor_anchor_location(self) -> tuple[int, int] | None:
         """识别劳动最光荣锚点位置，用于估计画面平移。"""
         self.ui.device.screenshot()
@@ -364,8 +378,20 @@ class TaskMain(TaskBase):
         seed_panel_boxes = []
         excluded_seed_box_orders: set[int] = set()
         open_seed_clicks = 0
+        first_land_click_at: float | None = None
+        first_click_labor_delay_seconds = 0.0
         while 1:
+            land_x, land_y = seed_popup_land
+            self.engine.device.click_point(int(land_x), int(land_y), desc='点击可播种地块')
+            if open_seed_clicks == 0:
+                first_land_click_at = time.monotonic()
+            open_seed_clicks += 1
+            self.ui.device.sleep(0.5)
+
             cv_img = self.ui.device.screenshot()
+            if open_seed_clicks == 1:
+                frame_width = int(cv_img.shape[1]) if cv_img is not None and len(cv_img.shape) >= 2 else 0
+                first_click_labor_delay_seconds = self._get_first_click_labor_delay_seconds(int(land_x), frame_width)
             popup_visible = self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False)
             number_boxes = self.number_box_detector.detect_boxes(cv_img)
             # 检查种子选择框/数字框出现
@@ -388,10 +414,12 @@ class TaskMain(TaskBase):
                     return self._plant_all(crop_name)
                 logger.warning('自动播种流程: 购买种子失败或未完成，结束本轮播种')
                 return
-            land_x, land_y = seed_popup_land
-            self.engine.device.click_point(int(land_x), int(land_y), desc='点击可播种地块')
-            open_seed_clicks += 1
-            self.ui.device.sleep(0.2)
+
+        if first_land_click_at is not None and first_click_labor_delay_seconds > 0:
+            elapsed = time.monotonic() - first_land_click_at
+            remain = first_click_labor_delay_seconds - elapsed
+            if remain > 0:
+                self.ui.device.sleep(remain)
 
         after_labor_anchor = self._get_labor_anchor_location()
         if before_labor_anchor is not None and after_labor_anchor is not None:
@@ -399,9 +427,7 @@ class TaskMain(TaskBase):
             dy = float(after_labor_anchor[1] - before_labor_anchor[1])
             drift = math.hypot(dx, dy)
             if drift > 3.0:
-                logger.info(
-                    '自动播种流程: 触发种子框后画面偏移 {:.1f}px，已修正播种坐标', drift
-                )
+                logger.info('自动播种流程: 画面偏移 {:.1f}px，已修正播种坐标', drift)
             land_coords = self._shift_land_coords(land_coords, dx, dy)
         else:
             logger.warning('自动播种流程: 劳动最光荣锚点识别失败，继续使用原始地块坐标')

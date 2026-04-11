@@ -1,7 +1,8 @@
-"""Seed number-box detector (contour-only)."""
+"""Seed number-box detector (digit-template aggregation only)."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import cv2
@@ -20,56 +21,45 @@ class NumberBox:
 
 
 class NumberBoxDetector:
-    """Detect number boxes from seed bar area by contour geometry."""
+    """Detect seed number boxes from digit templates (`icon_num_0..9`)."""
 
     def __init__(
         self,
         *,
+        ui=None,
         x_min_px: int = 40,
         x_max_px: int = 500,
         y_min_px: int = 400,
         y_max_px: int = 750,
-        seed_bar_search_y_min_px: int = 430,
-        seed_bar_search_y_max_px: int = 860,
-        min_area: int = 260,
-        max_area: int = 12000,
-        min_w: int = 22,
-        max_w: int = 140,
-        min_h: int = 14,
-        max_h: int = 90,
-        min_aspect: float = 0.90,
-        max_aspect: float = 4.20,
-        min_dark_ratio: float = 0.010,
-        min_fill_ratio: float = 0.20,
-        min_solidity: float = 0.68,
-        min_circularity: float = 0.18,
-        row_y_tolerance: int = 18,
-        min_gap: int = 42,
-        max_gap: int = 140,
         iou_dedup_threshold: float = 0.35,
+        digit_template_threshold: float = 0.9,
+        digit_iou_dedup_threshold: float = 0.50,
     ):
+        self.ui = ui
         self.x_min_px = int(x_min_px)
         self.x_max_px = int(x_max_px)
         self.y_min_px = int(y_min_px)
         self.y_max_px = int(y_max_px)
-        self.seed_bar_search_y_min_px = int(seed_bar_search_y_min_px)
-        self.seed_bar_search_y_max_px = int(seed_bar_search_y_max_px)
-        self.min_area = int(min_area)
-        self.max_area = int(max_area)
-        self.min_w = int(min_w)
-        self.max_w = int(max_w)
-        self.min_h = int(min_h)
-        self.max_h = int(max_h)
-        self.min_aspect = float(min_aspect)
-        self.max_aspect = float(max_aspect)
-        self.min_dark_ratio = float(min_dark_ratio)
-        self.min_fill_ratio = float(min_fill_ratio)
-        self.min_solidity = float(min_solidity)
-        self.min_circularity = float(min_circularity)
-        self.row_y_tolerance = int(row_y_tolerance)
-        self.min_gap = int(min_gap)
-        self.max_gap = int(max_gap)
         self.iou_dedup_threshold = float(iou_dedup_threshold)
+        self.digit_template_threshold = float(digit_template_threshold)
+        self.digit_iou_dedup_threshold = float(digit_iou_dedup_threshold)
+
+    @staticmethod
+    def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1 = max(ax1, bx1)
+        iy1 = max(ay1, by1)
+        ix2 = min(ax2, bx2)
+        iy2 = min(ay2, by2)
+        iw = max(0, ix2 - ix1)
+        ih = max(0, iy2 - iy1)
+        inter = iw * ih
+        if inter <= 0:
+            return 0.0
+        area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
+        area_b = max(1, (bx2 - bx1) * (by2 - by1))
+        return inter / float(area_a + area_b - inter)
 
     @staticmethod
     def _filter_boxes_by_xy_range(
@@ -92,196 +82,75 @@ class NumberBoxDetector:
         return out
 
     @staticmethod
-    def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
-        ax1, ay1, ax2, ay2 = a
-        bx1, by1, bx2, by2 = b
-        ix1 = max(ax1, bx1)
-        iy1 = max(ay1, by1)
-        ix2 = min(ax2, bx2)
-        iy2 = min(ay2, by2)
-        iw = max(0, ix2 - ix1)
-        ih = max(0, iy2 - iy1)
-        inter = iw * ih
-        if inter <= 0:
-            return 0.0
-        area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
-        area_b = max(1, (bx2 - bx1) * (by2 - by1))
-        return inter / float(area_a + area_b - inter)
-
-    def _estimate_seed_bar_row(self, gray: np.ndarray) -> int:
-        """Estimate translucent seed-bar row by dark-ratio peak."""
-        h, _ = gray.shape[:2]
-        y1 = int(self.seed_bar_search_y_min_px)
-        y2 = int(self.seed_bar_search_y_max_px)
-        y1 = max(0, min(y1, h - 2))
-        y2 = max(y1 + 1, min(y2, h))
-        region = gray[y1:y2, :]
-        if region.size == 0:
-            return int(min(h - 1, max(0, (self.seed_bar_search_y_min_px + self.seed_bar_search_y_max_px) // 2)))
-
-        dark = (region <= 120).astype(np.float32)
-        row_dark = dark.mean(axis=1)
-        row_dark = cv2.GaussianBlur(row_dark.reshape(-1, 1), (1, 17), 0).reshape(-1)
-        peak_idx = int(np.argmax(row_dark))
-        return int(y1 + peak_idx)
+    def _digit_template_names() -> list[str]:
+        return [f'icon_num_{i}' for i in range(10)]
 
     @staticmethod
-    def _build_mask(gray: np.ndarray) -> np.ndarray:
-        """Build bright bubble mask by gray thresholds."""
-        _, mask_global = cv2.threshold(gray, 168, 255, cv2.THRESH_BINARY)
-        mask_adapt = cv2.adaptiveThreshold(
-            gray,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY,
-            29,
-            -8,
-        )
-        mask = cv2.bitwise_and(mask_global, mask_adapt)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=1)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-        return mask
+    def _parse_digit_template_name(name: str) -> str | None:
+        matched = re.fullmatch(r'icon_num_(\d)', str(name or '').strip())
+        if matched is None:
+            return None
+        return str(matched.group(1))
 
-    def _collect_candidates(
+    def _collect_template_digit_hits(
         self,
         img_bgr: np.ndarray,
-        roi: tuple[int, int, int, int],
-    ) -> list[tuple[int, int, int, int]]:
-        x1, y1, x2, y2 = roi
-        region = img_bgr[y1:y2, x1:x2]
-        if region.size == 0:
+        detect_roi: tuple[int, int, int, int],
+    ) -> list[tuple[int, int, int, int, float, str]]:
+        rx1, ry1, rx2, ry2 = [int(v) for v in detect_roi]
+        template_names = self._digit_template_names()
+        candidates: list[tuple[int, int, int, int, float, str]] = []
+        if self.ui is None:
             return []
 
-        gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-        mask = self._build_mask(gray)
+        from core.ui.assets import ASSET_NAME_TO_CONST
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        boxes: list[tuple[int, int, int, int]] = []
-
-        region_h = int(y2 - y1)
-        min_local_y = int(round(region_h * 0.10))
-        max_local_y = int(round(region_h * 0.92))
-        for contour in contours:
-            rx, ry, rw, rh = cv2.boundingRect(contour)
-            area = int(rw * rh)
-            if area < self.min_area or area > self.max_area:
+        for name in template_names:
+            button = ASSET_NAME_TO_CONST.get(name)
+            digit = self._parse_digit_template_name(name)
+            if button is None or digit is None:
                 continue
-            if rw < self.min_w or rw > self.max_w or rh < self.min_h or rh > self.max_h:
-                continue
-            if ry < min_local_y or ry > max_local_y:
-                continue
+            matches = self.ui.match_template_multi(
+                button,
+                threshold=float(self.digit_template_threshold),
+                roi=detect_roi,
+            )
+            for idx, det in enumerate(matches):
+                x1, y1, x2, y2 = [int(v) for v in det.area]
+                x1 = max(rx1, x1)
+                y1 = max(ry1, y1)
+                x2 = min(rx2, x2)
+                y2 = min(ry2, y2)
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                # match_template_multi 返回结果已按置信度排序；用顺序构造稳定分数用于后续去重优先级。
+                confidence = float(self.digit_template_threshold) - float(idx) * 1e-4
+                candidates.append((x1, y1, x2, y2, confidence, digit))
 
-            aspect = float(rw) / max(1.0, float(rh))
-            if aspect < self.min_aspect or aspect > self.max_aspect:
-                continue
-
-            contour_area = float(cv2.contourArea(contour))
-            if contour_area <= 1.0:
-                continue
-            fill_ratio = contour_area / float(max(1, rw * rh))
-            if fill_ratio < self.min_fill_ratio:
-                continue
-
-            hull = cv2.convexHull(contour)
-            hull_area = float(cv2.contourArea(hull))
-            if hull_area <= 1.0:
-                continue
-            solidity = contour_area / hull_area
-            if solidity < self.min_solidity:
-                continue
-
-            perimeter = float(cv2.arcLength(contour, True))
-            if perimeter <= 1.0:
-                continue
-            circularity = (4.0 * np.pi * contour_area) / (perimeter * perimeter)
-            if circularity < self.min_circularity:
-                continue
-
-            crop_gray = gray[ry : ry + rh, rx : rx + rw]
-            bright_ratio = float((crop_gray >= 165).sum()) / float(crop_gray.size)
-            if bright_ratio < 0.34:
-                continue
-            dark_ratio = float((crop_gray <= 120).sum()) / float(crop_gray.size)
-            if dark_ratio < self.min_dark_ratio:
-                continue
-
-            boxes.append((int(rx + x1), int(ry + y1), int(rx + rw + x1), int(ry + rh + y1)))
-
-        boxes.sort(key=lambda b: (b[1], b[0]))
-        deduped: list[tuple[int, int, int, int]] = []
-        for box in boxes:
-            if any(self._iou(box, old) > self.iou_dedup_threshold for old in deduped):
-                continue
-            deduped.append(box)
-
-        return deduped
-
-    def _cluster_rows(self, boxes: list[tuple[int, int, int, int]]) -> list[list[tuple[int, int, int, int]]]:
-        rows: list[list[tuple[int, int, int, int]]] = []
-        for box in sorted(boxes, key=lambda b: ((b[1] + b[3]) / 2.0, b[0])):
-            cy = (box[1] + box[3]) / 2.0
-            placed = False
-            for row in rows:
-                mean_y = sum((b[1] + b[3]) / 2.0 for b in row) / float(len(row))
-                if abs(cy - mean_y) <= float(self.row_y_tolerance):
-                    row.append(box)
-                    placed = True
-                    break
-            if not placed:
-                rows.append([box])
-        for row in rows:
-            row.sort(key=lambda b: b[0])
-        return rows
-
-    def _best_run_in_row(self, row: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
-        if not row:
-            return []
-        if len(row) <= 1:
-            return row[:]
-
-        runs: list[list[tuple[int, int, int, int]]] = []
-        curr = [row[0]]
-        for prev, now in zip(row, row[1:]):
-            prev_cx = int((prev[0] + prev[2]) // 2)
-            now_cx = int((now[0] + now[2]) // 2)
-            gap = int(now_cx - prev_cx)
-            if self.min_gap <= gap <= self.max_gap:
-                curr.append(now)
-            else:
-                runs.append(curr)
-                curr = [now]
-        runs.append(curr)
-        runs.sort(
-            key=lambda r: (
-                len(r),
-                (r[-1][0] - r[0][0]) if len(r) > 1 else 0,
-            ),
-            reverse=True,
-        )
-        return runs[0]
-
-    def _select_boxes(self, boxes: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
-        if not boxes:
-            return []
-        rows = self._cluster_rows(boxes)
-        candidates: list[list[tuple[int, int, int, int]]] = []
-        for row in rows:
-            run = self._best_run_in_row(row)
-            if run:
-                candidates.append(run)
         if not candidates:
             return []
 
-        candidates.sort(
-            key=lambda r: (
-                len(r),
-                (r[-1][0] - r[0][0]) if len(r) > 1 else 0,
-                -sum((b[1] + b[3]) / 2.0 for b in r) / float(len(r)),
-            ),
-            reverse=True,
-        )
-        best = candidates[0]
-        return sorted(best, key=lambda b: b[0])
+        candidates.sort(key=lambda item: item[4], reverse=True)
+        deduped: list[tuple[int, int, int, int, float, str]] = []
+        for item in candidates:
+            box = (item[0], item[1], item[2], item[3])
+            cx = int(round((item[0] + item[2]) / 2.0))
+            cy = int(round((item[1] + item[3]) / 2.0))
+            duplicated = False
+            for old in deduped:
+                old_box = (old[0], old[1], old[2], old[3])
+                old_cx = int(round((old[0] + old[2]) / 2.0))
+                old_cy = int(round((old[1] + old[3]) / 2.0))
+                if self._iou(box, old_box) >= float(self.digit_iou_dedup_threshold):
+                    duplicated = True
+                    break
+                if abs(cx - old_cx) <= 2 and abs(cy - old_cy) <= 2:
+                    duplicated = True
+                    break
+            if not duplicated:
+                deduped.append(item)
+        deduped.sort(key=lambda item: (int((item[1] + item[3]) / 2), int((item[0] + item[2]) / 2)))
+        return deduped
 
     @staticmethod
     def _normalize_box_sizes(
@@ -293,10 +162,8 @@ class NumberBoxDetector:
             return []
         widths = [b[2] - b[0] for b in boxes]
         heights = [b[3] - b[1] for b in boxes]
-        ref_w = int(round(float(np.median(widths))))
-        ref_h = int(round(float(np.median(heights))))
-        ref_w = max(34, min(ref_w, 52))
-        ref_h = max(20, min(ref_h, 38))
+        ref_w = max(34, min(int(round(float(np.median(widths)))), 52))
+        ref_h = max(20, min(int(round(float(np.median(heights)))), 38))
 
         out: list[tuple[int, int, int, int]] = []
         for x1, y1, x2, y2 in boxes:
@@ -313,6 +180,77 @@ class NumberBoxDetector:
             out.append((nx1, ny1, nx2, ny2))
         return out
 
+    def _aggregate_digit_hits_to_number_boxes(
+        self,
+        digit_hits: list[tuple[int, int, int, int, float, str]],
+        detect_roi: tuple[int, int, int, int],
+    ) -> list[tuple[int, int, int, int]]:
+        if not digit_hits:
+            return []
+
+        digit_boxes = sorted(
+            [(int(x1), int(y1), int(x2), int(y2)) for x1, y1, x2, y2, _, _ in digit_hits],
+            key=lambda box: (int((box[1] + box[3]) / 2), box[0]),
+        )
+        widths = [int(box[2] - box[0]) for box in digit_boxes]
+        heights = [int(box[3] - box[1]) for box in digit_boxes]
+        median_w = float(np.median(np.asarray(widths, dtype=np.float32))) if widths else 8.0
+        median_h = float(np.median(np.asarray(heights, dtype=np.float32))) if heights else 12.0
+        merge_gap = int(max(8, min(20, round(median_w * 1.8))))
+        row_tol = int(max(10, min(26, round(median_h * 1.5))))
+
+        grouped_runs: list[list[tuple[int, int, int, int]]] = []
+        for box in digit_boxes:
+            if not grouped_runs:
+                grouped_runs.append([box])
+                continue
+
+            last_box = grouped_runs[-1][-1]
+            cur_cy = int(round((box[1] + box[3]) / 2.0))
+            last_cy = int(round((last_box[1] + last_box[3]) / 2.0))
+            horizontal_gap = int(box[0] - last_box[2])
+            if abs(cur_cy - last_cy) <= row_tol and horizontal_gap <= merge_gap:
+                grouped_runs[-1].append(box)
+            else:
+                grouped_runs.append([box])
+
+        rx1, ry1, rx2, ry2 = [int(v) for v in detect_roi]
+        out: list[tuple[int, int, int, int]] = []
+        for run in grouped_runs:
+            if not run:
+                continue
+            x1 = min(box[0] for box in run)
+            y1 = min(box[1] for box in run)
+            x2 = max(box[2] for box in run)
+            y2 = max(box[3] for box in run)
+            cx = int(round((x1 + x2) / 2.0))
+            cy = int(round((y1 + y2) / 2.0))
+            run_width = int(x2 - x1)
+            run_height = int(y2 - y1)
+
+            target_w = int(max(24, min(52, round(float(run_width) * 2.6))))
+            target_h = int(max(20, min(38, round(float(run_height) * 2.8))))
+            bx1 = int(round(cx - target_w / 2.0))
+            by1 = int(round(cy - target_h / 2.0))
+            bx2 = int(bx1 + target_w)
+            by2 = int(by1 + target_h)
+
+            bx1 = max(rx1, bx1)
+            by1 = max(ry1, by1)
+            bx2 = min(rx2, bx2)
+            by2 = min(ry2, by2)
+            if bx2 <= bx1 or by2 <= by1:
+                continue
+            out.append((bx1, by1, bx2, by2))
+
+        out.sort(key=lambda box: (box[0], box[1]))
+        deduped: list[tuple[int, int, int, int]] = []
+        for box in out:
+            if any(self._iou(box, old) > self.iou_dedup_threshold for old in deduped):
+                continue
+            deduped.append(box)
+        return deduped
+
     def detect_boxes(
         self,
         img_bgr: np.ndarray | None,
@@ -321,18 +259,16 @@ class NumberBoxDetector:
         x_range: tuple[int, int] | None = None,
         y_range: tuple[int, int] | None = None,
     ) -> list[NumberBox]:
-        if img_bgr is None or img_bgr.size == 0:
-            return []
-        if img_bgr.ndim != 3:
+        if img_bgr is None or img_bgr.size == 0 or img_bgr.ndim != 3:
             return []
 
         h, w = img_bgr.shape[:2]
         if roi is None:
-            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-            seed_bar_row = self._estimate_seed_bar_row(gray)
-            number_row = int(seed_bar_row - 55)
-            primary_roi = (0, max(0, number_row - 38), w, min(h, number_row + 42))
-            fallback_roi = (0, max(0, number_row - 55), w, min(h, number_row + 60))
+            rx1 = 0
+            ry1 = max(0, min(h - 1, int(self.y_min_px - 80)))
+            rx2 = w
+            ry2 = max(ry1 + 1, min(h, int(self.y_max_px + 120)))
+            primary_roi = (rx1, ry1, rx2, ry2)
         else:
             x1, y1, x2, y2 = [int(v) for v in roi]
             x1 = max(0, min(x1, w - 1))
@@ -340,14 +276,9 @@ class NumberBoxDetector:
             x2 = max(x1 + 1, min(x2, w))
             y2 = max(y1 + 1, min(y2, h))
             primary_roi = (x1, y1, x2, y2)
-            fallback_roi = primary_roi
 
-        px1, py1, px2, py2 = primary_roi
-        fx1, fy1, fx2, fy2 = fallback_roi
-        if px2 <= px1 or py2 <= py1:
+        if primary_roi[2] <= primary_roi[0] or primary_roi[3] <= primary_roi[1]:
             return []
-        if fx2 <= fx1 or fy2 <= fy1:
-            fallback_roi = primary_roi
 
         if x_range is not None:
             x_min = int(min(x_range[0], x_range[1]))
@@ -357,6 +288,7 @@ class NumberBoxDetector:
             x_max = int(self.x_max_px)
         x_min = max(0, min(x_min, w - 1))
         x_max = max(x_min, min(x_max, w - 1))
+
         if y_range is not None:
             y_min = int(min(y_range[0], y_range[1]))
             y_max = int(max(y_range[0], y_range[1]))
@@ -366,29 +298,17 @@ class NumberBoxDetector:
         y_min = max(0, min(y_min, h - 1))
         y_max = max(y_min, min(y_max, h - 1))
 
-        candidates_primary = self._collect_candidates(img_bgr, primary_roi)
-        candidates_primary = self._filter_boxes_by_xy_range(
-            candidates_primary,
+        primary_hits = self._collect_template_digit_hits(img_bgr, primary_roi)
+        boxes = self._aggregate_digit_hits_to_number_boxes(primary_hits, primary_roi)
+        boxes = self._filter_boxes_by_xy_range(
+            boxes,
             x_min=x_min,
             x_max=x_max,
             y_min=y_min,
             y_max=y_max,
         )
-        selected_primary = self._select_boxes(candidates_primary)
-        candidates_fallback = self._collect_candidates(img_bgr, fallback_roi)
-        candidates_fallback = self._filter_boxes_by_xy_range(
-            candidates_fallback,
-            x_min=x_min,
-            x_max=x_max,
-            y_min=y_min,
-            y_max=y_max,
-        )
-        selected_fallback = self._select_boxes(candidates_fallback)
-
-        selected = selected_primary
-        if len(selected_fallback) > len(selected_primary):
-            selected = selected_fallback
-        selected = self._normalize_box_sizes(selected, frame_w=w, frame_h=h)
+        boxes.sort(key=lambda box: box[0])
+        selected = self._normalize_box_sizes(boxes, frame_w=w, frame_h=h)
 
         out: list[NumberBox] = []
         for idx, box in enumerate(selected, start=1):
