@@ -34,8 +34,26 @@ def bundled_configs_dir() -> Path:
     return bundled_root_dir() / 'configs'
 
 
+def is_dev_runtime_enabled() -> bool:
+    """是否启用开发态运行目录（仅源码调试场景）。"""
+    if getattr(sys, 'frozen', False):
+        return False
+
+    raw = str(os.getenv('QFARM_DEV') or '').strip().lower()
+    if raw == 'true':
+        return True
+    if raw == 'false':
+        return False
+
+    return bool(str(os.getenv('DEBUGPY_LAUNCHER_PORT') or '').strip())
+
+
 def user_app_dir() -> Path:
     """返回 Windows 标准用户应用目录。"""
+    if is_dev_runtime_enabled():
+        # 开发/调试态目录与发行版隔离，避免 profiles/instances 相互污染。
+        return bundled_root_dir() / '.dev_appdata' / APP_DIR_NAME
+
     if sys.platform == 'win32':
         base = os.getenv('APPDATA') or os.getenv('LOCALAPPDATA')
         if base:

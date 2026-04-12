@@ -9,7 +9,13 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
-from utils.app_paths import ensure_user_configs, instance_config_file, resolve_config_file, resolve_runtime_path
+from utils.app_paths import (
+    ensure_user_configs,
+    instance_config_file,
+    is_dev_runtime_enabled,
+    resolve_config_file,
+    resolve_runtime_path,
+)
 
 
 class PlantMode(str, Enum):
@@ -271,7 +277,7 @@ class AppConfig(BaseModel):
     @classmethod
     def _is_project_root_config_enabled(cls) -> bool:
         """是否启用项目根目录配置（用于本地开发调试）。"""
-        return str(os.getenv('QFARM_DEV') or '').strip().lower() == 'true'
+        return is_dev_runtime_enabled()
 
     @classmethod
     def _resolve_template_path(cls, config_path: str, template_path: str | None = None) -> str:
