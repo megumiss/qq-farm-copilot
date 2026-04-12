@@ -34,6 +34,8 @@ BACKGROUND_TREE_SWIPE_H_P1 = (230, 190)
 BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
 BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
 BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
+SEED_POPUP_NUMBER_BOX_Y_ABOVE = 50
+SEED_POPUP_NUMBER_BOX_Y_BELOW = 30
 LEVEL_OCR_REGION_QQ = (130, 102, 160, 125)
 LEVEL_OCR_REGION_WECHAT = (67, 102, 97, 125)
 
@@ -491,6 +493,25 @@ class TaskMain(TaskBase):
                     break
         return excluded_orders
 
+    def _filter_number_boxes_by_seed_popup_y(self, number_boxes: list, popup_location: tuple[int, int] | None) -> list:
+        """按种子弹窗右侧按钮的 y 坐标过滤数字框，降低误检。"""
+        if not number_boxes or popup_location is None:
+            return number_boxes
+
+        popup_y = int(popup_location[1])
+        min_y = popup_y - int(SEED_POPUP_NUMBER_BOX_Y_ABOVE)
+        max_y = popup_y + int(SEED_POPUP_NUMBER_BOX_Y_BELOW)
+        filtered = [box for box in number_boxes if min_y <= int(box.center[1]) <= max_y]
+        logger.info(
+            '自动播种流程: 数字框按弹窗y过滤 | popup_y={} keep_range=[{}, {}] raw={} filtered={}',
+            popup_y,
+            min_y,
+            max_y,
+            len(number_boxes),
+            len(filtered),
+        )
+        return filtered
+
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
         # get_lands_from_land_anchor()
@@ -520,8 +541,13 @@ class TaskMain(TaskBase):
             if open_seed_clicks == 1:
                 frame_width = int(cv_img.shape[1]) if cv_img is not None and len(cv_img.shape) >= 2 else 0
                 first_click_labor_delay_seconds = self._get_first_click_labor_delay_seconds(int(land_x), frame_width)
-            popup_visible = self.ui.appear(BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False)
+            popup_location = self.ui.appear_location(
+                BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False
+            )
+            popup_visible = popup_location is not None
             number_boxes = self.number_box_detector.detect_boxes(cv_img)
+            if popup_visible:
+                number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, popup_location)
             # 检查种子选择框/数字框出现
             if popup_visible or number_boxes:
                 seed_panel_boxes = number_boxes
@@ -568,7 +594,12 @@ class TaskMain(TaskBase):
             active_excluded_orders = excluded_seed_box_orders
             if not number_boxes:
                 cv_img = self.ui.device.screenshot()
+                popup_location = self.ui.appear_location(
+                    BTN_SEED_SELECT_POPUP_RIGHT, offset=30, threshold=0.85, static=False
+                )
                 number_boxes = self.number_box_detector.detect_boxes(cv_img)
+                if popup_location is not None:
+                    number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, popup_location)
                 active_excluded_orders = self._collect_excluded_seed_box_orders(number_boxes)
             available_boxes = [box for box in number_boxes if int(box.order) not in active_excluded_orders]
             if available_boxes:

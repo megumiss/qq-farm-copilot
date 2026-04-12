@@ -39,6 +39,10 @@ class NumberBoxDetector:
         iou_dedup_threshold: float = 0.35,
         digit_template_threshold: float = 0.7,
         digit_iou_dedup_threshold: float = 0.50,
+        left_anchor_row_cluster_gap_px: int = 18,
+        left_anchor_row_min_cluster_size: int = 2,
+        number_box_row_cluster_gap_px: int = 22,
+        number_box_row_min_cluster_size: int = 2,
     ):
         self.ui = ui
         self.x_min_px = int(x_min_px)
@@ -53,6 +57,10 @@ class NumberBoxDetector:
         self.iou_dedup_threshold = float(iou_dedup_threshold)
         self.digit_template_threshold = float(digit_template_threshold)
         self.digit_iou_dedup_threshold = float(digit_iou_dedup_threshold)
+        self.left_anchor_row_cluster_gap_px = int(left_anchor_row_cluster_gap_px)
+        self.left_anchor_row_min_cluster_size = int(left_anchor_row_min_cluster_size)
+        self.number_box_row_cluster_gap_px = int(number_box_row_cluster_gap_px)
+        self.number_box_row_min_cluster_size = int(number_box_row_min_cluster_size)
 
     @staticmethod
     def _iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
@@ -102,6 +110,140 @@ class NumberBoxDetector:
             return None
         return str(matched.group(1))
 
+    @staticmethod
+    def _center_y(box: tuple[int, int, int, int]) -> int:
+        return int(round((int(box[1]) + int(box[3])) / 2.0))
+
+    def _dedupe_boxes_by_iou_and_center(
+        self,
+        boxes: list[tuple[int, int, int, int]],
+        *,
+        iou_threshold: float = 0.5,
+        center_tol_px: int = 2,
+    ) -> list[tuple[int, int, int, int]]:
+        if not boxes:
+            return []
+        out: list[tuple[int, int, int, int]] = []
+        for box in sorted(boxes, key=lambda item: (item[1], item[0])):
+            cx = int(round((box[0] + box[2]) / 2.0))
+            cy = int(round((box[1] + box[3]) / 2.0))
+            duplicated = False
+            for old in out:
+                ocx = int(round((old[0] + old[2]) / 2.0))
+                ocy = int(round((old[1] + old[3]) / 2.0))
+                if self._iou(box, old) >= float(iou_threshold):
+                    duplicated = True
+                    break
+                if abs(cx - ocx) <= int(center_tol_px) and abs(cy - ocy) <= int(center_tol_px):
+                    duplicated = True
+                    break
+            if not duplicated:
+                out.append(box)
+        return out
+
+    def _filter_boxes_by_main_y_cluster(
+        self,
+        boxes: list[tuple[int, int, int, int]],
+        *,
+        gap_px: int,
+        min_cluster_size: int,
+        label: str,
+    ) -> list[tuple[int, int, int, int]]:
+        """按 y 轴主簇过滤，移除明显偏移的候选框。"""
+        if len(boxes) <= 2:
+            return boxes
+
+        sorted_boxes = sorted(boxes, key=self._center_y)
+        clusters: list[list[tuple[int, int, int, int]]] = []
+        for box in sorted_boxes:
+            cy = self._center_y(box)
+            if not clusters:
+                clusters.append([box])
+                continue
+            last_cy = self._center_y(clusters[-1][-1])
+            if abs(cy - last_cy) <= int(gap_px):
+                clusters[-1].append(box)
+            else:
+                clusters.append([box])
+
+        if not clusters:
+            return boxes
+
+        def cluster_span(items: list[tuple[int, int, int, int]]) -> int:
+            ys = [self._center_y(item) for item in items]
+            return int(max(ys) - min(ys)) if ys else 0
+
+        best_cluster = max(clusters, key=lambda items: (len(items), -cluster_span(items)))
+        best_size = len(best_cluster)
+        total = len(sorted_boxes)
+        if best_size < int(min_cluster_size) or best_size >= total:
+            return boxes
+        if total >= 4 and (float(best_size) / float(total)) < 0.5:
+            return boxes
+
+        filtered = sorted(best_cluster, key=lambda item: (item[0], item[1]))
+        logger.info(
+            '{} y主簇过滤: total={} keep={} drop={} gap_px={} min_cluster_size={}',
+            str(label),
+            total,
+            len(filtered),
+            total - len(filtered),
+            int(gap_px),
+            int(min_cluster_size),
+        )
+        return filtered
+
+    def _filter_digit_hits_by_main_y_cluster(
+        self,
+        digit_hits: list[tuple[int, int, int, int, float, str]],
+        *,
+        gap_px: int,
+        min_cluster_size: int,
+    ) -> list[tuple[int, int, int, int, float, str]]:
+        """按 y 轴主簇过滤 digit template 命中，剔除明显偏移的数字模板结果。"""
+        if len(digit_hits) <= 2:
+            return digit_hits
+
+        sorted_hits = sorted(digit_hits, key=lambda item: (int((item[1] + item[3]) / 2), int(item[0])))
+        clusters: list[list[tuple[int, int, int, int, float, str]]] = []
+        for item in sorted_hits:
+            cy = int(round((int(item[1]) + int(item[3])) / 2.0))
+            if not clusters:
+                clusters.append([item])
+                continue
+            last = clusters[-1][-1]
+            last_cy = int(round((int(last[1]) + int(last[3])) / 2.0))
+            if abs(cy - last_cy) <= int(gap_px):
+                clusters[-1].append(item)
+            else:
+                clusters.append([item])
+
+        if not clusters:
+            return digit_hits
+
+        def cluster_span(items: list[tuple[int, int, int, int, float, str]]) -> int:
+            ys = [int(round((int(it[1]) + int(it[3])) / 2.0)) for it in items]
+            return int(max(ys) - min(ys)) if ys else 0
+
+        best_cluster = max(clusters, key=lambda items: (len(items), -cluster_span(items)))
+        best_size = len(best_cluster)
+        total = len(sorted_hits)
+        if best_size < int(min_cluster_size) or best_size >= total:
+            return digit_hits
+        if total >= 4 and (float(best_size) / float(total)) < 0.5:
+            return digit_hits
+
+        filtered = sorted(best_cluster, key=lambda item: (int((item[1] + item[3]) / 2), int(item[0])))
+        logger.info(
+            '数字模板 y主簇过滤: total={} keep={} drop={} gap_px={} min_cluster_size={}',
+            total,
+            len(filtered),
+            total - len(filtered),
+            int(gap_px),
+            int(min_cluster_size),
+        )
+        return filtered
+
     def _collect_template_digit_hits(
         self,
         img_bgr: np.ndarray,
@@ -132,6 +274,17 @@ class NumberBoxDetector:
                 if lx2 <= lx1 or ly2 <= ly1:
                     continue
                 left_anchor_boxes.append((lx1, ly1, lx2, ly2))
+        left_anchor_boxes = self._dedupe_boxes_by_iou_and_center(
+            left_anchor_boxes,
+            iou_threshold=float(self.digit_iou_dedup_threshold),
+            center_tol_px=2,
+        )
+        left_anchor_boxes = self._filter_boxes_by_main_y_cluster(
+            left_anchor_boxes,
+            gap_px=int(self.left_anchor_row_cluster_gap_px),
+            min_cluster_size=int(self.left_anchor_row_min_cluster_size),
+            label='左锚点',
+        )
         if not left_anchor_boxes:
             return []
 
@@ -373,6 +526,11 @@ class NumberBoxDetector:
         y_max = max(y_min, min(y_max, h - 1))
 
         primary_hits = self._collect_template_digit_hits(img_bgr, primary_roi)
+        primary_hits = self._filter_digit_hits_by_main_y_cluster(
+            primary_hits,
+            gap_px=int(self.number_box_row_cluster_gap_px),
+            min_cluster_size=int(self.number_box_row_min_cluster_size),
+        )
         boxes = self._aggregate_digit_hits_to_number_boxes(primary_hits, primary_roi)
         boxes = self._filter_boxes_by_xy_range(
             boxes,
