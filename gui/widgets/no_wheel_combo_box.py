@@ -17,6 +17,28 @@ class NoWheelComboBox(QComboBox):
         view.setFrameShape(QFrame.Shape.NoFrame)
         view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        view.setStyleSheet(
+            'QListView {'
+            'background-color: #ffffff;'
+            'color: #0f172a;'
+            'border: 1px solid #cbd5e1;'
+            'border-radius: 10px;'
+            'padding: 4px;'
+            'outline: none;'
+            '}'
+            'QListView::item {'
+            'min-height: 24px;'
+            'padding: 4px 8px;'
+            'border-radius: 6px;'
+            '}'
+            'QListView::item:hover {'
+            'background-color: #eef2ff;'
+            '}'
+            'QListView::item:selected {'
+            'background-color: #dbeafe;'
+            'color: #0f172a;'
+            '}'
+        )
         self.setView(view)
 
     def wheelEvent(self, event: QWheelEvent):

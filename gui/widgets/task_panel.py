@@ -216,17 +216,6 @@ class TaskPanel(QWidget):
             )
             # 额外预留左右内边距与下拉箭头区域，避免文本被省略号截断。
             interval_unit.setFixedWidth(max(96, max_unit_text_width + 44))
-            interval_unit.setStyleSheet(
-                'QComboBox {'
-                'min-height: 28px;'
-                'padding: 4px 24px 4px 8px;'
-                '}'
-                'QComboBox::drop-down {'
-                'width: 20px;'
-                'subcontrol-origin: padding;'
-                'subcontrol-position: top right;'
-                '}'
-            )
             next_run = QLineEdit()
             # 固定模板输入，支持逐位编辑，不需要先全选。
             next_run.setInputMask('0000-00-00 00:00:00;_')
