@@ -130,6 +130,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 - `executor`：空队列策略、默认间隔、最大失败次数、`min_task_interval_seconds`（任务最小执行间隔）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
+- `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）
 
 等级 OCR 相关（`planting`）：
 
@@ -145,6 +146,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "priority": 10,
     "trigger": "interval",
     "interval_seconds": 60,
+    "enabled_time_range": "00:00:00-23:59:59",
     "daily_time": "04:00",
     "next_run": "2026-01-01 00:00",
     "failure_interval_seconds": 30,
@@ -162,6 +164,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "daily_time": "04:00",
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 1800,
+    "enabled_time_range": "00:00:00-23:59:59",
     "failure_interval_seconds": 60,
     "features": {
       "auto_steal": false,
@@ -180,6 +183,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "daily_time": "04:00",
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 86400,
+    "enabled_time_range": "00:00:00-23:59:59",
     "failure_interval_seconds": 300,
     "features": {}
   },
@@ -190,6 +194,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "daily_time": "04:00",
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 21600,
+    "enabled_time_range": "00:00:00-23:59:59",
     "failure_interval_seconds": 300,
     "features": {
       "claim_growth_task": false,
@@ -201,6 +206,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     "priority": 35,
     "trigger": "daily",
     "daily_time": "04:00",
+    "enabled_time_range": "00:00:00-23:59:59",
     "interval_seconds": 86400,
     "failure_interval_seconds": 300,
     "features": {
@@ -227,6 +233,7 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 - 到期任务按 `priority` 从小到大执行
 - 任务执行后按成功/失败间隔或 `TaskResult.next_run_seconds` 计算下一次执行
+- `INTERVAL` 任务仅在 `enabled_time_range` 内执行；不在时间段内会跳过本轮并延迟到下个启用时段起点
 - `interval_seconds` / `failure_interval_seconds` 生效下限为 `executor.min_task_interval_seconds`（默认 `5` 秒）
 - 每次计算出的下次执行时间会回写到 `tasks.<task>.next_run`
 - `DAILY` 与 `INTERVAL` 共用同一套执行器队列

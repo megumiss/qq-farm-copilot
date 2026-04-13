@@ -65,6 +65,7 @@
 
 - `trigger=interval`：按 `interval_seconds`。
 - `trigger=daily`：按 `daily_time` 计算距离下一次秒数。
+- `trigger=interval` 额外受 `enabled_time_range`（`HH:MM:SS-HH:MM:SS`）限制；不在时间段则跳过本轮并延迟到下个时间段起点。
 - `interval_seconds` / `failure_interval_seconds` 生效下限为 `executor.min_task_interval_seconds`（默认 `5` 秒）。
 - `TaskResult.next_run_seconds` 若设置，会覆盖本次默认成功/失败间隔。
 - 执行器每次计算后的 `next_run` 会回写 `config.tasks.<name>.next_run`。
@@ -190,6 +191,7 @@
 - `priority: int`（>=1）
 - `trigger: "interval" | "daily"`
 - `interval_seconds: int`（>=1，实际生效下限见 `executor.min_task_interval_seconds`）
+- `enabled_time_range: "HH:MM:SS-HH:MM:SS"`（默认 `00:00:00-23:59:59`，仅 `trigger=interval` 生效）
 - `daily_time: "HH:MM"`
 - `next_run: "YYYY-MM-DD HH:MM[:SS]"`（默认 `2026-01-01 00:00`）
 - `failure_interval_seconds: int`（>=1，实际生效下限见 `executor.min_task_interval_seconds`）
@@ -219,7 +221,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 检查 `window_title_keyword`、`window_select_rule`、窗口平台（QQ/微信）、模板是否与平台匹配。
 
 - 任务未执行
-: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds`、`priority`。
+: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds/enabled_time_range`、`priority`。
 
 - 修改文案后界面未更新
 : UI 文案读取 `configs/ui_labels.json`（内置配置）；修改后需重启程序，运行中不会热重建已创建面板。

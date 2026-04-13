@@ -12,6 +12,7 @@ from loguru import logger
 
 from core.exceptions import TaskRetryCurrentError
 from core.engine.task.registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
+from models.config import TaskTriggerType, normalize_task_enabled_time_range
 
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
@@ -162,9 +163,59 @@ class TaskExecutor:
             next_run=item.next_run,
             success_interval=item.success_interval,
             failure_interval=item.failure_interval,
+            trigger=item.trigger,
+            enabled_time_range=item.enabled_time_range,
             max_failures=item.max_failures,
             failure_count=item.failure_count,
         )
+
+    @staticmethod
+    def _enabled_time_range_seconds(text: str) -> tuple[int, int]:
+        """将 `HH:MM:SS-HH:MM:SS` 启用时间段转换为秒范围。"""
+        normalized = normalize_task_enabled_time_range(text)
+        start_text, end_text = normalized.split('-', 1)
+        start_hour, start_minute, start_second = start_text.split(':', 2)
+        end_hour, end_minute, end_second = end_text.split(':', 2)
+        start = int(start_hour) * 3600 + int(start_minute) * 60 + int(start_second)
+        end = int(end_hour) * 3600 + int(end_minute) * 60 + int(end_second)
+        return start, end
+
+    @classmethod
+    def _is_task_time_enabled(cls, task: TaskItem, now: datetime) -> bool:
+        """判断任务在当前时刻是否处于启用时间段（仅 interval 生效）。"""
+        trigger_text = cls._normalize_trigger_text(getattr(task, 'trigger', TaskTriggerType.INTERVAL.value))
+        if trigger_text != TaskTriggerType.INTERVAL.value:
+            return True
+
+        start, end = cls._enabled_time_range_seconds(getattr(task, 'enabled_time_range', ''))
+        if start == end:
+            return True
+        current = now.hour * 3600 + now.minute * 60 + now.second
+        if start < end:
+            return start <= current <= end
+        return current >= start or current <= end
+
+    @classmethod
+    def _next_enabled_time_start(cls, task: TaskItem, now: datetime) -> datetime:
+        """计算任务下一个可执行时间段起点。"""
+        start, end = cls._enabled_time_range_seconds(getattr(task, 'enabled_time_range', ''))
+        if start == end:
+            return now
+
+        start_hour = start // 3600
+        start_minute = (start % 3600) // 60
+        start_second = start % 60
+        start_dt = now.replace(hour=start_hour, minute=start_minute, second=start_second, microsecond=0)
+        current = now.hour * 3600 + now.minute * 60 + now.second
+        if start < end:
+            if current < start:
+                return start_dt
+            return start_dt + timedelta(days=1)
+
+        # 跨天区间（例如 23:00-06:00）下，不在区间说明当前位于 end 和 start 之间。
+        if end < current < start:
+            return start_dt
+        return start_dt + timedelta(days=1)
 
     def _emit_snapshot(self):
         """触发快照回调，向上层同步调度状态。"""
@@ -212,6 +263,21 @@ class TaskExecutor:
                     self._running_task = None
 
             self._emit_snapshot()
+
+            if task and not self._is_task_time_enabled(task, now):
+                with self._lock:
+                    item = self._tasks.get(task.name)
+                    if item:
+                        next_start = self._next_enabled_time_start(item, now)
+                        item.next_run = max(now + timedelta(seconds=1), next_start)
+                        logger.debug(
+                            f'task `{item.name}` skipped by enabled_time_range({item.enabled_time_range}), '
+                            f'next_run={item.next_run.strftime("%Y-%m-%d %H:%M:%S")}'
+                        )
+                    self._running_task = None
+                self._emit_snapshot()
+                time.sleep(0.03)
+                continue
 
             if not task:
                 # 空队列时可执行 idle hook（例如回主界面），并短暂休眠。
@@ -275,3 +341,18 @@ class TaskExecutor:
 
             self._emit_snapshot()
             time.sleep(0.03)
+
+    @staticmethod
+    def _normalize_trigger_text(trigger) -> str:
+        """将任务触发类型规范化为 `interval/daily`。"""
+        if isinstance(trigger, TaskTriggerType):
+            return trigger.value
+        raw = str(trigger or '').strip()
+        lowered = raw.lower()
+        if lowered in {TaskTriggerType.INTERVAL.value, TaskTriggerType.DAILY.value}:
+            return lowered
+        if '.' in lowered:
+            tail = lowered.split('.')[-1]
+            if tail in {TaskTriggerType.INTERVAL.value, TaskTriggerType.DAILY.value}:
+                return tail
+        return lowered

@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from models.config import resolve_task_min_interval_seconds
+from models.config import (
+    DEFAULT_TASK_ENABLED_TIME_RANGE,
+    TaskTriggerType,
+    normalize_task_enabled_time_range,
+    resolve_task_min_interval_seconds,
+)
 
 if TYPE_CHECKING:
     from models.config import AppConfig
@@ -22,6 +27,8 @@ class TaskItem:
     next_run: datetime
     success_interval: int
     failure_interval: int
+    trigger: str = TaskTriggerType.INTERVAL.value
+    enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
     max_failures: int = 3
     failure_count: int = 0
 
@@ -77,6 +84,8 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
         cfg = tasks_cfg.get(task_name) if isinstance(tasks_cfg, dict) else getattr(tasks_cfg, task_name, None)
         if cfg is None:
             continue
+        trigger_cfg = getattr(cfg, 'trigger', TaskTriggerType.INTERVAL)
+        trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
         out[task_name] = TaskItem(
             name=task_name,
             enabled=bool(getattr(cfg, 'enabled', True)),
@@ -89,6 +98,10 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
             failure_interval=max(
                 min_interval,
                 int(getattr(cfg, 'failure_interval_seconds', default_failure)),
+            ),
+            trigger=trigger_text,
+            enabled_time_range=normalize_task_enabled_time_range(
+                getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
             ),
             max_failures=max_failures,
         )

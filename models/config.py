@@ -109,6 +109,45 @@ class TaskTriggerType(str, Enum):
 
 DEFAULT_MIN_TASK_INTERVAL_SECONDS = 5
 DEFAULT_TASK_NEXT_RUN = '2026-01-01 00:00'
+DEFAULT_TASK_ENABLED_TIME_RANGE = '00:00:00-23:59:59'
+
+
+def _normalize_hh_mm_text(text: str, fallback: str) -> str:
+    """将输入文本规范化为 `HH:MM`。"""
+    if not re.match(r'^\d{2}:\d{2}$', text):
+        return fallback
+    hour = int(text[:2])
+    minute = int(text[3:5])
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return fallback
+    return f'{hour:02d}:{minute:02d}'
+
+
+def _normalize_hh_mm_ss_text(text: str, fallback: str) -> str:
+    """将输入文本规范化为 `HH:MM:SS`。"""
+    if not re.match(r'^\d{2}:\d{2}:\d{2}$', text):
+        return fallback
+    hour = int(text[:2])
+    minute = int(text[3:5])
+    second = int(text[6:8])
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59 or second < 0 or second > 59:
+        return fallback
+    return f'{hour:02d}:{minute:02d}:{second:02d}'
+
+
+def normalize_task_enabled_time_range(value: Any) -> str:
+    """规范化任务启用时间段为 `HH:MM:SS-HH:MM:SS`。"""
+    raw = str(value or DEFAULT_TASK_ENABLED_TIME_RANGE).strip()
+    for sep in ('-', '~', '～', '—'):
+        if sep not in raw:
+            continue
+        start_raw, end_raw = raw.split(sep, 1)
+        start = _normalize_hh_mm_ss_text(start_raw.strip(), '')
+        end = _normalize_hh_mm_ss_text(end_raw.strip(), '')
+        if start and end:
+            return f'{start}-{end}'
+        return DEFAULT_TASK_ENABLED_TIME_RANGE
+    return DEFAULT_TASK_ENABLED_TIME_RANGE
 
 
 def resolve_task_min_interval_seconds(executor_cfg) -> int:
@@ -127,6 +166,7 @@ class TaskScheduleItemConfig(BaseModel):
     priority: int = 10
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
+    enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
     daily_time: str = '00:01'
     next_run: str = DEFAULT_TASK_NEXT_RUN
     failure_interval_seconds: int = 60
@@ -155,13 +195,13 @@ class TaskScheduleItemConfig(BaseModel):
     def _normalize_daily_time(cls, value):
         """规范化 `daily_time` 输入值。"""
         text = str(value or '00:01').strip()
-        if not re.match(r'^\d{2}:\d{2}$', text):
-            return '00:01'
-        hour = int(text[:2])
-        minute = int(text[3:5])
-        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            return '00:01'
-        return f'{hour:02d}:{minute:02d}'
+        return _normalize_hh_mm_text(text, '00:01')
+
+    @field_validator('enabled_time_range', mode='before')
+    @classmethod
+    def _normalize_enabled_time_range(cls, value):
+        """规范化 `enabled_time_range` 输入值。"""
+        return normalize_task_enabled_time_range(value)
 
     @field_validator('next_run', mode='before')
     @classmethod

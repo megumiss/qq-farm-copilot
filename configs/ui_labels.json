@@ -65,6 +65,8 @@
     "switch_label": "开关:",
     "enabled": "启用",
     "daily_time_label": "每日执行时间:",
+    "enabled_time_range_label": "启用时间段:",
+    "time_range_separator": "~",
     "next_run_label": "下次执行:",
     "interval_label": "执行间隔:",
     "interval_unit_second": "秒",

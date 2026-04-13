@@ -24,9 +24,11 @@ from PyQt6.QtWidgets import (
 
 from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import (
+    DEFAULT_TASK_ENABLED_TIME_RANGE,
     DEFAULT_TASK_NEXT_RUN,
     AppConfig,
     TaskTriggerType,
+    normalize_task_enabled_time_range,
     resolve_task_min_interval_seconds,
 )
 from utils.app_paths import load_config_json_object
@@ -54,6 +56,8 @@ class TaskPanel(QWidget):
         self._switch_label = str(panel_labels.get('switch_label', 'Switch:'))
         self._enabled_text = str(panel_labels.get('enabled', 'Enable'))
         self._daily_time_label = str(panel_labels.get('daily_time_label', 'Daily time:'))
+        self._enabled_time_range_label = str(panel_labels.get('enabled_time_range_label', '启用时间段:'))
+        self._time_range_separator = str(panel_labels.get('time_range_separator', '~'))
         self._next_run_label = str(panel_labels.get('next_run_label', 'Next run:'))
         self._interval_label = str(panel_labels.get('interval_label', 'Interval:'))
         self._interval_unit_second = str(panel_labels.get('interval_unit_second', '秒'))
@@ -215,7 +219,7 @@ class TaskPanel(QWidget):
                 metrics.horizontalAdvance(self._interval_unit_hour),
             )
             # 额外预留左右内边距与下拉箭头区域，避免文本被省略号截断。
-            interval_unit.setFixedWidth(max(96, max_unit_text_width + 44))
+            interval_unit.setFixedWidth(max(80, max_unit_text_width + 43))
             next_run = QLineEdit()
             # 固定模板输入，支持逐位编辑，不需要先全选。
             next_run.setInputMask('0000-00-00 00:00:00;_')
@@ -240,9 +244,53 @@ class TaskPanel(QWidget):
             row_layout.addStretch()
 
             form.addRow(self._interval_label, row_widget)
+            start_time = QLineEdit()
+            start_time.setInputMask('00:00:00;_')
+            time_metrics = QFontMetrics(start_time.font())
+            time_input_width = max(75, time_metrics.horizontalAdvance('00:00:00') + 19)
+            start_time.setFixedWidth(time_input_width)
+            start_time.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            start_time.setStyleSheet(
+                'QLineEdit {'
+                'background-color: #ffffff;'
+                'border: 1px solid #cbd5e1;'
+                'border-radius: 6px;'
+                'padding: 4px 8px;'
+                'font-weight: 600;'
+                '}'
+                'QLineEdit:focus { border-color: #2563eb; }'
+            )
+            end_time = QLineEdit()
+            end_time.setInputMask('00:00:00;_')
+            end_time.setFixedWidth(time_input_width)
+            end_time.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            end_time.setStyleSheet(
+                'QLineEdit {'
+                'background-color: #ffffff;'
+                'border: 1px solid #cbd5e1;'
+                'border-radius: 6px;'
+                'padding: 4px 8px;'
+                'font-weight: 600;'
+                '}'
+                'QLineEdit:focus { border-color: #2563eb; }'
+            )
+            range_widget = QWidget()
+            range_layout = QHBoxLayout(range_widget)
+            range_layout.setContentsMargins(0, 0, 0, 0)
+            range_layout.setSpacing(8)
+            range_layout.addWidget(start_time)
+            sep_label = QLabel(self._time_range_separator)
+            sep_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sep_label.setFixedWidth(12)
+            range_layout.addWidget(sep_label)
+            range_layout.addWidget(end_time)
+            range_layout.addStretch()
+            form.addRow(self._enabled_time_range_label, range_widget)
             form.addRow(self._next_run_label, next_run)
             widgets['interval_value'] = interval_value
             widgets['interval_unit'] = interval_unit
+            widgets['enabled_time_start'] = start_time
+            widgets['enabled_time_end'] = end_time
             widgets['next_run'] = next_run
 
         group.setLayout(form)
@@ -297,6 +345,18 @@ class TaskPanel(QWidget):
             if isinstance(interval_unit, QComboBox):
                 interval_unit.currentIndexChanged.connect(self._auto_save)
 
+            enabled_time_start = widgets.get('enabled_time_start')
+            if isinstance(enabled_time_start, QLineEdit):
+                enabled_time_start.editingFinished.connect(
+                    lambda name=task_name: self._on_enabled_time_range_edit_finished(name)
+                )
+
+            enabled_time_end = widgets.get('enabled_time_end')
+            if isinstance(enabled_time_end, QLineEdit):
+                enabled_time_end.editingFinished.connect(
+                    lambda name=task_name: self._on_enabled_time_range_edit_finished(name)
+                )
+
             daily_time = widgets.get('daily_time')
             if isinstance(daily_time, QTimeEdit):
                 daily_time.timeChanged.connect(self._auto_save)
@@ -313,7 +373,7 @@ class TaskPanel(QWidget):
 
         行为：
         - 更新 executor 全局策略。
-        - 更新每个任务的 enabled/trigger/interval/daily_time/next_run。
+        - 更新每个任务的 enabled/trigger/interval/enabled_time_range/daily_time/next_run。
         - 保存后发出 `config_changed`，驱动引擎热更新。
         """
         if self._loading:
@@ -342,6 +402,13 @@ class TaskPanel(QWidget):
                     min_interval,
                     int(interval_value.value()) * max(1, unit_factor),
                 )
+                enabled_time_start = widgets.get('enabled_time_start')
+                enabled_time_end = widgets.get('enabled_time_end')
+                if isinstance(enabled_time_start, QLineEdit) and isinstance(enabled_time_end, QLineEdit):
+                    task_cfg.enabled_time_range = self._format_enabled_time_range(
+                        enabled_time_start.text(),
+                        enabled_time_end.text(),
+                    )
 
             daily_time = widgets.get('daily_time')
             if isinstance(daily_time, QTimeEdit):
@@ -379,6 +446,14 @@ class TaskPanel(QWidget):
                 display_value, unit_factor = self._split_interval_for_display(seconds)
                 self._set_combo_data(interval_unit, unit_factor)
                 interval_value.setValue(display_value)
+                enabled_time_start = widgets.get('enabled_time_start')
+                enabled_time_end = widgets.get('enabled_time_end')
+                if isinstance(enabled_time_start, QLineEdit) and isinstance(enabled_time_end, QLineEdit):
+                    start_time, end_time = self._parse_enabled_time_range(
+                        str(getattr(task_cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE))
+                    )
+                    enabled_time_start.setText(start_time)
+                    enabled_time_end.setText(end_time)
                 next_run = widgets.get('next_run')
                 if isinstance(next_run, QLineEdit):
                     normalized = self._normalize_next_run_text(str(getattr(task_cfg, 'next_run', '')))
@@ -447,6 +522,31 @@ class TaskPanel(QWidget):
                 continue
         return None
 
+    @staticmethod
+    def _format_enabled_time_range(start_text: str, end_text: str) -> str:
+        """格式化启用时间段文本。"""
+        return normalize_task_enabled_time_range(f'{start_text}-{end_text}')
+
+    @staticmethod
+    def _parse_enabled_time_range(text: str) -> tuple[str, str]:
+        """解析启用时间段文本。"""
+        normalized = normalize_task_enabled_time_range(text or DEFAULT_TASK_ENABLED_TIME_RANGE)
+        try:
+            start_text, end_text = normalized.split('-', 1)
+            return start_text, end_text
+        except Exception:
+            return '00:00:00', '23:59:59'
+
+    @staticmethod
+    def _normalize_time_only_text(text: str) -> str | None:
+        """将 `HH:MM:SS` 文本规范化。"""
+        raw = str(text or '').strip()
+        try:
+            parsed = datetime.strptime(raw, '%H:%M:%S')
+            return parsed.strftime('%H:%M:%S')
+        except Exception:
+            return None
+
     def _on_next_run_edit_finished(self, task_name: str):
         """校验并规范化任务的 `next_run` 输入。"""
         widgets = self._task_widgets.get(task_name, {})
@@ -461,4 +561,32 @@ class TaskPanel(QWidget):
                 normalized = self._normalize_next_run_text(DEFAULT_TASK_NEXT_RUN) or '2026-01-01 00:00:00'
         if next_run.text() != normalized:
             next_run.setText(normalized)
+        self._auto_save()
+
+    def _on_enabled_time_range_edit_finished(self, task_name: str):
+        """校验并规范化任务启用时间段输入。"""
+        widgets = self._task_widgets.get(task_name, {})
+        start_edit = widgets.get('enabled_time_start')
+        end_edit = widgets.get('enabled_time_end')
+        if not isinstance(start_edit, QLineEdit) or not isinstance(end_edit, QLineEdit):
+            return
+
+        start_text = self._normalize_time_only_text(start_edit.text())
+        end_text = self._normalize_time_only_text(end_edit.text())
+
+        cfg = self.config.tasks.get(task_name)
+        fallback = str(getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE))
+        fallback_start, fallback_end = self._parse_enabled_time_range(fallback)
+        if start_text is None:
+            start_text = fallback_start
+        if end_text is None:
+            end_text = fallback_end
+
+        normalized = self._format_enabled_time_range(start_text, end_text)
+        normalized_start, normalized_end = self._parse_enabled_time_range(normalized)
+
+        if start_edit.text() != normalized_start:
+            start_edit.setText(normalized_start)
+        if end_edit.text() != normalized_end:
+            end_edit.setText(normalized_end)
         self._auto_save()

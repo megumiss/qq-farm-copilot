@@ -19,7 +19,12 @@ from core.engine.task.registry import (
 )
 from core.exceptions import GamePageUnknownError, LoginRepeatError, TaskRetryCurrentError
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
-from models.config import TaskTriggerType, resolve_task_min_interval_seconds
+from models.config import (
+    DEFAULT_TASK_ENABLED_TIME_RANGE,
+    TaskTriggerType,
+    normalize_task_enabled_time_range,
+    resolve_task_min_interval_seconds,
+)
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
 from tasks.main import TaskMain
@@ -193,6 +198,8 @@ class BotExecutorMixin:
                 min_interval,
                 int(getattr(cfg, 'failure_interval_seconds', default_failure)),
             )
+            trigger_cfg = getattr(cfg, 'trigger', TaskTriggerType.INTERVAL)
+            trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
 
             next_run = now
             if cfg is not None:
@@ -209,6 +216,10 @@ class BotExecutorMixin:
                 next_run=next_run,
                 success_interval=success_interval,
                 failure_interval=failure_interval,
+                trigger=trigger_text,
+                enabled_time_range=normalize_task_enabled_time_range(
+                    getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
+                ),
                 max_failures=max_failures,
             )
         return out
@@ -349,11 +360,17 @@ class BotExecutorMixin:
                 min_interval,
                 int(getattr(cfg, 'failure_interval_seconds', default_failure)),
             )
+            trigger_cfg = getattr(cfg, 'trigger', TaskTriggerType.INTERVAL)
+            trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
             kwargs = {
                 'enabled': enabled,
                 'priority': priority,
                 'success_interval': success_interval,
                 'failure_interval': failure_interval,
+                'trigger': trigger_text,
+                'enabled_time_range': normalize_task_enabled_time_range(
+                    getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
+                ),
                 'max_failures': max_failures,
             }
 
@@ -370,6 +387,8 @@ class BotExecutorMixin:
                 item.priority = int(kwargs['priority'])
                 item.success_interval = int(kwargs['success_interval'])
                 item.failure_interval = int(kwargs['failure_interval'])
+                item.trigger = str(kwargs['trigger'])
+                item.enabled_time_range = str(kwargs['enabled_time_range'])
                 item.max_failures = int(kwargs['max_failures'])
                 if 'next_run' in kwargs:
                     item.next_run = kwargs['next_run']
