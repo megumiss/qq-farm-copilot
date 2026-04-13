@@ -142,6 +142,16 @@ class TaskMain(TaskBase):
             return None
 
         old_level = int(getattr(planting, 'player_level', 1))
+        if level < old_level:
+            logger.warning(
+                '等级识别: OCR识别出错，忽略较低识别结果 | Lv{} -> Lv{} | roi={} score={:.3f} raw={}',
+                old_level,
+                level,
+                roi,
+                score,
+                raw_text,
+            )
+            return old_level
         if level == old_level:
             logger.debug('等级识别: 等级未变化 | Lv{} score={:.3f}', level, score)
             return level
