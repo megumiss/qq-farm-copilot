@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import numpy as np
 
+from utils.ocr_provider import get_ocr_tool
 from utils.ocr_utils import OCRTool
 
 
 class FriendNameOCR:
-    """封装好友昵称识别，复用全局 OCR 实例。"""
+    """封装好友昵称识别，支持注入 OCR 实例。"""
 
-    _shared_ocr: OCRTool | None = None
-
-    def __init__(self):
-        """初始化并复用 OCR 实例。"""
-        if FriendNameOCR._shared_ocr is None:
-            FriendNameOCR._shared_ocr = OCRTool()
-        self.ocr = FriendNameOCR._shared_ocr
+    def __init__(
+        self,
+        ocr_tool: OCRTool | None = None,
+        *,
+        scope: str = 'engine',
+        key: str | None = None,
+    ):
+        """初始化 OCR 实例，优先使用注入对象。"""
+        self.ocr = ocr_tool or get_ocr_tool(scope=scope, key=key)
 
     def detect_name(
         self,

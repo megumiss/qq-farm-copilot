@@ -15,6 +15,8 @@ from core.platform.window_manager import WindowManager
 from core.ui.ui import UI
 from core.vision.cv_detector import CVDetector
 from models.config import AppConfig, resolve_effective_run_mode
+from utils.ocr_provider import get_ocr_tool
+from utils.ocr_utils import OCRTool
 from utils.template_paths import DEFAULT_TEMPLATE_PLATFORM, normalize_template_platform
 
 
@@ -34,6 +36,7 @@ class BotInitMixin:
         self._instance_id = str(instance_id or 'default')
         self._runtime_paths = dict(runtime_paths or {})
         self._error_dir = str(self._runtime_paths.get('error_dir') or 'logs/error')
+        self._ocr_tool: OCRTool = get_ocr_tool(scope='engine', key=self._instance_id)
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()

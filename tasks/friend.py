@@ -31,6 +31,7 @@ from core.ui.page import page_friend_list, page_main
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 from utils.friend_name_ocr import FriendNameOCR
+from utils.ocr_utils import OCRTool
 
 # 好友列表中“可操作图标”筛选范围：x 轴有效区间（像素）。
 FRIEND_PAGE_ICON_X_RANGE = (105, 410)
@@ -72,11 +73,11 @@ FRIEND_VISIT_MATCH_MARGIN_Y = 30
 class TaskFriend(TaskBase):
     """封装 `TaskFriend` 任务的执行入口与步骤。"""
 
-    def __init__(self, engine, ui):
+    def __init__(self, engine, ui, *, ocr_tool: OCRTool | None = None):
         """初始化对象并准备运行所需状态。"""
         super().__init__(engine, ui)
         self._friend_blacklist: list[str] = []
-        self.friend_name_ocr = FriendNameOCR()
+        self.friend_name_ocr = FriendNameOCR(ocr_tool=ocr_tool)
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：递进遍历可操作好友，直到没有可继续目标。"""

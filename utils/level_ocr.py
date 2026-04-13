@@ -6,19 +6,22 @@ import re
 
 import numpy as np
 
+from utils.ocr_provider import get_ocr_tool
 from utils.ocr_utils import OCRItem, OCRTool
 
 
 class LevelOCR:
     """封装等级识别逻辑，支持传入 ROI。"""
 
-    _shared_ocr: OCRTool | None = None
-
-    def __init__(self):
-        """初始化并复用 OCR 实例。"""
-        if LevelOCR._shared_ocr is None:
-            LevelOCR._shared_ocr = OCRTool()
-        self.ocr = LevelOCR._shared_ocr
+    def __init__(
+        self,
+        ocr_tool: OCRTool | None = None,
+        *,
+        scope: str = 'engine',
+        key: str | None = None,
+    ):
+        """初始化 OCR 实例，优先使用注入对象。"""
+        self.ocr = ocr_tool or get_ocr_tool(scope=scope, key=key)
 
     @staticmethod
     def _normalize_text(text: str) -> str:

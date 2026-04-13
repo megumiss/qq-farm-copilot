@@ -15,6 +15,7 @@ import numpy as np
 from loguru import logger
 
 from models.game_data import get_crop_names
+from utils.ocr_provider import get_ocr_tool
 from utils.ocr_utils import OCRItem, OCRTool
 
 
@@ -70,13 +71,16 @@ class ShopItemMatch:
 class ShopItemOCR:
     """封装 `ShopItemOCR` 相关的数据与行为。"""
 
-    _shared_ocr: OCRTool | None = None
-
-    def __init__(self, vocab: list[str] | None = None):
+    def __init__(
+        self,
+        vocab: list[str] | None = None,
+        ocr_tool: OCRTool | None = None,
+        *,
+        scope: str = 'engine',
+        key: str | None = None,
+    ):
         """初始化对象并准备运行所需状态。"""
-        if ShopItemOCR._shared_ocr is None:
-            ShopItemOCR._shared_ocr = OCRTool()
-        self.ocr = ShopItemOCR._shared_ocr
+        self.ocr = ocr_tool or get_ocr_tool(scope=scope, key=key)
         base_vocab = vocab if vocab else get_crop_names()
         self.vocab = sorted({self._norm_name(v) for v in base_vocab if v})
         self._norm_to_original = {self._norm_name(v): v for v in base_vocab if v}

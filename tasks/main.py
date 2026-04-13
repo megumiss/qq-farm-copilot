@@ -18,6 +18,7 @@ from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from tasks.base import TaskBase
 from utils.level_ocr import LevelOCR
 from utils.number_box_detector import NumberBoxDetector
+from utils.ocr_utils import OCRTool
 from utils.shop_item_ocr import ShopItemOCR
 
 SHOP_LIST_SWIPE_START = (270, 300)
@@ -43,13 +44,13 @@ LEVEL_OCR_REGION_WECHAT = (67, 102, 97, 125)
 class TaskMain(TaskBase):
     """封装 `TaskMain` 任务的执行入口与步骤。"""
 
-    def __init__(self, engine, ui):
+    def __init__(self, engine, ui, *, ocr_tool: OCRTool | None = None):
         """初始化对象并准备运行所需状态。"""
         super().__init__(engine, ui)
         self._expand_failed = False
-        self.shop_ocr = ShopItemOCR()
+        self.shop_ocr = ShopItemOCR(ocr_tool=ocr_tool)
         self.number_box_detector = NumberBoxDetector(ui=self.ui)
-        self.level_ocr = LevelOCR()
+        self.level_ocr = LevelOCR(ocr_tool=ocr_tool)
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：在 run 内按 feature 显式控制每个子方法。"""
