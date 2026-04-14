@@ -5,6 +5,16 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 rapidocr_datas = collect_data_files('rapidocr_onnxruntime')
 gui_hiddenimports = ['gui.dialog_styles'] + collect_submodules('gui.widgets')
 core_gui_binary = [('gui/main_window_core.pyd', 'gui')]
+gui_package_datas = collect_data_files(
+    'gui',
+    include_py_files=True,
+    includes=[
+        '__init__.py',
+        'dialog_styles.py',
+        'widgets/__init__.py',
+        'widgets/*.py',
+    ],
+)
 
 a = Analysis(
     ['main.py'],
@@ -15,6 +25,7 @@ a = Analysis(
         ('templates', 'templates'),
         ('gui/icons', 'gui/icons'),
     ]
+    + gui_package_datas
     + rapidocr_datas,
     hiddenimports=[
         'PyQt6.sip',
