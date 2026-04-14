@@ -1,1 +1,1 @@
-# widgets package
+"""gui widgets."""

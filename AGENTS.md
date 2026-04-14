@@ -6,7 +6,7 @@
 : 推荐命令：`.\.venv\Scripts\python.exe -m ruff format core gui models tasks utils main.py private\main_window_core.py`
 
 - `private/main_window_core.py` 与 `gui/main_window_core.pyd` 的关系与更新方式：
-: `private/main_window_core.py` 是 GUI 源码；`gui/main_window_core.pyd` 是实际发布/默认运行加载的二进制产物。
+: `private/main_window_core.py` 是 Fluent GUI 私有源码；`gui/main_window_core.pyd` 是发布/默认加载的二进制产物。
 : GUI 更新流程（必须遵守）：先改 `private/main_window_core.py`，验证通过后执行 `.\private\build_main_window_core_pyd.ps1` 重新编译并覆盖 `gui/main_window_core.pyd`。
 : 首次编译先执行：`.\private\build_main_window_core_pyd.ps1 -InstallDeps`。
 
@@ -273,4 +273,5 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 - 关键阶段打印阶段日志（开始、步骤切换、结束）。
 - 点击日志必须包含按钮名与坐标；任务完成日志必须包含任务名、状态、动作摘要。
 - 异常日志要带上下文（当前任务/页面/按钮），便于复现与回放。
+
 

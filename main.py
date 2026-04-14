@@ -74,7 +74,13 @@ def main():
     # 启动GUI
     _set_windows_app_id()
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')
+    try:
+        from qfluentwidgets import Theme, setTheme, setThemeColor
+
+        setTheme(Theme.AUTO)
+        setThemeColor('#2563eb')
+    except Exception:
+        app.setStyle('Fusion')
     wheel_filter = _NoWheelSpinBoxFilter(app)
     app.installEventFilter(wheel_filter)
     app._no_wheel_spin_box_filter = wheel_filter

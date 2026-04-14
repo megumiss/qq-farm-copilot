@@ -1,108 +1,84 @@
-"""状态面板 - 紧凑网格布局"""
+"""Fluent 状态面板。"""
 
-from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QGroupBox, QSizePolicy
+from __future__ import annotations
 
-from utils.app_paths import load_config_json_object
+from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from qfluentwidgets import BodyLabel, CardWidget, StrongBodyLabel
 
 
 class StatusPanel(QWidget):
-    """承载 `StatusPanel` 相关界面控件与交互逻辑。"""
+    """运行态统计显示。"""
 
     def __init__(self, parent=None):
-        """初始化对象并准备运行所需状态。"""
         super().__init__(parent)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
-        panel_labels = load_config_json_object('ui_labels.json', prefer_user=False).get('status_panel', {})
-        self._group_titles = panel_labels.get('group_titles', {})
-        self._cell_labels = panel_labels.get('labels', {})
-        self._state_text_map = panel_labels.get('state_text', {})
-        self._labels = {}
-        self._init_ui()
+        self._labels: dict[str, StrongBodyLabel] = {}
+        self._build_ui()
 
-    def _init_ui(self):
-        """初始化 `ui` 相关状态或界面。"""
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(6)
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
 
-        # 运行状态组
-        status_group = QGroupBox(str(self._group_titles.get('runtime', 'Runtime')))
-        status_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
-        status_layout = QGridLayout()
-        status_layout.setContentsMargins(0, 0, 0, 4)
-        status_layout.setHorizontalSpacing(16)
-        status_layout.setVerticalSpacing(8)
-        self._add_cell(status_layout, 0, 0, self._cell_labels.get('state', 'State'), 'state', '● --')
-        self._add_cell(status_layout, 0, 1, self._cell_labels.get('elapsed', 'Elapsed'), 'elapsed', '--')
-        self._add_cell(
-            status_layout, 0, 2, self._cell_labels.get('current_platform', 'Current platform'), 'platform', '--'
-        )
-        self._add_cell(status_layout, 0, 3, self._cell_labels.get('window_id', 'Window ID'), 'window_id', '--')
-        status_group.setLayout(status_layout)
-        outer.addWidget(status_group)
+        runtime_card, runtime_grid = self._build_card('运行状态')
+        self._add_cell(runtime_grid, 0, 0, '状态', 'state', '● idle')
+        self._add_cell(runtime_grid, 0, 1, '已运行', 'elapsed', '--')
+        self._add_cell(runtime_grid, 0, 2, '平台', 'platform', '--')
+        self._add_cell(runtime_grid, 0, 3, '窗口ID', 'window_id', '--')
+        root.addWidget(runtime_card)
 
-        # 任务信息组
-        task_group = QGroupBox(str(self._group_titles.get('task', 'Task')))
-        task_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
-        task_layout = QGridLayout()
-        task_layout.setContentsMargins(0, 0, 0, 4)
-        task_layout.setHorizontalSpacing(16)
-        task_layout.setVerticalSpacing(8)
-        self._add_cell(task_layout, 0, 0, self._cell_labels.get('current_task', 'Current task'), 'current_task', '--')
-        self._add_cell(task_layout, 0, 1, self._cell_labels.get('running_tasks', 'Running'), 'running_tasks', '0')
-        self._add_cell(task_layout, 0, 2, self._cell_labels.get('pending_tasks', 'Pending'), 'pending_tasks', '0')
-        self._add_cell(task_layout, 0, 3, self._cell_labels.get('waiting_tasks', 'Waiting'), 'waiting_tasks', '0')
-        self._add_cell(task_layout, 1, 0, self._cell_labels.get('next_task', 'Next task'), 'next_task', '--')
-        self._add_cell(task_layout, 1, 1, self._cell_labels.get('next_run', 'Next run'), 'next_run', '--')
-        task_group.setLayout(task_layout)
-        outer.addWidget(task_group)
+        tasks_card, tasks_grid = self._build_card('任务队列')
+        self._add_cell(tasks_grid, 0, 0, '当前任务', 'current_task', '--')
+        self._add_cell(tasks_grid, 0, 1, '运行中', 'running_tasks', '0')
+        self._add_cell(tasks_grid, 0, 2, '待执行', 'pending_tasks', '0')
+        self._add_cell(tasks_grid, 0, 3, '等待中', 'waiting_tasks', '0')
+        self._add_cell(tasks_grid, 1, 0, '下一任务', 'next_task', '--')
+        self._add_cell(tasks_grid, 1, 1, '下次执行', 'next_run', '--')
+        root.addWidget(tasks_card)
 
-        # 统计信息组
-        stats_group = QGroupBox(str(self._group_titles.get('stats', 'Stats')))
-        stats_group.setStyleSheet('QGroupBox { font-weight: bold; color: #475569; }')
-        stats_layout = QGridLayout()
-        stats_layout.setContentsMargins(0, 0, 0, 4)
-        stats_layout.setHorizontalSpacing(16)
-        stats_layout.setVerticalSpacing(8)
-        self._add_cell(stats_layout, 0, 0, self._cell_labels.get('harvest', 'Harvest'), 'harvest', '0')
-        self._add_cell(stats_layout, 0, 1, self._cell_labels.get('plant', 'Plant'), 'plant', '0')
-        self._add_cell(stats_layout, 0, 2, self._cell_labels.get('water', 'Water'), 'water', '0')
-        self._add_cell(stats_layout, 1, 0, self._cell_labels.get('weed', 'Weed'), 'weed', '0')
-        self._add_cell(stats_layout, 1, 1, self._cell_labels.get('bug', 'Bug'), 'bug', '0')
-        self._add_cell(stats_layout, 1, 2, self._cell_labels.get('sell', 'Sell'), 'sell', '0')
-        stats_group.setLayout(stats_layout)
-        outer.addWidget(stats_group)
+        stats_card, stats_grid = self._build_card('动作统计')
+        self._add_cell(stats_grid, 0, 0, '收获', 'harvest', '0')
+        self._add_cell(stats_grid, 0, 1, '播种', 'plant', '0')
+        self._add_cell(stats_grid, 0, 2, '浇水', 'water', '0')
+        self._add_cell(stats_grid, 1, 0, '除草', 'weed', '0')
+        self._add_cell(stats_grid, 1, 1, '除虫', 'bug', '0')
+        self._add_cell(stats_grid, 1, 2, '出售', 'sell', '0')
+        root.addWidget(stats_card)
 
-    def _add_cell(self, grid: QGridLayout, row: int, col: int, label_text: str, key: str, default: str):
-        """执行 `add cell` 相关处理。"""
-        container = QHBoxLayout()
-        container.setSpacing(3)
-        container.setContentsMargins(0, 0, 0, 0)
-        label = QLabel(label_text)
-        label.setStyleSheet('color: #94a3b8; font-size: 12px;')
-        value = QLabel(default)
-        value.setStyleSheet('color: #1e293b; font-size: 12px; font-weight: bold;')
-        container.addWidget(label)
-        container.addWidget(value)
-        container.addStretch()
-        wrapper = QWidget()
-        wrapper.setLayout(container)
-        grid.addWidget(wrapper, row, col)
+    def _build_card(self, title: str) -> tuple[CardWidget, QGridLayout]:
+        card = CardWidget(self)
+        wrapper = QVBoxLayout(card)
+        wrapper.setContentsMargins(12, 10, 12, 10)
+        wrapper.setSpacing(8)
+        wrapper.addWidget(BodyLabel(title))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(8)
+        wrapper.addLayout(grid)
+        return card, grid
+
+    def _add_cell(self, grid: QGridLayout, row: int, col: int, title: str, key: str, default: str) -> None:
+        row_widget = QWidget(self)
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(4)
+        row_layout.addWidget(BodyLabel(f'{title}:'))
+        value = StrongBodyLabel(default)
+        row_layout.addWidget(value)
+        row_layout.addStretch()
+        grid.addWidget(row_widget, row, col)
         self._labels[key] = value
 
-    def update_stats(self, stats: dict):
-        """更新 `stats` 状态。"""
-        state = stats.get('state', 'idle')
-        state_map = {
-            'idle': (self._state_text_map.get('idle', '● idle'), '#94a3b8'),
-            'running': (self._state_text_map.get('running', '● running'), '#16a34a'),
-            'paused': (self._state_text_map.get('paused', '● paused'), '#d97706'),
-            'error': (self._state_text_map.get('error', '● error'), '#dc2626'),
-        }
-        text, color = state_map.get(state, (self._state_text_map.get('default', '● running'), '#16a34a'))
-        self._labels['state'].setText(text)
-        self._labels['state'].setStyleSheet(f'color: {color}; font-size: 12px; font-weight: bold;')
-        self._labels['elapsed'].setText(stats.get('elapsed', '--'))
+    def update_stats(self, stats: dict) -> None:
+        state = str(stats.get('state', 'idle'))
+        color = {
+            'idle': '#6b7280',
+            'running': '#16a34a',
+            'paused': '#d97706',
+            'error': '#dc2626',
+        }.get(state, '#2563eb')
+        self._labels['state'].setText(f'● {state}')
+        self._labels['state'].setStyleSheet(f'color: {color};')
+        self._labels['elapsed'].setText(str(stats.get('elapsed', '--')))
         self._labels['platform'].setText(str(stats.get('current_platform', '--')))
         self._labels['window_id'].setText(str(stats.get('window_id', '--')))
         self._labels['current_task'].setText(str(stats.get('current_task', '--')))

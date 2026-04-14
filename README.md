@@ -4,6 +4,8 @@
 
 基于 OpenCV + PyQt6 的 QQ 农场自动化工具，支持 PC 端 QQ和微信平台多开和后台运行。
 
+当前 GUI：`gui`（基于 `qfluentwidgets`）。
+
 ## 使用提示
 
 - 本软件完全免费，若付费购买请立即退款。
@@ -95,6 +97,7 @@ python main.py
 ```bash
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
+
 
 ### VSCode 调试使用独立实例目录
 
@@ -283,3 +286,4 @@ tools/
 ## 免责声明
 
 本项目仅供学习研究 OpenCV 视觉识别技术使用。自动化操作可能违反游戏服务条款，由此产生的一切后果由使用者自行承担。
+

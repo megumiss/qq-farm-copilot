@@ -1,1 +1,1 @@
-# gui package
+"""gui package."""

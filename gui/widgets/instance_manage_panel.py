@@ -1,18 +1,18 @@
-"""Fluent 实例侧栏。"""
+"""Fluent 实例管理页面。"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QAbstractItemView, QFrame, QListWidgetItem, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, CaptionLabel, FluentIcon, ListWidget, PrimaryPushButton, PushButton
+from PyQt6.QtWidgets import QAbstractItemView, QGridLayout, QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
+from qfluentwidgets import BodyLabel, CaptionLabel, CardWidget, FluentIcon, ListWidget, PrimaryPushButton, PushButton
 
 
-class InstanceSidebar(CardWidget):
-    """实例列表 + 新增/删除/克隆/重命名。"""
+class InstanceManagePanel(QWidget):
+    """实例管理（右侧页面版）。"""
 
-    instance_selected = pyqtSignal(str)
+    open_requested = pyqtSignal(str)
     create_requested = pyqtSignal()
     delete_requested = pyqtSignal(str)
     clone_requested = pyqtSignal(str)
@@ -29,43 +29,82 @@ class InstanceSidebar(CardWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(8)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(10)
 
-        title = BodyLabel('实例')
-        root.addWidget(title)
-        root.addWidget(CaptionLabel('新增 / 删除 / 克隆 / 重命名'))
+        card = CardWidget(self)
+        root.addWidget(card, 1)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        layout.addWidget(BodyLabel('实例管理'))
+        layout.addWidget(CaptionLabel('新增 / 删除 / 克隆 / 重命名 / 打开实例'))
 
-        self._list = ListWidget(self)
+        self._list = ListWidget(card)
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._list.itemSelectionChanged.connect(self._on_selection_changed)
-        root.addWidget(self._list, 1)
+        self._list.itemDoubleClicked.connect(lambda _: self._emit_open())
+        self._list.itemSelectionChanged.connect(self._refresh_summary)
+        layout.addWidget(self._list, 1)
 
-        line = QFrame(self)
-        line.setFrameShape(QFrame.Shape.HLine)
-        root.addWidget(line)
+        self._summary = CaptionLabel('未选择实例', card)
+        layout.addWidget(self._summary)
 
-        self._btn_create = PrimaryPushButton('新增', self)
-        self._btn_delete = PushButton('删除', self)
-        self._btn_clone = PushButton('克隆', self)
-        self._btn_rename = PushButton('重命名', self)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        self._btn_open = PrimaryPushButton('打开实例', card)
+        self._btn_create = PrimaryPushButton('新增', card)
+        self._btn_delete = PushButton('删除', card)
+        self._btn_clone = PushButton('克隆', card)
+        self._btn_rename = PushButton('重命名', card)
+        self._btn_open.setIcon(FluentIcon.PLAY)
         self._btn_create.setIcon(FluentIcon.ADD)
         self._btn_delete.setIcon(FluentIcon.DELETE)
         self._btn_clone.setIcon(FluentIcon.COPY)
         self._btn_rename.setIcon(FluentIcon.EDIT)
+        for btn in (self._btn_open, self._btn_create, self._btn_delete, self._btn_clone, self._btn_rename):
+            btn.setFixedHeight(34)
+        grid.addWidget(self._btn_open, 0, 0)
+        grid.addWidget(self._btn_create, 0, 1)
+        grid.addWidget(self._btn_delete, 1, 0)
+        grid.addWidget(self._btn_clone, 1, 1)
+        grid.addWidget(self._btn_rename, 2, 0, 1, 2)
+        layout.addLayout(grid)
+
+        self._btn_open.clicked.connect(self._emit_open)
         self._btn_create.clicked.connect(self.create_requested.emit)
         self._btn_delete.clicked.connect(self._emit_delete)
         self._btn_clone.clicked.connect(self._emit_clone)
         self._btn_rename.clicked.connect(self._emit_rename)
-        for btn in (self._btn_create, self._btn_delete, self._btn_clone, self._btn_rename):
-            btn.setFixedHeight(32)
-            root.addWidget(btn)
 
     def _current_instance_id(self) -> str:
         item = self._list.currentItem()
         if item is None:
             return ''
         return str(item.data(self.ROLE_INSTANCE_ID) or '')
+
+    @staticmethod
+    def _state_tip(state: str) -> str:
+        return {
+            'running': '运行中',
+            'paused': '已暂停',
+            'idle': '空闲',
+            'error': '异常',
+        }.get(str(state or 'idle').lower(), '未知状态')
+
+    def _refresh_summary(self) -> None:
+        iid = self._current_instance_id()
+        if not iid:
+            self._summary.setText('未选择实例')
+            return
+        name = self._id_to_name.get(iid, iid)
+        state = self._state_tip(self._id_to_state.get(iid, 'idle'))
+        self._summary.setText(f'当前选择: {name} ({state})')
+
+    def _emit_open(self) -> None:
+        iid = self._current_instance_id()
+        if iid:
+            self.open_requested.emit(iid)
 
     def _emit_delete(self) -> None:
         iid = self._current_instance_id()
@@ -82,26 +121,12 @@ class InstanceSidebar(CardWidget):
         if iid:
             self.rename_requested.emit(iid)
 
-    def _on_selection_changed(self) -> None:
-        iid = self._current_instance_id()
-        if iid:
-            self.instance_selected.emit(iid)
-
-    @staticmethod
-    def _state_tip(state: str) -> str:
-        return {
-            'running': '运行中',
-            'paused': '已暂停',
-            'idle': '空闲',
-        }.get(str(state or 'idle').lower(), '未知状态')
-
     def set_instances(self, instances: list[dict[str, Any]]) -> None:
         current = self._current_instance_id()
         self._list.blockSignals(True)
         self._list.clear()
         self._id_to_state.clear()
         self._id_to_name.clear()
-
         for data in instances:
             iid = str(data.get('id') or '')
             if not iid:
@@ -110,16 +135,16 @@ class InstanceSidebar(CardWidget):
             state = str(data.get('state') or 'idle')
             self._id_to_state[iid] = state
             self._id_to_name[iid] = name
-            item = QListWidgetItem(name)
+            mark = {'running': '●', 'paused': '◐', 'idle': '○', 'error': '✖'}.get(state, '○')
+            item = QListWidgetItem(f'{mark} {name}')
             item.setData(self.ROLE_INSTANCE_ID, iid)
             item.setData(self.ROLE_INSTANCE_NAME, name)
-            item.setToolTip(f'{name} - {self._state_tip(state)}')
             item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             self._list.addItem(item)
             if iid == current:
                 self._list.setCurrentItem(item)
-
         self._list.blockSignals(False)
+        self._refresh_summary()
 
     def set_active_instance(self, instance_id: str) -> None:
         iid = str(instance_id or '')
@@ -132,6 +157,7 @@ class InstanceSidebar(CardWidget):
                 self._list.setCurrentItem(item)
                 break
         self._list.blockSignals(False)
+        self._refresh_summary()
 
     def update_instance_state(self, instance_id: str, state: str, name: str | None = None) -> None:
         iid = str(instance_id or '')
@@ -144,8 +170,9 @@ class InstanceSidebar(CardWidget):
             item = self._list.item(i)
             if str(item.data(self.ROLE_INSTANCE_ID) or '') != iid:
                 continue
-            display_name = str(self._id_to_name.get(iid) or item.data(self.ROLE_INSTANCE_NAME) or iid)
+            display_name = self._id_to_name.get(iid, str(item.data(self.ROLE_INSTANCE_NAME) or iid))
+            mark = {'running': '●', 'paused': '◐', 'idle': '○', 'error': '✖'}.get(self._id_to_state[iid], '○')
             item.setData(self.ROLE_INSTANCE_NAME, display_name)
-            item.setText(display_name)
-            item.setToolTip(f'{display_name} - {self._state_tip(self._id_to_state[iid])}')
+            item.setText(f'{mark} {display_name}')
             break
+        self._refresh_summary()
