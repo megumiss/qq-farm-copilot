@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import time
 
 from loguru import logger
 
@@ -30,12 +29,6 @@ SHOP_LIST_SWIPE_END = (270, 860)
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
 # 空地模板命中的中心点 y 轴过滤区间，避免匹配到顶部 UI/底部无关区域。
 LAND_MATCH_Y_RANGE = (350, 850)
-# 首次点击地块后，常规场景等待背景树锚点稳定的时长。
-FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS = 0.5
-# 首次点击位于屏幕边缘时，额外增加的等待时长。
-FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS = 1.0
-# 屏幕左右边缘判定比例（用于应用 side delay）。
-FIRST_CLICK_SIDE_MARGIN_RATIO = 0.2
 # 背景树锚点在基准截图中的参考坐标（用于估算画面偏移）。
 BACKGROUND_TREE_BASELINE_POINT = (188, 314)
 # 背景树偏移超过该阈值时触发画面回正。
@@ -48,6 +41,12 @@ BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
 BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
 # 画面纵向回正手势点位 P2。
 BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
+# 判定“背景树锚点已稳定”所需的连续静止时长。
+BACKGROUND_TREE_STABLE_SECONDS = 0.3
+# 轮询背景树锚点稳定性的采样间隔。
+BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS = 0.1
+# 背景树锚点稳定等待超时，超时后放弃本轮平移修正。
+BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS = 3.0
 # 数字框横向约束区间（基于主界面截图绝对坐标）。
 SEED_POPUP_NUMBER_BOX_MIN_X = 45
 SEED_POPUP_NUMBER_BOX_MAX_X = 500
@@ -469,20 +468,36 @@ class TaskMain(TaskBase):
         top_row = [point for point in coords if point[1] == min_y]
         return min(top_row, key=lambda p: abs(p[0] - avg_x))
 
-    @staticmethod
-    def _get_first_click_labor_delay_seconds(land_x: int, frame_width: int) -> float:
-        """按首次点击坐标估算识别背景树前的等待时间。"""
-        if frame_width <= 0:
-            return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
-        side_margin = int(frame_width * FIRST_CLICK_SIDE_MARGIN_RATIO)
-        if land_x <= side_margin or land_x >= (frame_width - side_margin):
-            return FIRST_CLICK_LABOR_DELAY_SIDE_SECONDS
-        return FIRST_CLICK_LABOR_DELAY_DEFAULT_SECONDS
-
     def _get_labor_anchor_location(self) -> tuple[int, int] | None:
         """识别背景树锚点位置，用于估计画面平移。"""
         self.ui.device.screenshot()
         return self.ui.appear_location(BTN_BACKGROUND_TREE, offset=30, threshold=0.8, static=False)
+
+    def _wait_labor_anchor_stable(self) -> tuple[int, int] | None:
+        """等待背景树锚点连续稳定一段时间后返回坐标。"""
+        stable_timer = Timer(BACKGROUND_TREE_STABLE_SECONDS, count=3)
+        timeout_timer = Timer(BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS, count=1).start()
+        last_anchor: tuple[int, int] | None = None
+        while 1:
+            anchor = self._get_labor_anchor_location()
+            if anchor is None:
+                last_anchor = None
+                stable_timer.clear()
+            else:
+                current_anchor = (int(anchor[0]), int(anchor[1]))
+                if current_anchor != last_anchor:
+                    last_anchor = current_anchor
+                    stable_timer.start()
+                elif stable_timer.reached():
+                    return current_anchor
+
+            if timeout_timer.reached():
+                logger.warning(
+                    '自动播种流程: 背景树锚点稳定等待超时 | timeout={}s',
+                    BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS,
+                )
+                return None
+            self.ui.device.sleep(BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS)
 
     @staticmethod
     def _shift_land_coords(coords: list[tuple[int, int]], dx: float, dy: float) -> list[tuple[int, int]]:
@@ -569,20 +584,13 @@ class TaskMain(TaskBase):
         seed_panel_boxes = []
         excluded_seed_box_orders: set[int] = set()
         open_seed_clicks = 0
-        first_land_click_at: float | None = None
-        first_click_labor_delay_seconds = 0.0
         while 1:
             land_x, land_y = seed_popup_land
             self.engine.device.click_point(int(land_x), int(land_y), desc='点击可播种地块')
-            if open_seed_clicks == 0:
-                first_land_click_at = time.monotonic()
             open_seed_clicks += 1
             self.ui.device.sleep(0.5)
 
             cv_img = self.ui.device.screenshot()
-            if open_seed_clicks == 1:
-                frame_width = int(cv_img.shape[1]) if cv_img is not None and len(cv_img.shape) >= 2 else 0
-                first_click_labor_delay_seconds = self._get_first_click_labor_delay_seconds(int(land_x), frame_width)
             number_boxes = self.number_box_detector.detect_boxes(cv_img)
             number_boxes = self._filter_number_boxes_by_seed_popup_y(number_boxes, (int(land_x), int(land_y)))
             # 检查种子选择框/数字框出现
@@ -606,13 +614,7 @@ class TaskMain(TaskBase):
                 logger.warning('自动播种流程: 购买种子失败或未完成，结束本轮播种')
                 return
 
-        if first_land_click_at is not None and first_click_labor_delay_seconds > 0:
-            elapsed = time.monotonic() - first_land_click_at
-            remain = first_click_labor_delay_seconds - elapsed
-            if remain > 0:
-                self.ui.device.sleep(remain)
-
-        after_labor_anchor = self._get_labor_anchor_location()
+        after_labor_anchor = self._wait_labor_anchor_stable()
         if before_labor_anchor is not None and after_labor_anchor is not None:
             dx = float(after_labor_anchor[0] - before_labor_anchor[0])
             dy = float(after_labor_anchor[1] - before_labor_anchor[1])
