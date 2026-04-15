@@ -278,6 +278,7 @@ class PlantingConfig(BaseModel):
 
     strategy: PlantMode = PlantMode.LATEST_LEVEL
     warehouse_first: bool = True
+    skip_event_crops: bool = False
     preferred_crop: str = '白萝卜'
     player_level: int = 10
     level_ocr_enabled: bool = True

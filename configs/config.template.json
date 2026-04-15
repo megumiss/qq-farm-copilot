@@ -111,6 +111,7 @@
   "planting": {
     "strategy": "latest_level",
     "warehouse_first": true,
+    "skip_event_crops": false,
     "preferred_crop": "白萝卜",
     "player_level": 10,
     "level_ocr_enabled": true,

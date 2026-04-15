@@ -86,6 +86,7 @@ MENU_GOTO_MAIL = Button(area={'qq': (30, 486, 44, 505), 'wechat': (30, 486, 44, 
 MENU_GOTO_MAIN = Button(area={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, color={'qq': (244, 210, 136), 'wechat': (244, 210, 136)}, button={'qq': (31, 300, 51, 319), 'wechat': (31, 300, 51, 319)}, file={'qq': 'templates/qq/ui/menu_goto_main.png', 'wechat': 'templates/qq/ui/menu_goto_main.png'}, name='menu_goto_main')
 PET_CHECK = Button(area={'qq': (241, 77, 294, 105), 'wechat': (241, 77, 294, 105)}, color={'qq': (232, 199, 181), 'wechat': (232, 199, 181)}, button={'qq': (241, 77, 294, 105), 'wechat': (241, 77, 294, 105)}, file={'qq': 'templates/qq/ui/pet_check.png', 'wechat': 'templates/qq/ui/pet_check.png'}, name='pet_check')
 SEED_BTN_HEART_FRUIT = Button(area={'qq': (81, 613, 120, 637), 'wechat': (81, 613, 120, 637)}, color={'qq': (243, 176, 78), 'wechat': (243, 176, 78)}, button={'qq': (81, 613, 120, 637), 'wechat': (81, 613, 120, 637)}, file={'qq': 'templates/qq/seedbtn/seed_btn_heart_fruit.png', 'wechat': 'templates/qq/seedbtn/seed_btn_heart_fruit.png'}, name='seed_btn_heart_fruit')
+SEED_BTN_MUGWORT = Button(area={'qq': (193, 651, 219, 671), 'wechat': (193, 651, 219, 671)}, color={'qq': (111, 165, 77), 'wechat': (111, 165, 77)}, button={'qq': (193, 651, 219, 671), 'wechat': (193, 651, 219, 671)}, file={'qq': 'templates/qq/seedbtn/seed_btn_mugwort.png', 'wechat': 'templates/qq/seedbtn/seed_btn_mugwort.png'}, name='seed_btn_mugwort')
 SETTING_CHECK = Button(area={'qq': (31, 607, 53, 632), 'wechat': (31, 607, 53, 632)}, color={'qq': (227, 183, 122), 'wechat': (227, 183, 122)}, button={'qq': (31, 607, 53, 632), 'wechat': (31, 607, 53, 632)}, file={'qq': 'templates/qq/ui/setting_check.png', 'wechat': 'templates/qq/ui/setting_check.png'}, name='setting_check')
 SHARE_CHECK = Button(area={'qq': (64, 142, 130, 175), 'wechat': (64, 142, 130, 175)}, color={'qq': (194, 160, 136), 'wechat': (194, 160, 136)}, button={'qq': (64, 142, 130, 175), 'wechat': (64, 142, 130, 175)}, file={'qq': 'templates/qq/ui/share_check.png', 'wechat': 'templates/qq/ui/share_check.png'}, name='share_check')
 SHOP_CHECK = Button(area={'qq': (241, 85, 298, 113), 'wechat': (241, 85, 298, 113)}, color={'qq': (225, 191, 168), 'wechat': (225, 191, 168)}, button={'qq': (241, 85, 298, 113), 'wechat': (241, 85, 298, 113)}, file={'qq': 'templates/qq/ui/shop_check.png', 'wechat': 'templates/qq/ui/shop_check.png'}, name='shop_check')
@@ -177,6 +178,7 @@ ASSET_NAME_TO_CONST = {
     'menu_goto_main': MENU_GOTO_MAIN,
     'pet_check': PET_CHECK,
     'seed_btn_heart_fruit': SEED_BTN_HEART_FRUIT,
+    'seed_btn_mugwort': SEED_BTN_MUGWORT,
     'setting_check': SETTING_CHECK,
     'share_check': SHARE_CHECK,
     'shop_check': SHOP_CHECK,

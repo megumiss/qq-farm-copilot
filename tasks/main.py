@@ -55,6 +55,10 @@ SEED_POPUP_NUMBER_REGION_Y_OFFSET_TOP = 40
 SEED_POPUP_NUMBER_REGION_Y_OFFSET_BOTTOM = 80
 # 主界面等级 OCR 顶部带高度（像素，平台无关）。
 LEVEL_OCR_TOP_BAND_HEIGHT = 140
+# 固定排除作物模板（始终生效）。
+ALWAYS_SKIP_SEED_BUTTONS = [SEED_BTN_HEART_FRUIT]
+# 可选排除作物模板（受配置开关控制）。
+OPTIONAL_SKIP_SEED_BUTTONS = [SEED_BTN_MUGWORT]
 
 
 class TaskMain(TaskBase):
@@ -349,6 +353,15 @@ class TaskMain(TaskBase):
         return buttons
 
     @staticmethod
+    def _get_seed_buttons_for_exclusion(*, skip_event_crops: bool) -> list[Button]:
+        """返回当前应参与排除的作物模板列表。"""
+        buttons: list[Button] = [btn for btn in ALWAYS_SKIP_SEED_BUTTONS if btn is not None]
+        if skip_event_crops:
+            buttons.extend(btn for btn in OPTIONAL_SKIP_SEED_BUTTONS if btn is not None)
+        buttons.sort(key=lambda btn: str(btn.name))
+        return buttons
+
+    @staticmethod
     def _bbox_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
         """计算两个框的 IoU。"""
         ax1, ay1, ax2, ay2 = a
@@ -530,6 +543,43 @@ class TaskMain(TaskBase):
         )
         return items
 
+    def _collect_excluded_seed_item_indexes(
+        self,
+        number_items: list[BgPatchNumberItem],
+        *,
+        skip_event_crops: bool,
+        threshold: float = 0.80,
+        near_distance: float = 50.0,
+    ) -> set[int]:
+        """识别活动作物模板并返回需排除的数字块索引集合。"""
+        if not number_items:
+            return set()
+
+        seed_buttons = self._get_seed_buttons_for_exclusion(skip_event_crops=skip_event_crops)
+        if not seed_buttons:
+            return set()
+
+        seed_points: list[tuple[int, int]] = []
+        for seed_btn in seed_buttons:
+            loc = self.ui.appear_location(seed_btn, offset=30, threshold=float(threshold), static=False)
+            if loc is None:
+                continue
+            if any(math.hypot(float(loc[0] - old[0]), float(loc[1] - old[1])) <= 6.0 for old in seed_points):
+                continue
+            seed_points.append((int(loc[0]), int(loc[1])))
+
+        excluded_indexes: set[int] = set()
+        for idx, item in enumerate(number_items):
+            box_x, box_y, box_w, box_h = item.box
+            box_cx = float(box_x) + float(box_w) / 2.0
+            box_cy = float(box_y) + float(box_h) / 2.0
+            dynamic_near = max(float(near_distance), float(max(box_w, box_h)) * 0.75)
+            for sx, sy in seed_points:
+                if math.hypot(box_cx - float(sx), box_cy - float(sy)) <= dynamic_near:
+                    excluded_indexes.add(int(idx))
+                    break
+        return excluded_indexes
+
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
         # get_lands_from_land_anchor()
@@ -542,7 +592,9 @@ class TaskMain(TaskBase):
         before_labor_anchor = self._get_labor_anchor_location()
         seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
         use_warehouse_first = bool(getattr(self.engine.config.planting, 'warehouse_first', True))
+        skip_event_crops = bool(getattr(self.engine.config.planting, 'skip_event_crops', False))
         seed_panel_items: list[BgPatchNumberItem] = []
+        excluded_seed_item_indexes: set[int] = set()
         open_seed_clicks = 0
         while 1:
             land_x, land_y = seed_popup_land
@@ -555,6 +607,27 @@ class TaskMain(TaskBase):
             # 检查种子数字块是否出现
             if number_items:
                 seed_panel_items = number_items
+                if use_warehouse_first:
+                    excluded_seed_item_indexes = self._collect_excluded_seed_item_indexes(
+                        number_items,
+                        skip_event_crops=skip_event_crops,
+                    )
+                    available_count = int(len(number_items) - len(excluded_seed_item_indexes))
+                    logger.info(
+                        '自动播种流程: 作物排除结果 | templates={} total={} excluded={} available={} skip_event_crops={}',
+                        [btn.name for btn in self._get_seed_buttons_for_exclusion(skip_event_crops=skip_event_crops)],
+                        len(number_items),
+                        len(excluded_seed_item_indexes),
+                        available_count,
+                        skip_event_crops,
+                    )
+                    if available_count <= 0:
+                        logger.info('自动播种流程: 仓库数字块全部命中排除模板，购买种子')
+                        buy_result = self._buy_seeds(crop_name)
+                        if buy_result:
+                            return self._plant_all(crop_name)
+                        logger.warning('自动播种流程: 购买种子失败或未完成，结束本轮播种')
+                        return
                 break
             if open_seed_clicks >= 2:
                 logger.info('自动播种流程: 未识别到种子，购买种子')
@@ -580,11 +653,17 @@ class TaskMain(TaskBase):
         seed_drag_point: tuple[int, int] | None = None
         if use_warehouse_first:
             number_items = seed_panel_items
+            active_excluded_indexes: set[int] = excluded_seed_item_indexes
             if not number_items:
                 cv_img = self.ui.device.screenshot()
                 number_items = self._detect_seed_number_items(cv_img, seed_popup_land)
-            if number_items:
-                left_seed = min(number_items, key=lambda item: float(item.box[0] + item.box[2] / 2.0))
+                active_excluded_indexes = self._collect_excluded_seed_item_indexes(
+                    number_items,
+                    skip_event_crops=skip_event_crops,
+                )
+            available_items = [item for idx, item in enumerate(number_items) if int(idx) not in active_excluded_indexes]
+            if available_items:
+                left_seed = min(available_items, key=lambda item: float(item.box[0] + item.box[2] / 2.0))
                 left_center_x = int(left_seed.box[0] + left_seed.box[2] / 2.0)
                 left_center_y = int(left_seed.box[1] + left_seed.box[3] / 2.0)
                 seed_drag_point = (left_center_x, left_center_y)
@@ -596,7 +675,12 @@ class TaskMain(TaskBase):
                     seed_drag_point,
                 )
             else:
-                logger.warning('自动播种流程: 仓库优先已启用，但未识别到可用数字块')
+                logger.warning(
+                    '自动播种流程: 仓库优先已启用，但未识别到可用数字块 | total={} excluded={} skip_event_crops={}',
+                    len(number_items),
+                    len(active_excluded_indexes),
+                    skip_event_crops,
+                )
 
         if seed_drag_point is None:
             while 1:
