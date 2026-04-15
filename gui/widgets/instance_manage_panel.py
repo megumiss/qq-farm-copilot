@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QAbstractItemView, QGridLayout, QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CaptionLabel, CardWidget, FluentIcon, ListWidget, PrimaryPushButton, PushButton
+from PyQt6.QtWidgets import QAbstractItemView, QGridLayout, QListWidgetItem, QVBoxLayout, QWidget
+from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, ListWidget, PrimaryPushButton, PushButton
 
 
 class InstanceManagePanel(QWidget):
@@ -17,6 +17,7 @@ class InstanceManagePanel(QWidget):
     delete_requested = pyqtSignal(str)
     clone_requested = pyqtSignal(str)
     rename_requested = pyqtSignal(str)
+    order_changed = pyqtSignal(list)
 
     ROLE_INSTANCE_ID = 0x0100
     ROLE_INSTANCE_NAME = 0x0101
@@ -38,16 +39,19 @@ class InstanceManagePanel(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
         layout.addWidget(BodyLabel('实例管理'))
-        layout.addWidget(CaptionLabel('新增 / 删除 / 克隆 / 重命名 / 打开实例'))
 
         self._list = ListWidget(card)
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._list.setDragEnabled(True)
+        self._list.setAcceptDrops(True)
+        self._list.setDropIndicatorShown(True)
+        self._list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self._list.setDefaultDropAction(Qt.DropAction.MoveAction)
         self._list.itemDoubleClicked.connect(lambda _: self._emit_open())
-        self._list.itemSelectionChanged.connect(self._refresh_summary)
+        model = self._list.model()
+        if model is not None:
+            model.rowsMoved.connect(lambda *_: self._emit_order_changed())
         layout.addWidget(self._list, 1)
-
-        self._summary = CaptionLabel('未选择实例', card)
-        layout.addWidget(self._summary)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
@@ -83,24 +87,6 @@ class InstanceManagePanel(QWidget):
             return ''
         return str(item.data(self.ROLE_INSTANCE_ID) or '')
 
-    @staticmethod
-    def _state_tip(state: str) -> str:
-        return {
-            'running': '运行中',
-            'paused': '已暂停',
-            'idle': '空闲',
-            'error': '异常',
-        }.get(str(state or 'idle').lower(), '未知状态')
-
-    def _refresh_summary(self) -> None:
-        iid = self._current_instance_id()
-        if not iid:
-            self._summary.setText('未选择实例')
-            return
-        name = self._id_to_name.get(iid, iid)
-        state = self._state_tip(self._id_to_state.get(iid, 'idle'))
-        self._summary.setText(f'当前选择: {name} ({state})')
-
     def _emit_open(self) -> None:
         iid = self._current_instance_id()
         if iid:
@@ -121,6 +107,16 @@ class InstanceManagePanel(QWidget):
         if iid:
             self.rename_requested.emit(iid)
 
+    def _emit_order_changed(self) -> None:
+        ordered_ids: list[str] = []
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            iid = str(item.data(self.ROLE_INSTANCE_ID) or '').strip()
+            if iid:
+                ordered_ids.append(iid)
+        if ordered_ids:
+            self.order_changed.emit(ordered_ids)
+
     def set_instances(self, instances: list[dict[str, Any]]) -> None:
         current = self._current_instance_id()
         self._list.blockSignals(True)
@@ -135,8 +131,7 @@ class InstanceManagePanel(QWidget):
             state = str(data.get('state') or 'idle')
             self._id_to_state[iid] = state
             self._id_to_name[iid] = name
-            mark = {'running': '●', 'paused': '◐', 'idle': '○', 'error': '✖'}.get(state, '○')
-            item = QListWidgetItem(f'{mark} {name}')
+            item = QListWidgetItem(name)
             item.setData(self.ROLE_INSTANCE_ID, iid)
             item.setData(self.ROLE_INSTANCE_NAME, name)
             item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -144,7 +139,6 @@ class InstanceManagePanel(QWidget):
             if iid == current:
                 self._list.setCurrentItem(item)
         self._list.blockSignals(False)
-        self._refresh_summary()
 
     def set_active_instance(self, instance_id: str) -> None:
         iid = str(instance_id or '')
@@ -157,7 +151,6 @@ class InstanceManagePanel(QWidget):
                 self._list.setCurrentItem(item)
                 break
         self._list.blockSignals(False)
-        self._refresh_summary()
 
     def update_instance_state(self, instance_id: str, state: str, name: str | None = None) -> None:
         iid = str(instance_id or '')
@@ -171,8 +164,6 @@ class InstanceManagePanel(QWidget):
             if str(item.data(self.ROLE_INSTANCE_ID) or '') != iid:
                 continue
             display_name = self._id_to_name.get(iid, str(item.data(self.ROLE_INSTANCE_NAME) or iid))
-            mark = {'running': '●', 'paused': '◐', 'idle': '○', 'error': '✖'}.get(self._id_to_state[iid], '○')
             item.setData(self.ROLE_INSTANCE_NAME, display_name)
-            item.setText(f'{mark} {display_name}')
+            item.setText(display_name)
             break
-        self._refresh_summary()

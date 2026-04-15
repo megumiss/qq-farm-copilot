@@ -11,6 +11,7 @@ from qfluentwidgets import (
     BodyLabel,
     CardWidget,
     CheckBox,
+    CompactSpinBox,
     LineEdit,
     ScrollArea,
     SpinBox,
@@ -123,17 +124,16 @@ class TaskPanel(QWidget):
             interval_value.setValue(60)
             interval_value.valueChanged.connect(self._auto_save)
             interval_unit = NoWheelComboBox(card)
-            interval_unit.addItem('秒', 1)
-            interval_unit.addItem('分钟', 60)
-            interval_unit.addItem('小时', 3600)
+            interval_unit.addItem('秒', userData=1)
+            interval_unit.addItem('分钟', userData=60)
+            interval_unit.addItem('小时', userData=3600)
             interval_unit.currentIndexChanged.connect(self._auto_save)
             row = QWidget(card)
             row_layout = QHBoxLayout(row)
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(8)
-            row_layout.addWidget(interval_value)
+            row_layout.addWidget(interval_value, 1)
             row_layout.addWidget(interval_unit)
-            row_layout.addStretch()
             form.addRow('执行间隔:', row)
             widgets['interval_value'] = interval_value
             widgets['interval_unit'] = interval_unit
@@ -148,10 +148,9 @@ class TaskPanel(QWidget):
             range_layout = QHBoxLayout(range_row)
             range_layout.setContentsMargins(0, 0, 0, 0)
             range_layout.setSpacing(8)
-            range_layout.addWidget(start)
+            range_layout.addWidget(start, 1)
             range_layout.addWidget(BodyLabel('~'))
-            range_layout.addWidget(end)
-            range_layout.addStretch()
+            range_layout.addWidget(end, 1)
             form.addRow('启用时段:', range_row)
             widgets['enabled_time_start'] = start
             widgets['enabled_time_end'] = end
@@ -177,10 +176,10 @@ class TaskPanel(QWidget):
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
         self._empty_policy = NoWheelComboBox(card)
-        self._empty_policy.addItem('停留当前页', 'stay')
-        self._empty_policy.addItem('回到主页面', 'goto_main')
+        self._empty_policy.addItem('停留当前页', userData='stay')
+        self._empty_policy.addItem('回到主页面', userData='goto_main')
         self._empty_policy.currentIndexChanged.connect(self._auto_save)
-        self._max_failures = SpinBox(card)
+        self._max_failures = CompactSpinBox(card)
         self._max_failures.setRange(1, 20)
         self._max_failures.valueChanged.connect(self._auto_save)
         form.addRow('空队列策略:', self._empty_policy)

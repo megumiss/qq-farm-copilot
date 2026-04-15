@@ -217,6 +217,41 @@ class InstanceManager:
         self.save()
         return session
 
+    def reorder_instances(self, ordered_instance_ids: list[str]) -> None:
+        """按给定实例 ID 顺序重排会话并持久化。"""
+        if not ordered_instance_ids:
+            return
+
+        by_id = {session.instance_id.casefold(): session for session in self._sessions}
+        used: set[str] = set()
+        reordered: list[InstanceSession] = []
+
+        for raw in ordered_instance_ids:
+            iid = sanitize_instance_name(raw)
+            key = iid.casefold()
+            if key in used:
+                continue
+            session = by_id.get(key)
+            if session is None:
+                continue
+            reordered.append(session)
+            used.add(key)
+
+        for session in self._sessions:
+            key = session.instance_id.casefold()
+            if key in used:
+                continue
+            reordered.append(session)
+
+        current_order = [s.instance_id for s in self._sessions]
+        target_order = [s.instance_id for s in reordered]
+        if current_order == target_order:
+            return
+
+        self._sessions = reordered
+        self._mark_meta_dirty()
+        self.save()
+
     def delete_instance(self, instance_id: str) -> None:
         session = self.get_session(instance_id)
         if session is None:

@@ -3,10 +3,51 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CaptionLabel, CardWidget, PrimaryPushButton, SwitchButton
+from PyQt6.QtWidgets import QVBoxLayout, QWidget
+from qfluentwidgets import (
+    FluentIcon,
+    OptionsConfigItem,
+    OptionsSettingCard,
+    OptionsValidator,
+    SettingCardGroup,
+    SwitchSettingCard,
+)
 
-from gui.widgets.no_wheel_combo_box import NoWheelComboBox
+
+class _LocalOptionsSettingCard(OptionsSettingCard):
+    """仅用于本面板的选项卡：不写 qconfig，全程本地值驱动。"""
+
+    def __init__(self, config_item, icon, title, content=None, texts=None, parent=None):
+        self._current_value = config_item.value
+        super().__init__(config_item, icon, title, content, texts, parent)
+        try:
+            self.buttonGroup.buttonClicked.disconnect()
+        except Exception:
+            pass
+        self.buttonGroup.buttonClicked.connect(self._on_button_clicked)
+        self.setValue(config_item.value)
+
+    def _on_button_clicked(self, button) -> None:
+        value = button.property(self.configName)
+        if value == self._current_value:
+            return
+        self._current_value = value
+        self.configItem.value = value
+        self.choiceLabel.setText(button.text())
+        self.choiceLabel.adjustSize()
+        self.optionChanged.emit(self.configItem)
+
+    def setValue(self, value):
+        self._current_value = value
+        for button in self.buttonGroup.buttons():
+            is_checked = button.property(self.configName) == value
+            button.setChecked(is_checked)
+            if is_checked:
+                self.choiceLabel.setText(button.text())
+                self.choiceLabel.adjustSize()
+
+    def currentValue(self):
+        return self._current_value
 
 
 class GlobalSettingsPanel(QWidget):
@@ -16,48 +57,52 @@ class GlobalSettingsPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._loading = True
         self._build_ui()
+        self._loading = False
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
 
-        card = CardWidget(self)
-        root.addWidget(card)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(8)
-        card_layout.addWidget(BodyLabel('全局设置'))
-        card_layout.addWidget(CaptionLabel('主题、窗口效果等应用级外观'))
-
-        form = QFormLayout()
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setSpacing(8)
-        card_layout.addLayout(form)
-
-        self.theme_combo = NoWheelComboBox(card)
-        self.theme_combo.addItem('跟随系统', 'auto')
-        self.theme_combo.addItem('浅色', 'light')
-        self.theme_combo.addItem('深色', 'dark')
-        form.addRow('主题:', self.theme_combo)
-
-        self.mica_switch = SwitchButton(card)
-        self.mica_switch.setOnText('开')
-        self.mica_switch.setOffText('关')
-        form.addRow('云母效果:', self.mica_switch)
-
-        action_row = QHBoxLayout()
-        action_row.addStretch()
-        self.apply_btn = PrimaryPushButton('应用', card)
-        self.apply_btn.clicked.connect(self._on_apply)
-        action_row.addWidget(self.apply_btn)
-        card_layout.addLayout(action_row)
+        self._theme_config = OptionsConfigItem(
+            'global_settings',
+            'theme_mode',
+            'auto',
+            OptionsValidator(['auto', 'light', 'dark']),
+        )
+        self.settings_group = SettingCardGroup('全局设置', self)
+        self.theme_card = _LocalOptionsSettingCard(
+            self._theme_config,
+            FluentIcon.BRUSH,
+            '主题',
+            '选择应用主题模式',
+            texts=['跟随系统', '浅色', '深色'],
+            parent=self.settings_group,
+        )
+        self.mica_card = SwitchSettingCard(
+            FluentIcon.TRANSPARENT,
+            '云母效果',
+            '开启后使用窗口材质效果',
+            parent=self.settings_group,
+        )
+        self.settings_group.addSettingCards([self.theme_card, self.mica_card])
+        self.theme_card.optionChanged.connect(lambda *_: self._emit_apply())
+        self.mica_card.checkedChanged.connect(lambda *_: self._emit_apply())
+        root.addWidget(self.settings_group)
         root.addStretch()
 
-    def _on_apply(self) -> None:
-        self.apply_requested.emit(str(self.theme_combo.currentData() or 'auto'), bool(self.mica_switch.isChecked()))
+    def _emit_apply(self) -> None:
+        if self._loading:
+            return
+        self.apply_requested.emit(str(self.theme_card.currentValue() or 'auto'), bool(self.mica_card.isChecked()))
 
     def set_values(self, theme_mode: str, mica_enabled: bool) -> None:
-        self.theme_combo.select_data(str(theme_mode or 'auto'))
-        self.mica_switch.setChecked(bool(mica_enabled))
+        self._loading = True
+        value = str(theme_mode or 'auto')
+        if value not in {'auto', 'light', 'dark'}:
+            value = 'auto'
+        self.theme_card.setValue(value)
+        self.mica_card.setChecked(bool(mica_enabled))
+        self._loading = False

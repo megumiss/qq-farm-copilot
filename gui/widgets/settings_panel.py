@@ -9,12 +9,12 @@ from qfluentwidgets import (
     CardWidget,
     CaptionLabel,
     CheckBox,
-    DoubleSpinBox,
+    CompactDoubleSpinBox,
+    CompactSpinBox,
     FluentIcon,
     LineEdit,
     PushButton,
     ScrollArea,
-    SpinBox,
 )
 
 from core.platform.window_manager import WindowManager
@@ -65,7 +65,7 @@ class SettingsPanel(QWidget):
         form.setSpacing(8)
         card_layout.addLayout(form)
 
-        self.level = SpinBox(card)
+        self.level = CompactSpinBox(card)
         self.level.setRange(1, 100)
         self.level_ocr = CheckBox('自动同步', card)
         level_row = QWidget(card)
@@ -78,27 +78,27 @@ class SettingsPanel(QWidget):
         form.addRow('等级:', level_row)
 
         self.strategy = NoWheelComboBox(card)
-        self.strategy.addItem('自动最新', PlantMode.LATEST_LEVEL.value)
-        self.strategy.addItem('自动最优', PlantMode.BEST_EXP_RATE.value)
-        self.strategy.addItem('手动选择', PlantMode.PREFERRED.value)
+        self.strategy.addItem('自动最新', userData=PlantMode.LATEST_LEVEL.value)
+        self.strategy.addItem('自动最优', userData=PlantMode.BEST_EXP_RATE.value)
+        self.strategy.addItem('手动选择', userData=PlantMode.PREFERRED.value)
         form.addRow('策略:', self.strategy)
 
         self.crop = NoWheelComboBox(card)
         for crop in self._crop_names:
-            self.crop.addItem(str(crop), str(crop))
+            self.crop.addItem(str(crop), userData=str(crop))
         form.addRow('作物:', self.crop)
 
         self.warehouse_first = CheckBox('仓库优先', card)
         form.addRow('播种:', self.warehouse_first)
 
         self.platform = NoWheelComboBox(card)
-        self.platform.addItem('QQ', WindowPlatform.QQ.value)
-        self.platform.addItem('微信', WindowPlatform.WECHAT.value)
+        self.platform.addItem('QQ', userData=WindowPlatform.QQ.value)
+        self.platform.addItem('微信', userData=WindowPlatform.WECHAT.value)
         form.addRow('平台:', self.platform)
 
         self.run_mode = NoWheelComboBox(card)
-        self.run_mode.addItem('后台模式', RunMode.BACKGROUND.value)
-        self.run_mode.addItem('前台模式', RunMode.FOREGROUND.value)
+        self.run_mode.addItem('后台模式', userData=RunMode.BACKGROUND.value)
+        self.run_mode.addItem('前台模式', userData=RunMode.FOREGROUND.value)
         form.addRow('运行方式:', self.run_mode)
 
         self.keyword = LineEdit(card)
@@ -118,34 +118,34 @@ class SettingsPanel(QWidget):
         form.addRow('选择窗口:', select_row)
 
         self.window_position = NoWheelComboBox(card)
-        self.window_position.addItem('左侧居中', WindowPosition.LEFT_CENTER.value)
-        self.window_position.addItem('居中', WindowPosition.CENTER.value)
-        self.window_position.addItem('右侧居中', WindowPosition.RIGHT_CENTER.value)
-        self.window_position.addItem('左上', WindowPosition.TOP_LEFT.value)
-        self.window_position.addItem('右上', WindowPosition.TOP_RIGHT.value)
-        self.window_position.addItem('左下', WindowPosition.LEFT_BOTTOM.value)
-        self.window_position.addItem('右下', WindowPosition.RIGHT_BOTTOM.value)
+        self.window_position.addItem('左侧居中', userData=WindowPosition.LEFT_CENTER.value)
+        self.window_position.addItem('居中', userData=WindowPosition.CENTER.value)
+        self.window_position.addItem('右侧居中', userData=WindowPosition.RIGHT_CENTER.value)
+        self.window_position.addItem('左上', userData=WindowPosition.TOP_LEFT.value)
+        self.window_position.addItem('右上', userData=WindowPosition.TOP_RIGHT.value)
+        self.window_position.addItem('左下', userData=WindowPosition.LEFT_BOTTOM.value)
+        self.window_position.addItem('右下', userData=WindowPosition.RIGHT_BOTTOM.value)
         form.addRow('窗口位置:', self.window_position)
 
         delay_row = QWidget(card)
         delay_layout = QHBoxLayout(delay_row)
         delay_layout.setContentsMargins(0, 0, 0, 0)
         delay_layout.setSpacing(8)
-        self.delay_min = DoubleSpinBox(delay_row)
+        self.delay_min = CompactDoubleSpinBox(delay_row)
         self.delay_min.setRange(0, 10)
         self.delay_min.setDecimals(2)
-        self.delay_max = DoubleSpinBox(delay_row)
+        self.delay_max = CompactDoubleSpinBox(delay_row)
         self.delay_max.setRange(0, 10)
         self.delay_max.setDecimals(2)
         delay_layout.addWidget(self.delay_min)
         delay_layout.addWidget(self.delay_max)
         form.addRow('随机延迟:', delay_row)
 
-        self.offset = SpinBox(card)
+        self.offset = CompactSpinBox(card)
         self.offset.setRange(0, 50)
         form.addRow('点击抖动:', self.offset)
 
-        self.max_actions = SpinBox(card)
+        self.max_actions = CompactSpinBox(card)
         self.max_actions.setRange(1, 500)
         form.addRow('单轮点击上限:', self.max_actions)
 
@@ -172,15 +172,21 @@ class SettingsPanel(QWidget):
         self.keyword.editingFinished.connect(self._on_keyword_committed)
         self.refresh_btn.clicked.connect(self._refresh_windows)
 
+    @staticmethod
+    def _set_combo_data(combo: NoWheelComboBox, value) -> None:
+        idx = combo.findData(value)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+
     def _refresh_windows(self) -> None:
         current = str(self.window_select.currentData() or self.config.window_select_rule or 'auto')
         self.window_select.blockSignals(True)
         self.window_select.clear()
-        self.window_select.addItem('自动（平台优先）', 'auto')
+        self.window_select.addItem('自动（平台优先）', userData='auto')
         windows = self._wm.list_windows(str(self.keyword.text() or self.config.window_title_keyword))
         for idx, info in enumerate(windows):
-            self.window_select.addItem(f'#{idx + 1} {info.title[:16]}', f'index:{idx}')
-        self.window_select.select_data(current)
+            self.window_select.addItem(f'#{idx + 1} {info.title[:16]}', userData=f'index:{idx}')
+        self._set_combo_data(self.window_select, current)
         self.window_select.blockSignals(False)
 
     def _on_keyword_committed(self) -> None:
@@ -191,20 +197,20 @@ class SettingsPanel(QWidget):
         c = self.config
         self.level.setValue(int(c.planting.player_level))
         self.level_ocr.setChecked(bool(c.planting.level_ocr_enabled))
-        self.strategy.select_data(c.planting.strategy.value)
-        self.crop.select_data(c.planting.preferred_crop)
+        self._set_combo_data(self.strategy, c.planting.strategy.value)
+        self._set_combo_data(self.crop, c.planting.preferred_crop)
         self.warehouse_first.setChecked(bool(c.planting.warehouse_first))
-        self.platform.select_data(c.planting.window_platform.value)
-        self.run_mode.select_data(c.safety.run_mode.value)
+        self._set_combo_data(self.platform, c.planting.window_platform.value)
+        self._set_combo_data(self.run_mode, c.safety.run_mode.value)
         self.keyword.setText(str(c.window_title_keyword or ''))
-        self.window_position.select_data(c.planting.window_position.value)
+        self._set_combo_data(self.window_position, c.planting.window_position.value)
         self.delay_min.setValue(float(c.safety.random_delay_min))
         self.delay_max.setValue(float(c.safety.random_delay_max))
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
         self._refresh_windows()
-        self.window_select.select_data(c.window_select_rule or 'auto')
+        self._set_combo_data(self.window_select, c.window_select_rule or 'auto')
 
     def _save(self) -> None:
         if self._loading:
