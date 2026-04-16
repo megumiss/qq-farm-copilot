@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QFormLayout, QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFormLayout, QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -20,7 +20,7 @@ from qfluentwidgets import (
     SpinBox,
 )
 
-from core.platform.window_manager import WindowManager
+from core.platform.window_manager import WindowInfo, WindowManager
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
@@ -99,7 +99,7 @@ class SettingsPanel(QWidget):
         warehouse_tip.setStyleSheet('color: #d97706;')
         plant_form.addRow(CaptionLabel('', plant_card), warehouse_tip)
         self.skip_event_crops = CheckBox('排除活动作物', plant_card)
-        plant_form.addRow(CaptionLabel('其他设置:', plant_card), self.skip_event_crops)
+        plant_form.addRow(CaptionLabel('其他:', plant_card), self.skip_event_crops)
         event_tip = CaptionLabel(
             '提示：爱心果固定排除；此选项仅控制是否额外排除其他活动作物（当前仅艾草）。', plant_card
         )
@@ -140,7 +140,8 @@ class SettingsPanel(QWidget):
         select_layout.addWidget(self.window_select, 1)
         self.refresh_btn = PushButton('刷新', select_row)
         self.refresh_btn.setIcon(FluentIcon.SYNC)
-        self.refresh_btn.setFixedWidth(64)
+        refresh_btn_width = max(72, self.refresh_btn.sizeHint().width() + 8)
+        self.refresh_btn.setFixedWidth(refresh_btn_width)
         select_layout.addWidget(self.refresh_btn)
         env_form.addRow(CaptionLabel('选择窗口:', env_card), select_row)
 
@@ -165,7 +166,6 @@ class SettingsPanel(QWidget):
         delay_layout = QHBoxLayout(delay_row)
         delay_layout.setContentsMargins(0, 0, 0, 0)
         delay_layout.setSpacing(8)
-        delay_layout.addWidget(BodyLabel('最小', delay_row))
         self.delay_min = DoubleSpinBox(delay_row)
         self.delay_min.setRange(0, 10)
         self.delay_min.setDecimals(2)
@@ -176,11 +176,29 @@ class SettingsPanel(QWidget):
         self.delay_max.setDecimals(2)
         self.delay_max.setSingleStep(0.05)
         self.delay_max.setSuffix(' 秒')
-        delay_layout.addWidget(self.delay_min)
-        delay_layout.addSpacing(8)
-        delay_layout.addWidget(BodyLabel('最大', delay_row))
-        delay_layout.addWidget(self.delay_max)
-        delay_layout.addStretch()
+        delay_left = QWidget(delay_row)
+        delay_left.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        delay_left_layout = QHBoxLayout(delay_left)
+        delay_left_layout.setContentsMargins(0, 0, 0, 0)
+        delay_left_layout.setSpacing(6)
+        delay_left_label = CaptionLabel('最小', delay_left)
+        delay_left_layout.addWidget(delay_left_label)
+        self.delay_min.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        delay_left_layout.addWidget(self.delay_min, 1)
+        delay_right = QWidget(delay_row)
+        delay_right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        delay_right_layout = QHBoxLayout(delay_right)
+        delay_right_layout.setContentsMargins(0, 0, 0, 0)
+        delay_right_layout.setSpacing(6)
+        delay_right_label = CaptionLabel('最大', delay_right)
+        delay_right_layout.addWidget(delay_right_label)
+        self.delay_max.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        delay_right_layout.addWidget(self.delay_max, 1)
+        delay_label_width = max(delay_left_label.sizeHint().width(), delay_right_label.sizeHint().width())
+        delay_left_label.setFixedWidth(delay_label_width)
+        delay_right_label.setFixedWidth(delay_label_width)
+        delay_layout.addWidget(delay_left, 1)
+        delay_layout.addWidget(delay_right, 1)
         advanced_form.addRow(CaptionLabel('随机延迟:', advanced_card), delay_row)
 
         self.offset = SpinBox(advanced_card)
@@ -311,12 +329,31 @@ class SettingsPanel(QWidget):
         current = str(self.window_select.currentData() or self.config.window_select_rule or 'auto')
         self.window_select.blockSignals(True)
         self.window_select.clear()
-        self.window_select.addItem('自动（平台优先）', userData='auto')
+        self.window_select.addItem('自动', userData='auto')
         windows = self._wm.list_windows(str(self.keyword.text() or self.config.window_title_keyword))
         for idx, info in enumerate(windows):
-            self.window_select.addItem(f'#{idx + 1} {info.title[:16]}', userData=f'index:{idx}')
+            self.window_select.addItem(self._format_window_option_label(idx, info), userData=f'index:{idx}')
         self._set_combo_data(self.window_select, current)
         self.window_select.blockSignals(False)
+
+    @staticmethod
+    def _format_window_option_label(index: int, info: WindowInfo) -> str:
+        title = str(info.title).replace('\n', ' ').strip()
+        if len(title) > 16:
+            title = f'{title[:16]}...'
+        process_name = str(info.process_name or '').strip().lower()
+        if process_name == 'qq.exe' or process_name.startswith('qq'):
+            platform = 'QQ'
+        elif process_name.startswith('wechat') or 'weixin' in process_name:
+            platform = '微信'
+        else:
+            platform = '未知'
+        return (
+            f'#{index + 1} [{platform}] {title} | '
+            f'{int(info.width)}x{int(info.height)} | '
+            f'({int(info.left)},{int(info.top)}) | '
+            f'0x{int(info.hwnd):X}'
+        )
 
     def _on_keyword_committed(self) -> None:
         self._refresh_windows()

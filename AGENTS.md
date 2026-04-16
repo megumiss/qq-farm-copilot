@@ -1,6 +1,7 @@
 # AGENTS
 
 本文件定义本仓库内自动化/编码代理的工作约定。以当前代码实现为准。
+- 一切修改以工作区最新内容为准。
 - 每次修改完后，使用项目 `.venv` 下的 `ruff format` 进行代码格式化。
 : 仅格式化 Python 文件，跳过 `json/md` 等非 Python 文件（避免改坏 JSON 语法与文档排版）。
 : 推荐命令：`.\.venv\Scripts\python.exe -m ruff format core gui models tasks utils main.py private\main_window_core.py`
