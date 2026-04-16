@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QDateTimeEdit, QFormLayout, QFrame, QHBoxLayout, QSi
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
+    CaptionLabel,
     CheckBox,
     ComboBox,
     CompactSpinBox,
@@ -19,6 +20,7 @@ from qfluentwidgets import (
     TimeEdit,
 )
 
+from gui.widgets.fluent_container import TransparentCardContainer
 from models.config import (
     DEFAULT_TASK_ENABLED_TIME_RANGE,
     DEFAULT_TASK_NEXT_RUN,
@@ -56,8 +58,10 @@ class TaskPanel(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         root.addWidget(scroll)
 
-        content = QWidget(self)
+        content = TransparentCardContainer(self)
         scroll.setWidget(content)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        scroll.viewport().setStyleSheet('background: transparent;')
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(10, 8, 10, 8)
         content_layout.setSpacing(10)
@@ -109,14 +113,14 @@ class TaskPanel(QWidget):
 
         enabled = CheckBox('启用')
         enabled.toggled.connect(self._auto_save)
-        form.addRow('开关:', enabled)
+        form.addRow(CaptionLabel('开关:', card), enabled)
         widgets['enabled'] = enabled
 
         if trigger == TaskTriggerType.DAILY:
             time_edit = TimeEdit(card)
             time_edit.setDisplayFormat('HH:mm')
             time_edit.timeChanged.connect(self._auto_save)
-            form.addRow('每日时间:', time_edit)
+            form.addRow(CaptionLabel('每日时间:', card), time_edit)
             widgets['daily_time'] = time_edit
         else:
             interval_value = SpinBox(card)
@@ -134,7 +138,7 @@ class TaskPanel(QWidget):
             row_layout.setSpacing(8)
             row_layout.addWidget(interval_value, 1)
             row_layout.addWidget(interval_unit)
-            form.addRow('执行间隔:', row)
+            form.addRow(CaptionLabel('执行间隔:', card), row)
             widgets['interval_value'] = interval_value
             widgets['interval_unit'] = interval_unit
 
@@ -157,7 +161,7 @@ class TaskPanel(QWidget):
             range_layout.addWidget(start, 1)
             range_layout.addWidget(BodyLabel('~'))
             range_layout.addWidget(end, 1)
-            form.addRow('启用时段:', range_row)
+            form.addRow(CaptionLabel('启用时段:', card), range_row)
             widgets['enabled_time_start'] = start
             widgets['enabled_time_end'] = end
 
@@ -167,7 +171,7 @@ class TaskPanel(QWidget):
         next_run.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         next_run.setDisplayFormat('yyyy-MM-dd HH:mm:ss')
         next_run.dateTimeChanged.connect(self._auto_save)
-        form.addRow('下次执行:', next_run)
+        form.addRow(CaptionLabel('下次执行:', card), next_run)
         widgets['next_run'] = next_run
 
         layout.addLayout(form)
@@ -191,8 +195,8 @@ class TaskPanel(QWidget):
         self._max_failures = CompactSpinBox(card)
         self._max_failures.setRange(1, 20)
         self._max_failures.valueChanged.connect(self._auto_save)
-        form.addRow('空队列策略:', self._empty_policy)
-        form.addRow('最大连续失败:', self._max_failures)
+        form.addRow(CaptionLabel('空队列策略:', card), self._empty_policy)
+        form.addRow(CaptionLabel('最大连续失败:', card), self._max_failures)
         layout.addLayout(form)
         return card
 

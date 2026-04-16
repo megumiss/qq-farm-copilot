@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QDialog, QFormLayout, QFrame, QHBoxLayout, QVBoxLayo
 from qfluentwidgets import (
     BodyLabel,
     CardWidget,
+    CaptionLabel,
     CheckBox,
     LineEdit,
     ListWidget,
@@ -17,6 +18,7 @@ from qfluentwidgets import (
     ScrollArea,
 )
 
+from gui.widgets.fluent_container import TransparentCardContainer
 from models.config import AppConfig
 from utils.app_paths import load_config_json_object
 from utils.feature_policy import is_feature_forced_off
@@ -116,8 +118,10 @@ class FeaturePanel(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         root.addWidget(scroll)
 
-        content = QWidget(self)
+        content = TransparentCardContainer(self)
         scroll.setWidget(content)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        scroll.viewport().setStyleSheet('background: transparent;')
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(10, 8, 10, 8)
         content_layout.setSpacing(10)
@@ -180,13 +184,13 @@ class FeaturePanel(QWidget):
                 )
                 row_layout.addWidget(summary, 1)
                 row_layout.addWidget(btn)
-                form.addRow(f'{label}:', row)
+                form.addRow(CaptionLabel(f'{label}:', card), row)
                 continue
 
             box = CheckBox('启用', card)
             box.toggled.connect(self._auto_save)
             self._bool_widgets[(task_name, feature_name)] = box
-            form.addRow(f'{label}:', box)
+            form.addRow(CaptionLabel(f'{label}:', card), box)
 
         layout.addLayout(form)
         return card

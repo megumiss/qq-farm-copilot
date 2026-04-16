@@ -19,6 +19,7 @@ from qfluentwidgets import (
 )
 
 from core.platform.window_manager import WindowManager
+from gui.widgets.fluent_container import TransparentCardContainer
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import get_crop_names
 
@@ -47,8 +48,10 @@ class SettingsPanel(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         root.addWidget(scroll)
 
-        content = QWidget(self)
+        content = TransparentCardContainer(self)
         scroll.setWidget(content)
+        scroll.setStyleSheet('QScrollArea { border: none; background: transparent; }')
+        scroll.viewport().setStyleSheet('background: transparent;')
         layout = QVBoxLayout(content)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(10)
@@ -75,35 +78,35 @@ class SettingsPanel(QWidget):
         level_layout.addWidget(self.level)
         level_layout.addWidget(self.level_ocr)
         level_layout.addStretch()
-        form.addRow('等级:', level_row)
+        form.addRow(CaptionLabel('等级:', card), level_row)
 
         self.strategy = ComboBox(card)
         self.strategy.addItem('自动最新', userData=PlantMode.LATEST_LEVEL.value)
         self.strategy.addItem('自动最优', userData=PlantMode.BEST_EXP_RATE.value)
         self.strategy.addItem('手动选择', userData=PlantMode.PREFERRED.value)
-        form.addRow('策略:', self.strategy)
+        form.addRow(CaptionLabel('策略:', card), self.strategy)
 
         self.crop = ComboBox(card)
         for crop in self._crop_names:
             self.crop.addItem(str(crop), userData=str(crop))
-        form.addRow('作物:', self.crop)
+        form.addRow(CaptionLabel('作物:', card), self.crop)
 
         self.warehouse_first = CheckBox('仓库优先', card)
-        form.addRow('播种:', self.warehouse_first)
+        form.addRow(CaptionLabel('播种:', card), self.warehouse_first)
 
         self.platform = ComboBox(card)
         self.platform.addItem('QQ', userData=WindowPlatform.QQ.value)
         self.platform.addItem('微信', userData=WindowPlatform.WECHAT.value)
-        form.addRow('平台:', self.platform)
+        form.addRow(CaptionLabel('平台:', card), self.platform)
 
         self.run_mode = ComboBox(card)
         self.run_mode.addItem('后台模式', userData=RunMode.BACKGROUND.value)
         self.run_mode.addItem('前台模式', userData=RunMode.FOREGROUND.value)
-        form.addRow('运行方式:', self.run_mode)
+        form.addRow(CaptionLabel('运行方式:', card), self.run_mode)
 
         self.keyword = LineEdit(card)
         self.keyword.setPlaceholderText('窗口标题关键字')
-        form.addRow('窗口关键词:', self.keyword)
+        form.addRow(CaptionLabel('窗口关键词:', card), self.keyword)
 
         self.window_select = ComboBox(card)
         select_row = QWidget(card)
@@ -115,7 +118,7 @@ class SettingsPanel(QWidget):
         self.refresh_btn.setIcon(FluentIcon.SYNC)
         self.refresh_btn.setFixedWidth(64)
         select_layout.addWidget(self.refresh_btn)
-        form.addRow('选择窗口:', select_row)
+        form.addRow(CaptionLabel('选择窗口:', card), select_row)
 
         self.window_position = ComboBox(card)
         self.window_position.addItem('左侧居中', userData=WindowPosition.LEFT_CENTER.value)
@@ -125,7 +128,7 @@ class SettingsPanel(QWidget):
         self.window_position.addItem('右上', userData=WindowPosition.TOP_RIGHT.value)
         self.window_position.addItem('左下', userData=WindowPosition.LEFT_BOTTOM.value)
         self.window_position.addItem('右下', userData=WindowPosition.RIGHT_BOTTOM.value)
-        form.addRow('窗口位置:', self.window_position)
+        form.addRow(CaptionLabel('窗口位置:', card), self.window_position)
 
         delay_row = QWidget(card)
         delay_layout = QHBoxLayout(delay_row)
@@ -139,18 +142,18 @@ class SettingsPanel(QWidget):
         self.delay_max.setDecimals(2)
         delay_layout.addWidget(self.delay_min)
         delay_layout.addWidget(self.delay_max)
-        form.addRow('随机延迟:', delay_row)
+        form.addRow(CaptionLabel('随机延迟:', card), delay_row)
 
         self.offset = CompactSpinBox(card)
         self.offset.setRange(0, 50)
-        form.addRow('点击抖动:', self.offset)
+        form.addRow(CaptionLabel('点击抖动:', card), self.offset)
 
         self.max_actions = CompactSpinBox(card)
         self.max_actions.setRange(1, 500)
-        form.addRow('单轮点击上限:', self.max_actions)
+        form.addRow(CaptionLabel('单轮点击上限:', card), self.max_actions)
 
         self.debug = CheckBox('启用 Debug 日志', card)
-        form.addRow('调试日志:', self.debug)
+        form.addRow(CaptionLabel('调试日志:', card), self.debug)
 
         for sig in (
             self.level.valueChanged,
