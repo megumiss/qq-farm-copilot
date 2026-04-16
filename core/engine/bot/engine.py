@@ -313,7 +313,11 @@ class BotEngine(QObject):
         effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
         if effective_mode == RunMode.FOREGROUND:
             self._activate_target_window()
-        ok = self._send_command('start', wait=True, timeout=20.0, ensure_worker=True)
+        cold_start = not (self._worker and self._worker.is_alive())
+        start_timeout = 120.0 if cold_start else 30.0
+        if cold_start:
+            self.log_message.emit('引擎冷启动中，正在预热组件...')
+        ok = self._send_command('start', wait=True, timeout=start_timeout, ensure_worker=True)
         if not ok:
             # 启动失败时回收空闲 worker，避免残留后台进程。
             self._shutdown_worker(force=True)

@@ -425,7 +425,7 @@ class BotExecutorMixin:
         if err is not None or rect is None:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
-        task = TaskMain(engine=self, ui=self.ui, ocr_tool=self._ocr_tool)
+        task = TaskMain(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
 
     def _run_task_friend(self, _ctx: TaskContext) -> TaskResult:
@@ -434,7 +434,7 @@ class BotExecutorMixin:
         if err is not None or rect is None:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
-        task = TaskFriend(engine=self, ui=self.ui, ocr_tool=self._ocr_tool)
+        task = TaskFriend(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
 
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:

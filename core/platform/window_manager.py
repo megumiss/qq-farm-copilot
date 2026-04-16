@@ -831,3 +831,26 @@ class WindowManager:
     ) -> WindowInfo | None:
         """刷新窗口位置信息。"""
         return self.find_window(title_keyword, select_rule, platform)
+
+    def refresh_cached_window_info(self) -> WindowInfo | None:
+        """按缓存句柄快速刷新窗口几何信息（不重新枚举所有窗口）。"""
+        if not self._cached_window:
+            return None
+
+        hwnd = int(self._cached_window.hwnd or 0)
+        if hwnd <= 0:
+            return None
+
+        rect = self._get_window_rect(hwnd)
+        if not rect:
+            return None
+
+        left, top, right, bottom = rect
+        self._cached_window.left = int(left)
+        self._cached_window.top = int(top)
+        self._cached_window.width = int(max(0, right - left))
+        self._cached_window.height = int(max(0, bottom - top))
+        if int(self._cached_window.pid or 0) <= 0:
+            self._cached_window.pid = self._get_window_pid(hwnd)
+            self._cached_window.process_name = self._get_process_name(self._cached_window.pid)
+        return self._cached_window

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,12 +10,15 @@ from typing import Any
 import cv2
 import numpy as np
 from PIL import Image
+from loguru import logger
 from rapidocr import EngineType, LangDet, LangRec, ModelType
 
 try:
     from rapidocr import OCRVersion, RapidOCR
 except ImportError as exc:  # pragma: no cover
     raise RuntimeError('Missing dependency `rapidocr`. Please install requirements first.') from exc
+
+from utils.app_paths import user_app_dir
 
 
 @dataclass
@@ -37,8 +41,14 @@ class OCRTool:
 
     def __init__(self):
         """初始化对象并准备运行所需状态。"""
+        model_root_dir = self._prepare_model_root_dir()
+        if self._needs_model_download(model_root_dir):
+            logger.info(f'RapidOCR 正在下载 OCR 模型到 `{model_root_dir}`')
+        else:
+            logger.info(f'RapidOCR 使用本地 OCR 模型缓存: `{model_root_dir}`')
         self._ocr = RapidOCR(
             params={
+                'Global.model_root_dir': str(model_root_dir),
                 'Det.engine_type': EngineType.ONNXRUNTIME,
                 'Det.lang_type': LangDet.CH,
                 'Det.model_type': ModelType.MOBILE,
@@ -49,6 +59,38 @@ class OCRTool:
                 'Rec.ocr_version': OCRVersion.PPOCRV5,
             }
         )
+
+    @staticmethod
+    def _needs_model_download(model_root_dir: Path) -> bool:
+        """判断当前是否缺少可用模型（缺失时 RapidOCR 将触发下载）。"""
+        return not any(model_root_dir.glob('*.onnx'))
+
+    @staticmethod
+    def _prepare_model_root_dir() -> Path:
+        """使用用户持久目录缓存 OCR 模型，避免落在 PyInstaller 临时目录。"""
+        model_root_dir = user_app_dir() / 'models' / 'rapidocr'
+        model_root_dir.mkdir(parents=True, exist_ok=True)
+        OCRTool._seed_bundled_models(model_root_dir)
+        return model_root_dir
+
+    @staticmethod
+    def _seed_bundled_models(model_root_dir: Path) -> None:
+        """将打包内置模型复制到持久目录，减少首次下载。"""
+        try:
+            import rapidocr as _rapidocr_pkg
+
+            bundled_models = Path(_rapidocr_pkg.__file__).resolve().parent / 'models'
+            if not bundled_models.exists():
+                return
+            for src in bundled_models.glob('*'):
+                if not src.is_file():
+                    continue
+                dst = model_root_dir / src.name
+                if dst.exists():
+                    continue
+                shutil.copy2(src, dst)
+        except Exception as exc:
+            logger.debug(f'seed rapidocr models skipped: {exc}')
 
     @staticmethod
     def _to_raw_items(ocr_result: Any) -> list[tuple[list[list[float]], str, float]]:

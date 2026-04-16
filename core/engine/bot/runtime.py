@@ -22,6 +22,23 @@ from utils.template_paths import normalize_template_platform
 class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
 
+    def _wait_window_capture_stable(self, timeout: float = 0.5, interval: float = 0.04) -> None:
+        """等待窗口截图区域稳定，避免固定睡眠造成的启动额外耗时。"""
+        deadline = time.perf_counter() + max(0.05, float(timeout))
+        last_rect: tuple[int, int, int, int] | None = None
+        stable_hits = 0
+
+        while time.perf_counter() < deadline:
+            rect = self.window_manager.get_capture_rect()
+            if rect and rect == last_rect:
+                stable_hits += 1
+                if stable_hits >= 2:
+                    return
+            else:
+                stable_hits = 0
+                last_rect = rect
+            time.sleep(max(0.01, float(interval)))
+
     def _get_effective_run_mode(self, *, emit_hint: bool = False) -> RunMode:
         """返回生效运行模式。"""
         _ = emit_hint
@@ -158,10 +175,15 @@ class BotRuntimeMixin:
         platform = getattr(self.config.planting, 'window_platform', 'qq')
         platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         self.window_manager.resize_window(pos_value, platform_value)
-        time.sleep(0.5)
-        window = self.window_manager.refresh_window_info(
-            self.config.window_title_keyword, self.config.window_select_rule, platform_value
+        self._wait_window_capture_stable(timeout=0.5, interval=0.04)
+        window = self.window_manager.refresh_cached_window_info() or self.window_manager.refresh_window_info(
+            self.config.window_title_keyword,
+            self.config.window_select_rule,
+            platform_value,
         )
+        if not window:
+            self.log_message.emit('窗口刷新失败，请检查窗口是否仍存在')
+            return False
         self.log_message.emit(
             f'窗口已调整（整窗外框目标：540x960 + 非客户区增量）-> 实际外框 {window.width}x{window.height}'
         )

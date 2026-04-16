@@ -36,7 +36,7 @@ class BotInitMixin:
         self._instance_id = str(instance_id or 'default')
         self._runtime_paths = dict(runtime_paths or {})
         self._error_dir = str(self._runtime_paths.get('error_dir') or 'logs/error')
-        self._ocr_tool: OCRTool = get_ocr_tool(scope='engine', key=self._instance_id)
+        self._ocr_tool: OCRTool | None = None
 
         # [1] 窗口控制层
         self.window_manager = WindowManager()
@@ -70,3 +70,9 @@ class BotInitMixin:
 
         self.scheduler.state_changed.connect(self.state_changed.emit)
         self.scheduler.stats_updated.connect(self.stats_updated.emit)
+
+    def _get_ocr_tool(self) -> OCRTool:
+        """懒加载 OCRTool，避免在引擎启动阶段触发模型下载。"""
+        if self._ocr_tool is None:
+            self._ocr_tool = get_ocr_tool(scope='engine', key=self._instance_id)
+        return self._ocr_tool
