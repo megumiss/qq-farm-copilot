@@ -35,7 +35,6 @@ a = Analysis(
         'gui.widgets.instance_sidebar',
         'gui.widgets.land_detail_panel',
         'gui.widgets.log_panel',
-        'gui.widgets.no_wheel_combo_box',
         'gui.widgets.settings_panel',
         'gui.widgets.status_panel',
         'gui.widgets.task_panel',

@@ -11,6 +11,7 @@ from qfluentwidgets import (
     BodyLabel,
     CardWidget,
     CheckBox,
+    ComboBox,
     CompactSpinBox,
     LineEdit,
     ScrollArea,
@@ -18,7 +19,6 @@ from qfluentwidgets import (
     TimeEdit,
 )
 
-from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import (
     DEFAULT_TASK_ENABLED_TIME_RANGE,
     DEFAULT_TASK_NEXT_RUN,
@@ -123,7 +123,7 @@ class TaskPanel(QWidget):
             interval_value.setRange(1, 999999)
             interval_value.setValue(60)
             interval_value.valueChanged.connect(self._auto_save)
-            interval_unit = NoWheelComboBox(card)
+            interval_unit = ComboBox(card)
             interval_unit.addItem('秒', userData=1)
             interval_unit.addItem('分钟', userData=60)
             interval_unit.addItem('小时', userData=3600)
@@ -175,7 +175,7 @@ class TaskPanel(QWidget):
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
-        self._empty_policy = NoWheelComboBox(card)
+        self._empty_policy = ComboBox(card)
         self._empty_policy.addItem('停留当前页', userData='stay')
         self._empty_policy.addItem('回到主页面', userData='goto_main')
         self._empty_policy.currentIndexChanged.connect(self._auto_save)
@@ -219,7 +219,7 @@ class TaskPanel(QWidget):
             return '00:00:00', '23:59:59'
 
     @staticmethod
-    def _set_combo_data(combo: NoWheelComboBox, value) -> None:
+    def _set_combo_data(combo: ComboBox, value) -> None:
         idx = combo.findData(value)
         if idx >= 0:
             combo.setCurrentIndex(idx)
@@ -238,7 +238,7 @@ class TaskPanel(QWidget):
             if 'interval_value' in widgets and 'interval_unit' in widgets:
                 interval_value = widgets['interval_value']
                 interval_unit = widgets['interval_unit']
-                if isinstance(interval_value, SpinBox) and isinstance(interval_unit, NoWheelComboBox):
+                if isinstance(interval_value, SpinBox) and isinstance(interval_unit, ComboBox):
                     value, unit = self._split_interval(
                         max(self._task_min_interval_seconds(), task_cfg.interval_seconds)
                     )

@@ -9,6 +9,7 @@ from qfluentwidgets import (
     CardWidget,
     CaptionLabel,
     CheckBox,
+    ComboBox,
     CompactDoubleSpinBox,
     CompactSpinBox,
     FluentIcon,
@@ -18,7 +19,6 @@ from qfluentwidgets import (
 )
 
 from core.platform.window_manager import WindowManager
-from gui.widgets.no_wheel_combo_box import NoWheelComboBox
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import get_crop_names
 
@@ -77,13 +77,13 @@ class SettingsPanel(QWidget):
         level_layout.addStretch()
         form.addRow('等级:', level_row)
 
-        self.strategy = NoWheelComboBox(card)
+        self.strategy = ComboBox(card)
         self.strategy.addItem('自动最新', userData=PlantMode.LATEST_LEVEL.value)
         self.strategy.addItem('自动最优', userData=PlantMode.BEST_EXP_RATE.value)
         self.strategy.addItem('手动选择', userData=PlantMode.PREFERRED.value)
         form.addRow('策略:', self.strategy)
 
-        self.crop = NoWheelComboBox(card)
+        self.crop = ComboBox(card)
         for crop in self._crop_names:
             self.crop.addItem(str(crop), userData=str(crop))
         form.addRow('作物:', self.crop)
@@ -91,12 +91,12 @@ class SettingsPanel(QWidget):
         self.warehouse_first = CheckBox('仓库优先', card)
         form.addRow('播种:', self.warehouse_first)
 
-        self.platform = NoWheelComboBox(card)
+        self.platform = ComboBox(card)
         self.platform.addItem('QQ', userData=WindowPlatform.QQ.value)
         self.platform.addItem('微信', userData=WindowPlatform.WECHAT.value)
         form.addRow('平台:', self.platform)
 
-        self.run_mode = NoWheelComboBox(card)
+        self.run_mode = ComboBox(card)
         self.run_mode.addItem('后台模式', userData=RunMode.BACKGROUND.value)
         self.run_mode.addItem('前台模式', userData=RunMode.FOREGROUND.value)
         form.addRow('运行方式:', self.run_mode)
@@ -105,7 +105,7 @@ class SettingsPanel(QWidget):
         self.keyword.setPlaceholderText('窗口标题关键字')
         form.addRow('窗口关键词:', self.keyword)
 
-        self.window_select = NoWheelComboBox(card)
+        self.window_select = ComboBox(card)
         select_row = QWidget(card)
         select_layout = QHBoxLayout(select_row)
         select_layout.setContentsMargins(0, 0, 0, 0)
@@ -117,7 +117,7 @@ class SettingsPanel(QWidget):
         select_layout.addWidget(self.refresh_btn)
         form.addRow('选择窗口:', select_row)
 
-        self.window_position = NoWheelComboBox(card)
+        self.window_position = ComboBox(card)
         self.window_position.addItem('左侧居中', userData=WindowPosition.LEFT_CENTER.value)
         self.window_position.addItem('居中', userData=WindowPosition.CENTER.value)
         self.window_position.addItem('右侧居中', userData=WindowPosition.RIGHT_CENTER.value)
@@ -173,7 +173,7 @@ class SettingsPanel(QWidget):
         self.refresh_btn.clicked.connect(self._refresh_windows)
 
     @staticmethod
-    def _set_combo_data(combo: NoWheelComboBox, value) -> None:
+    def _set_combo_data(combo: ComboBox, value) -> None:
         idx = combo.findData(value)
         if idx >= 0:
             combo.setCurrentIndex(idx)
