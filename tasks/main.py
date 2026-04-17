@@ -43,8 +43,6 @@ BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
 BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
 # 轮询背景树锚点稳定性的采样间隔。
 BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS = 0.1
-# 背景树锚点稳定等待超时，超时后放弃本轮平移修正。
-BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS = 3.0
 # 数字块识别区域横向范围（基于主界面截图绝对坐标）。
 SEED_POPUP_NUMBER_REGION_X_MIN = 50
 SEED_POPUP_NUMBER_REGION_X_MAX = 480
@@ -480,8 +478,10 @@ class TaskMain(TaskBase):
 
     def _wait_labor_anchor_stable(self) -> tuple[int, int] | None:
         """等待背景树锚点连续稳定一段时间后返回坐标。"""
-        stable_timer = Timer(self.engine.config.planting.planting_stable_seconds, count=3)
-        timeout_timer = Timer(BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS, count=1).start()
+        stable_seconds = max(0.1, float(self.engine.config.planting.planting_stable_seconds))
+        stable_timer = Timer(stable_seconds, count=3)
+        timeout_seconds = max(0.1, float(self.engine.config.planting.planting_stable_timeout_seconds))
+        timeout_timer = Timer(timeout_seconds, count=1).start()
         last_anchor: tuple[int, int] | None = None
         while 1:
             anchor = self._get_labor_anchor_location()
@@ -499,7 +499,7 @@ class TaskMain(TaskBase):
             if timeout_timer.reached():
                 logger.warning(
                     '自动播种流程: 背景树锚点稳定等待超时 | timeout={}s',
-                    BACKGROUND_TREE_STABLE_TIMEOUT_SECONDS,
+                    timeout_seconds,
                 )
                 return None
             self.ui.device.sleep(BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS)

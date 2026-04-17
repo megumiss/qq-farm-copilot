@@ -216,6 +216,18 @@ class SettingsPanel(QWidget):
         planting_stable_hint = CaptionLabel('如果在边缘地块无法正常播种，请适当增加这个值', advanced_card)
         planting_stable_hint.setStyleSheet('color: #d97706;')
         advanced_form.addRow('', planting_stable_hint)
+        self.planting_stable_timeout = DoubleSpinBox(advanced_card)
+        self.planting_stable_timeout.setRange(0.5, 30.0)
+        self.planting_stable_timeout.setDecimals(1)
+        self.planting_stable_timeout.setSingleStep(0.5)
+        self.planting_stable_timeout.setSuffix(' 秒')
+        advanced_form.addRow(self._field_label('播种稳定超时', advanced_card), self.planting_stable_timeout)
+        planting_stable_timeout_hint = CaptionLabel(
+            '如果提示背景树锚点稳定等待超时，请适当增加这个值',
+            advanced_card,
+        )
+        planting_stable_timeout_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', planting_stable_timeout_hint)
 
         self.debug = CheckBox('启用 Debug 日志', advanced_card)
         advanced_form.addRow(self._field_label('调试日志', advanced_card), self.debug)
@@ -262,6 +274,7 @@ class SettingsPanel(QWidget):
             self.offset.valueChanged,
             self.max_actions.valueChanged,
             self.planting_stable.valueChanged,
+            self.planting_stable_timeout.valueChanged,
             self.debug.toggled,
         ):
             sig.connect(self._save)
@@ -433,6 +446,7 @@ class SettingsPanel(QWidget):
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
         self.planting_stable.setValue(float(c.planting.planting_stable_seconds))
+        self.planting_stable_timeout.setValue(float(c.planting.planting_stable_timeout_seconds))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
         self.logs_path_label.setText(self._resolve_logs_path_text())
         self._refresh_windows()
@@ -464,6 +478,7 @@ class SettingsPanel(QWidget):
         c.safety.click_offset_range = int(self.offset.value())
         c.safety.max_actions_per_round = int(self.max_actions.value())
         c.planting.planting_stable_seconds = float(self.planting_stable.value())
+        c.planting.planting_stable_timeout_seconds = float(self.planting_stable_timeout.value())
         c.safety.debug_log_enabled = bool(self.debug.isChecked())
         c.save()
         self.config_changed.emit(c)

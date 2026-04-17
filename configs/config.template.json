@@ -118,7 +118,8 @@
     "level_ocr_enabled": true,
     "window_platform": "qq",
     "window_position": "left_center",
-    "planting_stable_seconds": 0.5
+    "planting_stable_seconds": 0.5,
+    "planting_stable_timeout_seconds": 3.0
   },
   "sell": {
     "mode": "batch_all"

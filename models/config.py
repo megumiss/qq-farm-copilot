@@ -285,6 +285,7 @@ class PlantingConfig(BaseModel):
     window_platform: WindowPlatform = WindowPlatform.QQ
     window_position: WindowPosition = WindowPosition.LEFT_CENTER
     planting_stable_seconds: float = 0.5
+    planting_stable_timeout_seconds: float = 3.0
 
     @field_validator('player_level', mode='before')
     @classmethod
