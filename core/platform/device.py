@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 import time
 from collections import deque
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -13,6 +13,7 @@ from loguru import logger
 from PIL import Image as PILImage
 
 from core.base.button import Button
+from core.base.timer import Timer
 from models.farm_state import Action, ActionType
 
 
@@ -39,10 +40,37 @@ class Device:
         self.screenshot_deque = deque(maxlen=60)
         self.stuck_long_wait_list = {'login_check', 'pause'}
         self._stuck_started_at = time.perf_counter()
+        self._screenshot_interval_seconds = self._resolve_screenshot_interval_seconds()
+        self._screenshot_interval_timer = Timer(self._screenshot_interval_seconds)
 
     def set_rect(self, rect: tuple[int, int, int, int]):
         """设置 `rect` 参数。"""
         self.rect = rect
+
+    def _resolve_screenshot_interval_seconds(self) -> float:
+        """读取配置中的截图最小间隔（秒）。"""
+        screenshot_cfg = getattr(getattr(self.engine, 'config', None), 'screenshot', None)
+        value = getattr(screenshot_cfg, 'capture_interval_seconds', 0.3)
+        try:
+            return max(0.0, float(value))
+        except Exception:
+            return 0.3
+
+    def _sync_screenshot_interval_timer(self) -> None:
+        """当配置变化时同步截图节流定时器。"""
+        interval = self._resolve_screenshot_interval_seconds()
+        if abs(interval - self._screenshot_interval_seconds) <= 1e-6:
+            return
+        self._screenshot_interval_seconds = interval
+        self._screenshot_interval_timer = Timer(interval)
+
+    def _wait_screenshot_interval(self) -> None:
+        """执行截图频率控制（对齐 NIKKE wait+reset 语义）。"""
+        self._sync_screenshot_interval_timer()
+        if self._screenshot_interval_seconds <= 0:
+            return
+        self._screenshot_interval_timer.wait()
+        self._screenshot_interval_timer.reset()
 
     def screenshot(
         self, rect: tuple[int, int, int, int] | None = None, *, prefix: str = 'farm', save: bool = False
@@ -51,6 +79,7 @@ class Device:
         if not self._wait_if_paused():
             return None
         self.stuck_record_check()
+        self._wait_screenshot_interval()
         if rect is not None:
             self.rect = rect
         if self.rect is None:

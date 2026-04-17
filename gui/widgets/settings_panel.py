@@ -207,6 +207,16 @@ class SettingsPanel(QWidget):
         self.max_actions.setRange(1, 500)
         advanced_form.addRow(self._field_label('单轮点击上限', advanced_card), self.max_actions)
 
+        self.capture_interval = DoubleSpinBox(advanced_card)
+        self.capture_interval.setRange(0.0, 5.0)
+        self.capture_interval.setDecimals(2)
+        self.capture_interval.setSingleStep(0.05)
+        self.capture_interval.setSuffix(' 秒')
+        advanced_form.addRow(self._field_label('截图间隔', advanced_card), self.capture_interval)
+        capture_interval_hint = CaptionLabel('限制连续截图频率（0 表示不限制，默认 0.3 秒）。', advanced_card)
+        capture_interval_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', capture_interval_hint)
+
         self.planting_stable = DoubleSpinBox(advanced_card)
         self.planting_stable.setRange(0.1, 5.0)
         self.planting_stable.setDecimals(1)
@@ -273,6 +283,7 @@ class SettingsPanel(QWidget):
             self.delay_max.valueChanged,
             self.offset.valueChanged,
             self.max_actions.valueChanged,
+            self.capture_interval.valueChanged,
             self.planting_stable.valueChanged,
             self.planting_stable_timeout.valueChanged,
             self.debug.toggled,
@@ -445,6 +456,7 @@ class SettingsPanel(QWidget):
         self.delay_max.setValue(float(c.safety.random_delay_max))
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
+        self.capture_interval.setValue(float(c.screenshot.capture_interval_seconds))
         self.planting_stable.setValue(float(c.planting.planting_stable_seconds))
         self.planting_stable_timeout.setValue(float(c.planting.planting_stable_timeout_seconds))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
@@ -477,6 +489,7 @@ class SettingsPanel(QWidget):
         c.safety.random_delay_max = max(d_min, d_max)
         c.safety.click_offset_range = int(self.offset.value())
         c.safety.max_actions_per_round = int(self.max_actions.value())
+        c.screenshot.capture_interval_seconds = float(self.capture_interval.value())
         c.planting.planting_stable_seconds = float(self.planting_stable.value())
         c.planting.planting_stable_timeout_seconds = float(self.planting_stable_timeout.value())
         c.safety.debug_log_enabled = bool(self.debug.isChecked())

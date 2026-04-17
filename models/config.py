@@ -98,6 +98,17 @@ class ScreenshotConfig(BaseModel):
 
     save_history: bool = True
     max_history_count: int = 50
+    capture_interval_seconds: float = 0.3
+
+    @field_validator('capture_interval_seconds', mode='before')
+    @classmethod
+    def _normalize_capture_interval_seconds(cls, value):
+        """规范化截图最小间隔（秒）。"""
+        try:
+            interval = float(value)
+        except Exception:
+            interval = 0.3
+        return max(0.0, interval)
 
 
 class TaskTriggerType(str, Enum):

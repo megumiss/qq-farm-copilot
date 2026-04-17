@@ -11,7 +11,8 @@
   },
   "screenshot": {
     "save_history": true,
-    "max_history_count": 50
+    "max_history_count": 50,
+    "capture_interval_seconds": 0.3
   },
   "tasks": {
     "main": {
