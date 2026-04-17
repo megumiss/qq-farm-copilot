@@ -25,6 +25,7 @@ a = Analysis(
         'gui.dialog_styles',
         'gui.window_loader',
         'gui.main_window_core',
+        'gui.steal_chart_panel',
         'gui.widgets',
         'models.config',
         'utils.app_paths',
