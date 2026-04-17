@@ -4,6 +4,11 @@ title: "[Suggestion]: "
 labels:
   - enhancement
 body:
+  - type: markdown
+    attributes:
+      value: |
+        > 注意：请填写所有标记为必填的字段，必填项未填写的 Issue 会被自动关闭。
+
   - type: textarea
     id: suggestion
     attributes:
@@ -11,7 +16,7 @@ body:
       description: 请清晰描述你的建议
       placeholder: 例如：希望支持任务执行完成后的系统通知
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: use_case
@@ -20,7 +25,7 @@ body:
       description: 该建议在什么场景下有帮助
       placeholder: 例如：多实例长时间挂机时，无法及时知道任务是否异常
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: expected_result
@@ -29,7 +34,7 @@ body:
       description: 你希望最终达到的效果
       placeholder: 例如：任务异常/完成时弹出系统通知并显示实例名
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: extra

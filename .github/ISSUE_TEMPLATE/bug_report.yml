@@ -4,6 +4,11 @@ title: "[Bug]: "
 labels:
   - bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        > 注意：请填写所有标记为必填的字段，必填项未填写的 Issue 会被自动关闭。
+
   - type: dropdown
     id: run_mode
     attributes:

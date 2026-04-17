@@ -1,0 +1,125 @@
+name: Validate New Issue Required Fields
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate-required-fields:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required fields
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const issueNumber = issue.number;
+            const title = (issue.title || "").trim();
+            const body = issue.body || "";
+            const labels = new Set((issue.labels || []).map((label) => label.name));
+
+            function escapeRegex(text) {
+              return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function extractSectionValue(sectionLabel) {
+              const pattern = new RegExp(
+                `###\\s*${escapeRegex(sectionLabel)}\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)`,
+                "i"
+              );
+              const match = body.match(pattern);
+              if (!match) {
+                return null;
+              }
+              return match[1].trim();
+            }
+
+            function isMissing(value) {
+              if (value === null || value === undefined) {
+                return true;
+              }
+              const normalized = value.trim().toLowerCase();
+              return (
+                normalized === "" ||
+                normalized === "_no response_" ||
+                normalized === "none" ||
+                normalized === "n/a" ||
+                normalized === "na"
+              );
+            }
+
+            const isEnhancementIssue = labels.has("enhancement") || /^\[suggestion\]/i.test(title);
+            if (isEnhancementIssue) {
+              const suggestionTitle = title.replace(/^\[suggestion\]\s*:?\s*/i, "").trim();
+              if (suggestionTitle) {
+                core.info("Enhancement title validation passed.");
+                return;
+              }
+              const missingEnhancementFields = ["标题"];
+
+              const commentBody = [
+                "该 Issue 已被自动关闭。",
+                "",
+                `原因：必填字段未填写完整：${missingEnhancementFields.join("、")}。`,
+                "",
+                "请按模板补全后重新提交。",
+              ].join("\n");
+
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issueNumber,
+                body: commentBody,
+              });
+
+              await github.rest.issues.update({
+                ...context.repo,
+                issue_number: issueNumber,
+                state: "closed",
+              });
+              return;
+            }
+
+            const isBugIssue = labels.has("bug") || /^\[bug\]/i.test(title);
+            if (!isBugIssue) {
+              core.info("Non-bug and non-enhancement issue, skip validation.");
+              return;
+            }
+
+            const requiredBugFields = ["运行方式", "平台", "脚本内选择了正确的平台", "版本号"];
+            const missingBugFields = [];
+            for (const field of requiredBugFields) {
+              const value = extractSectionValue(field);
+              if (isMissing(value)) {
+                missingBugFields.push(field);
+              }
+            }
+
+            if (missingBugFields.length === 0) {
+              core.info("Bug required fields validation passed.");
+              return;
+            }
+
+            const commentBody = [
+              "该 Issue 已被自动关闭。",
+              "",
+              `原因：必填字段未填写完整：${missingBugFields.join("、")}。`,
+              "",
+              "请按模板补全后重新提交。",
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: issueNumber,
+              body: commentBody,
+            });
+
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number: issueNumber,
+              state: "closed",
+            });
