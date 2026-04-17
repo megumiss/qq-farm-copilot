@@ -62,4 +62,3 @@ exe = EXE(
     console=False,
     icon='gui/icons/app_icon.ico',
 )
-

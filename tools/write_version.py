@@ -33,12 +33,12 @@ def write_version_file(version_file: Path, version: str, repo: str) -> None:
     version = str(version or '').strip() or '0.0.0-dev'
     repo = str(repo or '').strip() or 'megumiss/qq-farm-copilot'
     content = (
-        '"""应用版本信息。\\n\\n'
+        '"""应用版本信息。\n\n'
         '此文件可由 tools/write_version.py 在打包流程中自动更新。'
-        '"""\\n\\n'
-        f"APP_VERSION = '{_sanitize_python_string(version)}'\\n"
-        f"APP_GITHUB_REPO = '{_sanitize_python_string(repo)}'\\n"
-        "APP_RELEASES_URL = f'https://github.com/{APP_GITHUB_REPO}/releases/latest'\\n"
+        '"""\n\n'
+        f"APP_VERSION = '{_sanitize_python_string(version)}'\n"
+        f"APP_GITHUB_REPO = '{_sanitize_python_string(repo)}'\n"
+        "APP_RELEASES_URL = f'https://github.com/{APP_GITHUB_REPO}/releases/latest'\n"
     )
     version_file.parent.mkdir(parents=True, exist_ok=True)
     version_file.write_text(content, encoding='utf-8')
