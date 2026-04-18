@@ -68,9 +68,11 @@ FRIEND_VISIT_MATCH_MARGIN_X = 10
 # 好友列表“访问”按钮定向匹配时 ROI 在 y 方向扩展量（像素）。
 FRIEND_VISIT_MATCH_MARGIN_Y = 30
 # 偷取统计：等待“总计按钮”出现的超时时间（秒）。
-STEAL_TOTAL_WAIT_TIMEOUT_SECONDS = 5.0
+STEAL_TOTAL_WAIT_TIMEOUT_SECONDS = 10.0
 # 偷取统计：识别按钮出现后的稳定等待（秒）。
 STEAL_TOTAL_STABLE_WAIT_SECONDS = 1.0
+# 偷取统计：OCR 轮询间隔（秒）。
+STEAL_TOTAL_OCR_POLL_INTERVAL_SECONDS = 0.2
 # 偷取统计 OCR 固定区域（x1, y1, x2, y2），按当前统一截图坐标系定义。
 STEAL_TOTAL_OCR_REGION = (420, 240, 530, 390)
 # 偷取统计金额 token 正则：支持纯数字/小数/万单位，允许前导负号。
@@ -488,12 +490,7 @@ class TaskFriend(TaskBase):
                 return
 
             self.ui.device.sleep(STEAL_TOTAL_STABLE_WAIT_SECONDS)
-            self.ui.device.screenshot()
-            items = self.friend_name_ocr.ocr.detect(
-                self.ui.device.image, region=STEAL_TOTAL_OCR_REGION, scale=1.3, alpha=1.12, beta=0.0
-            )
-            total_amount, loss_amount, bean_amount, debug_info = self._parse_steal_total_and_loss_from_items(items)
-            score = float(sum(float(item.score) for item in items) / len(items)) if items else 0.0
+            total_amount, loss_amount, bean_amount, score, debug_info = self._wait_stable_steal_ocr_result()
             coin_amount = max(0, total_amount - loss_amount)
 
             if coin_amount > 0 or bean_amount > 0:
@@ -512,15 +509,31 @@ class TaskFriend(TaskBase):
         except Exception as e:
             logger.warning('好友偷取统计 OCR 失败: {}', e)
 
+    def _wait_stable_steal_ocr_result(self) -> tuple[int, int, int, float, str]:
+        """轮询 OCR，直到连续两次解析结果一致。"""
+        last_value: tuple[int, int, int] | None = None
+        while 1:
+            self.ui.device.screenshot()
+            items = self.friend_name_ocr.ocr.detect(
+                self.ui.device.image, region=STEAL_TOTAL_OCR_REGION, scale=1.3, alpha=1.12, beta=0.0
+            )
+            total_amount, loss_amount, bean_amount, debug_info = self._parse_steal_total_and_loss_from_items(items)
+            score = float(sum(float(item.score) for item in items) / len(items)) if items else 0.0
+            current_value = (total_amount, loss_amount, bean_amount)
+            if last_value is not None and current_value == last_value:
+                return total_amount, loss_amount, bean_amount, score, debug_info
+            last_value = current_value
+            self.ui.device.sleep(STEAL_TOTAL_OCR_POLL_INTERVAL_SECONDS)
+
     def _wait_steal_total_button(self) -> bool:
         timer = Timer(STEAL_TOTAL_WAIT_TIMEOUT_SECONDS, count=0).start()
         while 1:
             self.ui.device.screenshot()
-            if self.ui.appear(BTN_STEAL_TOTAL, offset=30):
+            if self.ui.appear(BTN_STEAL_TOTAL, offset=(20, 20)):
                 return True
             if timer.reached():
                 return False
-            self.ui.device.sleep(0.2)
+            self.ui.device.sleep(STEAL_TOTAL_OCR_POLL_INTERVAL_SECONDS)
 
     def _resolve_instance_id(self) -> str:
         for name in ('_instance_id', 'instance_id'):
