@@ -18,7 +18,7 @@
 - [x] 一键收获 / 除草 / 除虫 / 浇水
 - [x] 自动购买种子
 - [x] 自动播种
-- [ ] 自动扩建土地
+- [x] 自动扩建土地
 - [ ] 自动升级土地
 - [x] 仓库批量出售
 - [x] 任务奖励领取
@@ -156,6 +156,7 @@ python main.py
     "features": {
       "auto_harvest": true,
       "auto_plant": false,
+      "auto_expand": false,
       "auto_upgrade": false,
       "auto_fertilize": false
     }
@@ -224,8 +225,6 @@ python main.py
 
 固定禁用项（运行时强制关闭）：
 
-- `main.auto_plant`
-- `main.auto_upgrade`
 - `main.auto_fertilize`
 
 `tasks.<task>.features` 字段说明：

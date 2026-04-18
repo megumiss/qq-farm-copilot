@@ -28,7 +28,8 @@
         "auto_weed": true,
         "auto_water": true,
         "auto_bug": true,
-        "auto_upgrade": false,
+        "auto_expand": true,
+        "auto_upgrade": true,
         "auto_fertilize": false
       }
     },

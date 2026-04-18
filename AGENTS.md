@@ -161,10 +161,11 @@
 
 - `main` 在主页面的子任务顺序（命中即短路）：
 1. `plant`
-2. `upgrade(expand)`
-3. `sell`
-4. `reward`
-5. `friend`
+2. `expand`
+3. `upgrade`
+4. `sell`
+5. `reward`
+6. `friend`
 
 - `harvest` 内部顺序（命中即返回）：
 1. 收获
