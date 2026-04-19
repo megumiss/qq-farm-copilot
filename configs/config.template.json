@@ -100,6 +100,17 @@
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {}
+    },
+    "land_scan": {
+      "enabled": false,
+      "priority": 45,
+      "trigger": "interval",
+      "interval_seconds": 1800,
+      "enabled_time_range": "00:00:00-23:59:59",
+      "daily_time": "00:01",
+      "next_run": "2026-01-01 00:00",
+      "failure_interval_seconds": 300,
+      "features": {}
     }
   },
   "executor": {

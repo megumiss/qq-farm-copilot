@@ -245,7 +245,7 @@ class Device:
         *,
         speed: float = 15,
         hold: float = 0.0,
-        delay: float = 0.0,
+        delay: float = 0.1,
     ) -> bool:
         """执行鼠标滑动。"""
         if not self._wait_if_paused():

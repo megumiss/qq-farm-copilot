@@ -53,7 +53,7 @@
 : 通用任务执行器（pending/waiting 队列、优先级排序、结果回写 next_run）。
 
 - `tasks/*.py`
-: 业务任务实现（`main/friend/share/reward` 及子任务）。
+: 业务任务实现（`main/friend/share/reward/gift/sell/land_scan` 及子任务）。
 
 - `core/ui/ui.py` + `core/base/module_base.py`
 : 页面识别、导航、弹窗清理、`appear/appear_then_click` 等模板点击能力。
@@ -181,6 +181,9 @@
 
 - `gift`
 : 物品领取任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 导航链路进入邮箱页）。
+
+- `land_scan`
+: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；流程为左滑 120 后扫描右到左前 5 列、右滑 240 后扫描左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集。
 
 ## 5. 新增任务标准流程
 

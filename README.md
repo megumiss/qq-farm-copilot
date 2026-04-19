@@ -29,6 +29,7 @@
 - [x] 好友农场偷菜
 - [x] 好友农场帮忙
 - [x] 自动同步等级
+- [x] 地块巡查
 - [x] 任务调度时间自定义
 - [x] 偷取统计
 - [ ] 异常通知
@@ -51,6 +52,7 @@
 - `reward`：独立任务奖励领取（默认每 6 小时执行一次）
 - `gift`：物品领取任务（QQSVIP礼包、商城礼包、可选邮件领取；支持分项开关）
 - `sell`：独立出售任务（仓库批量出售）
+- `land_scan`：地块巡查任务（默认关闭；每 30 分钟；按左右滑动分段点击地块并 OCR 采集）
 
 ## 后台/多开说明
 
@@ -221,6 +223,17 @@ python main.py
       "auto_mall_gift": true,
       "auto_mail": true
     }
+  },
+  "land_scan": {
+    "enabled": false,
+    "priority": 45,
+    "trigger": "interval",
+    "daily_time": "04:00",
+    "next_run": "2026-01-01 00:00",
+    "interval_seconds": 1800,
+    "enabled_time_range": "00:00:00-23:59:59",
+    "failure_interval_seconds": 300,
+    "features": {}
   }
 }
 ```
