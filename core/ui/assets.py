@@ -15,6 +15,8 @@ BTN_CLICK_TO_CLOSE = Button(area={'qq': (207, 793, 331, 811), 'wechat': (207, 79
 BTN_CLOSE = Button(area={'qq': (493, 54, 527, 88), 'wechat': (493, 54, 527, 88)}, color={'qq': (236, 191, 165), 'wechat': (236, 191, 165)}, button={'qq': (493, 54, 527, 88), 'wechat': (493, 54, 527, 88)}, file={'qq': 'templates/qq/btn/btn_close.png', 'wechat': 'templates/qq/btn/btn_close.png'}, name='btn_close')  # 关闭
 BTN_COME_AGAIN = Button(area={'qq': (223, 590, 316, 613), 'wechat': (223, 590, 316, 613)}, color={'qq': (187, 199, 98), 'wechat': (187, 199, 98)}, button={'qq': (223, 590, 316, 613), 'wechat': (223, 590, 316, 613)}, file={'qq': 'templates/qq/btn/btn_come_again.png', 'wechat': 'templates/qq/btn/btn_come_again.png'}, name='btn_come_again')
 BTN_CONFIRM = Button(area={'qq': (349, 871, 403, 896), 'wechat': (349, 871, 403, 896)}, color={'qq': (182, 197, 86), 'wechat': (182, 197, 86)}, button={'qq': (349, 871, 403, 896), 'wechat': (349, 871, 403, 896)}, file={'qq': 'templates/qq/btn/btn_confirm.png', 'wechat': 'templates/qq/btn/btn_confirm.png'}, name='btn_confirm')  # 确认
+BTN_CROP_MATURITY_TIME_SUFFIX = Button(area={'qq': (316, 475, 359, 489), 'wechat': (316, 475, 359, 489)}, color={'qq': (192, 157, 132), 'wechat': (192, 157, 132)}, button={'qq': (316, 475, 359, 489), 'wechat': (316, 475, 359, 489)}, file={'qq': 'templates/qq/btn/btn_crop_maturity_time_suffix.png', 'wechat': 'templates/qq/btn/btn_crop_maturity_time_suffix.png'}, name='btn_crop_maturity_time_suffix')
+BTN_CROP_REMOVAL = Button(area={'qq': (469, 459, 495, 486), 'wechat': (469, 459, 495, 486)}, color={'qq': (220, 211, 191), 'wechat': (220, 211, 191)}, button={'qq': (469, 459, 495, 486), 'wechat': (469, 459, 495, 486)}, file={'qq': 'templates/qq/btn/btn_crop_removal.png', 'wechat': 'templates/qq/btn/btn_crop_removal.png'}, name='btn_crop_removal')
 BTN_DIRECT_CLAIM = Button(area={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, color={'qq': (196, 204, 122), 'wechat': (196, 204, 122)}, button={'qq': (327, 733, 424, 759), 'wechat': (327, 733, 424, 759)}, file={'qq': 'templates/qq/btn/btn_direct_claim.png', 'wechat': 'templates/qq/btn/btn_direct_claim.png'}, name='btn_direct_claim')  # 领取
 BTN_EXPAND = Button(area={'qq': (156, 571, 195, 591), 'wechat': (156, 571, 195, 591)}, color={'qq': (195, 127, 64), 'wechat': (195, 127, 64)}, button={'qq': (156, 571, 195, 591), 'wechat': (156, 571, 195, 591)}, file={'qq': 'templates/qq/btn/btn_expand.png', 'wechat': 'templates/qq/btn/btn_expand.png'}, name='btn_expand')  # 扩建
 BTN_EXPAND_CHECK = Button(area={'qq': (219, 311, 314, 335), 'wechat': (219, 311, 314, 335)}, color={'qq': (229, 191, 172), 'wechat': (229, 191, 172)}, button={'qq': (219, 311, 314, 335), 'wechat': (219, 311, 314, 335)}, file={'qq': 'templates/qq/btn/btn_expand_check.png', 'wechat': 'templates/qq/btn/btn_expand_check.png'}, name='btn_expand_check')
@@ -107,6 +109,8 @@ ASSET_NAME_TO_CONST = {
     'btn_close': BTN_CLOSE,
     'btn_come_again': BTN_COME_AGAIN,
     'btn_confirm': BTN_CONFIRM,
+    'btn_crop_maturity_time_suffix': BTN_CROP_MATURITY_TIME_SUFFIX,
+    'btn_crop_removal': BTN_CROP_REMOVAL,
     'btn_direct_claim': BTN_DIRECT_CLAIM,
     'btn_expand': BTN_EXPAND,
     'btn_expand_check': BTN_EXPAND_CHECK,
