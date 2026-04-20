@@ -21,7 +21,7 @@
 - 实例纳管操作：`新增 / 删除 / 切换 / 克隆 / 重命名`
 - 调度模式：`TaskExecutor` 单线程串行执行
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典，包含持久化 `next_run`）
-- 农场详情配置：`config.land.plots`（固定 24 格，元素结构：`{plot_id, level}`）与 `config.land.profile`（`level/gold/coupon/exp`，来源于等级同步 OCR）
+- 农场详情配置：`config.land.plots`（固定 24 格，元素结构：`{plot_id, level, maturity_countdown}`；`maturity_countdown` 为 `HH:MM:SS`）与 `config.land.profile`（`level/gold/coupon/exp`，来源于等级同步 OCR）
 - 好友黑名单配置：`config.tasks.friend.features.blacklist`（`list[str]`，在任务设置详情弹窗维护）
 - 偷取统计开关：`config.tasks.friend.features.steal_stats`（默认 `false`；开启后仅在偷取动作后执行 OCR 统计，偷取速度会变慢）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
@@ -183,7 +183,7 @@
 : 物品领取任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 导航链路进入邮箱页）。
 
 - `land_scan`
-: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；流程为左滑 120 后扫描右到左前 5 列、右滑 240 后扫描左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集。
+: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；流程为左滑 120 后扫描右到左前 5 列、右滑 240 后扫描左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`。
 
 ## 5. 新增任务标准流程
 

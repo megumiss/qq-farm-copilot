@@ -134,7 +134,7 @@ python main.py
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
 - `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
 - `executor`：空队列策略、默认间隔、最大失败次数、`min_task_interval_seconds`（任务最小执行间隔）
-- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold" }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
+- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS" }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
 - `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）

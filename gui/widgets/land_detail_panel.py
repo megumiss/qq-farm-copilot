@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
-from PyQt6.QtCore import QSignalBlocker, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QSignalBlocker, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QShowEvent
 from PyQt6.QtWidgets import (
     QFrame,
@@ -67,6 +68,7 @@ LAND_STATE_RANK: dict[str, int] = {
     'black': 3,
     'gold': 4,
 }
+LAND_COUNTDOWN_PATTERN = re.compile(r'^(\d{2}):(\d{2}):(\d{2})$')
 
 
 class LandCell(QWidget):
@@ -77,8 +79,9 @@ class LandCell(QWidget):
     def __init__(self, plot_id: str, parent=None):
         super().__init__(parent)
         self.plot_id = str(plot_id)
+        self._countdown_seconds = 0
         self._init_ui()
-        self.set_data({'level': 'unbuilt'})
+        self.set_data({'level': 'unbuilt', 'maturity_countdown': ''})
         self.set_editable(False)
 
     def _init_ui(self) -> None:
@@ -118,6 +121,18 @@ class LandCell(QWidget):
             self._state_combo.addItem(meta.label, userData=state)
         self._state_combo.currentIndexChanged.connect(self._on_state_changed)
         root.addWidget(self._state_combo)
+
+        self._countdown_view = CaptionLabel('--:--:--', self)
+        self._countdown_view.setObjectName('countdownView')
+        self._countdown_view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._countdown_view.setStyleSheet(
+            'background: rgba(255, 255, 255, 0.85);'
+            'border: 1px solid rgba(15, 23, 42, 0.12);'
+            'border-radius: 6px;'
+            'color: #0f172a; font-size: 11px; font-weight: 600;'
+            'padding: 2px 4px;'
+        )
+        root.addWidget(self._countdown_view)
 
     @staticmethod
     def _normalize_state(raw: object) -> str:
@@ -162,21 +177,71 @@ class LandCell(QWidget):
             'padding: 2px 6px;'
         )
 
+    @staticmethod
+    def _normalize_countdown_text(raw: object) -> str:
+        text = str(raw or '').strip()
+        match = LAND_COUNTDOWN_PATTERN.match(text)
+        if not match:
+            return ''
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        second = int(match.group(3))
+        if hour < 0 or hour > 99 or minute < 0 or minute > 59 or second < 0 or second > 59:
+            return ''
+        return f'{hour:02d}:{minute:02d}:{second:02d}'
+
+    @staticmethod
+    def _countdown_to_seconds(text: str) -> int:
+        match = LAND_COUNTDOWN_PATTERN.match(str(text or '').strip())
+        if not match:
+            return 0
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        second = int(match.group(3))
+        return hour * 3600 + minute * 60 + second
+
+    @staticmethod
+    def _seconds_to_countdown(seconds: int) -> str:
+        value = max(0, int(seconds))
+        hour = min(99, value // 3600)
+        remain = value % 3600
+        minute = remain // 60
+        second = remain % 60
+        return f'{hour:02d}:{minute:02d}:{second:02d}'
+
+    def _current_countdown_text(self) -> str:
+        if self._countdown_seconds <= 0:
+            return ''
+        return self._seconds_to_countdown(self._countdown_seconds)
+
     def set_data(self, data: dict[str, object]) -> None:
         state = self._normalize_state(data.get('level', 'unbuilt'))
+        countdown_raw = data.get('maturity_countdown', self._current_countdown_text())
+        countdown = self._normalize_countdown_text(countdown_raw)
+        self._countdown_seconds = self._countdown_to_seconds(countdown)
         state_index = self._state_combo.findData(state)
         if state_index < 0:
             state_index = 0
         with QSignalBlocker(self._state_combo):
             self._state_combo.setCurrentIndex(state_index)
         self._state_view.setText(LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label)
+        self._countdown_view.setText(countdown or '--:--:--')
         self._apply_state_style(state)
 
     def get_data(self) -> dict[str, object]:
         return {
             'plot_id': self.plot_id,
             'level': self._current_state(),
+            'maturity_countdown': self._current_countdown_text(),
         }
+
+    def tick_countdown(self) -> bool:
+        """每秒递减一次成熟倒计时，返回是否有变更。"""
+        if self._countdown_seconds <= 0:
+            return False
+        self._countdown_seconds = max(0, int(self._countdown_seconds) - 1)
+        self._countdown_view.setText(self._current_countdown_text() or '--:--:--')
+        return True
 
     def set_editable(self, editable: bool) -> None:
         is_edit = bool(editable)
@@ -200,9 +265,13 @@ class LandDetailPanel(QWidget):
         self._cells: dict[str, LandCell] = {}
         self._profile_value_labels: dict[str, StrongBodyLabel] = {}
         self._editing = False
+        self._countdown_timer = QTimer(self)
+        self._countdown_timer.setInterval(1000)
+        self._countdown_timer.timeout.connect(self._on_countdown_tick)
         self._init_ui()
         self._load_from_config()
         self._set_edit_mode(False)
+        self._countdown_timer.start()
 
     @staticmethod
     def _plot_id_at(row_index: int, col_index: int) -> str:
@@ -511,6 +580,14 @@ class LandDetailPanel(QWidget):
         self.config_changed.emit(self.config)
         return True
 
+    def _save_countdown_to_config(self) -> None:
+        """倒计时自动刷新时回写配置。"""
+        try:
+            self.config.land.plots = self.get_land_data()
+            self.config.save()
+        except Exception:
+            return
+
     def _load_from_config(self) -> None:
         profile_cfg = getattr(getattr(self.config, 'land', None), 'profile', None)
         if profile_cfg is None:
@@ -580,6 +657,15 @@ class LandDetailPanel(QWidget):
             except Exception:
                 pass
         self._load_from_config()
+
+    def _on_countdown_tick(self) -> None:
+        changed = False
+        for cell in self._cells.values():
+            if cell.tick_countdown():
+                changed = True
+        if not changed:
+            return
+        self._save_countdown_to_config()
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)

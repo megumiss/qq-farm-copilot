@@ -317,6 +317,7 @@ LAND_STATE_ALIASES: dict[str, str] = {
     '金': 'gold',
 }
 LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold'}
+LAND_MATURITY_COUNTDOWN_PATTERN = re.compile(r'^(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})$')
 
 
 def build_default_land_plot_ids() -> list[str]:
@@ -331,7 +332,9 @@ def build_default_land_plot_ids() -> list[str]:
 
 def build_default_land_plots() -> list[dict[str, str]]:
     """生成默认地块状态列表。"""
-    return [{'plot_id': plot_id, 'level': 'unbuilt'} for plot_id in build_default_land_plot_ids()]
+    return [
+        {'plot_id': plot_id, 'level': 'unbuilt', 'maturity_countdown': ''} for plot_id in build_default_land_plot_ids()
+    ]
 
 
 def normalize_land_level(value: Any) -> str:
@@ -356,6 +359,22 @@ def normalize_land_plot_id(value: Any) -> str | None:
     if col < 1 or col > LAND_COL_COUNT or row < 1 or row > LAND_ROW_COUNT:
         return None
     return f'{col}-{row}'
+
+
+def normalize_land_maturity_countdown(value: Any) -> str:
+    """规范化地块成熟倒计时文本为 HH:MM:SS。"""
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    match = LAND_MATURITY_COUNTDOWN_PATTERN.match(text)
+    if not match:
+        return ''
+    hour = int(match.group('h'))
+    minute = int(match.group('m'))
+    second = int(match.group('s'))
+    if hour < 0 or hour > 99 or minute < 0 or minute > 59 or second < 0 or second > 59:
+        return ''
+    return f'{hour:02d}:{minute:02d}:{second:02d}'
 
 
 class LandDetailConfig(BaseModel):
@@ -393,30 +412,36 @@ class LandDetailConfig(BaseModel):
     def _normalize_plots(cls, value):
         """规范化地块详情列表，确保固定 24 格。"""
         ordered_ids = build_default_land_plot_ids()
-        level_map: dict[str, str] = {plot_id: 'unbuilt' for plot_id in ordered_ids}
+        plot_map: dict[str, dict[str, str]] = {
+            plot_id: {'plot_id': plot_id, 'level': 'unbuilt', 'maturity_countdown': ''} for plot_id in ordered_ids
+        }
 
-        def _apply_item(plot_id_raw: Any, level_raw: Any) -> None:
+        def _apply_item(plot_id_raw: Any, level_raw: Any, maturity_countdown_raw: Any = '') -> None:
             normalized_id = normalize_land_plot_id(plot_id_raw)
-            if not normalized_id or normalized_id not in level_map:
+            if not normalized_id or normalized_id not in plot_map:
                 return
-            level_map[normalized_id] = normalize_land_level(level_raw)
+            plot_map[normalized_id]['level'] = normalize_land_level(level_raw)
+            plot_map[normalized_id]['maturity_countdown'] = normalize_land_maturity_countdown(maturity_countdown_raw)
 
         if isinstance(value, dict):
-            for plot_id, level in value.items():
-                _apply_item(plot_id, level)
+            for plot_id, item in value.items():
+                if isinstance(item, dict):
+                    _apply_item(plot_id, item.get('level'), item.get('maturity_countdown'))
+                else:
+                    _apply_item(plot_id, item, '')
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
-                    _apply_item(item.get('plot_id'), item.get('level'))
+                    _apply_item(item.get('plot_id'), item.get('level'), item.get('maturity_countdown'))
                     continue
                 try:
                     dumped = item.model_dump()
                 except Exception:
                     dumped = {}
                 if isinstance(dumped, dict):
-                    _apply_item(dumped.get('plot_id'), dumped.get('level'))
+                    _apply_item(dumped.get('plot_id'), dumped.get('level'), dumped.get('maturity_countdown'))
 
-        return [{'plot_id': plot_id, 'level': level_map[plot_id]} for plot_id in ordered_ids]
+        return [plot_map[plot_id] for plot_id in ordered_ids]
 
 
 class AppConfig(BaseModel):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from loguru import logger
 
 from core.engine.task.registry import TaskResult
@@ -38,6 +40,8 @@ LAND_SCAN_TIME_PICK_X2 = -40
 LAND_SCAN_TIME_PICK_Y1 = -20
 # 成熟时间 OCR 二次筛选窗口：相对 BTN_CROP_MATURITY_TIME_SUFFIX 中心，y 下边界偏移（像素）。
 LAND_SCAN_TIME_PICK_Y2 = 20
+# 成熟时间文本正则（仅提取 HH:MM:SS）。
+LAND_SCAN_MATURITY_TIME_PATTERN = re.compile(r'(\d{2}:\d{2}:\d{2})')
 
 
 class TaskLandScan(TaskBase):
@@ -141,6 +145,8 @@ class TaskLandScan(TaskBase):
         roi = self._build_ocr_region(removal_location)
         items = self.ocr_tool.detect(self.ui.device.image, region=roi, scale=1.2, alpha=1.1, beta=0.0)
         text, score, tokens = self._pick_time_tokens_near_suffix(items=items, anchor=removal_location)
+        countdown = self._extract_maturity_time(text)
+        display_text = countdown or text
         logger.debug(
             '地块巡查: OCR筛选 | region={} pick_offset=({}, {}, {}, {}) tokens={} text={}',
             roi,
@@ -149,9 +155,14 @@ class TaskLandScan(TaskBase):
             LAND_SCAN_TIME_PICK_X2,
             LAND_SCAN_TIME_PICK_Y2,
             tokens,
-            text or '<empty>',
+            display_text or '<empty>',
         )
-        logger.info('地块巡查: OCR | 序号={} text={} score={:.3f}', cell.label, self._short_text(text), score)
+        logger.info('地块巡查: OCR | 序号={} text={} score={:.3f}', cell.label, self._short_text(display_text), score)
+        if countdown:
+            updated = self._update_plot_maturity_countdown(plot_id=cell.label, countdown=countdown)
+            if updated:
+                logger.debug('地块巡查: 成熟时间更新 | 序号={} countdown={}', cell.label, countdown)
+                self._save_land_countdown_update(plot_id=cell.label)
         return
 
     def _collect_land_cells(self) -> list[LandCell]:
@@ -244,3 +255,45 @@ class TaskLandScan(TaskBase):
         if len(clean) <= limit:
             return clean or '<empty>'
         return f'{clean[:limit]}...'
+
+    @staticmethod
+    def _extract_maturity_time(text: str) -> str:
+        """从 OCR 文本提取 HH:MM:SS。"""
+        raw = str(text or '').strip()
+        if not raw:
+            return ''
+        match = LAND_SCAN_MATURITY_TIME_PATTERN.search(raw)
+        if not match:
+            return ''
+        return str(match.group(1))
+
+    def _update_plot_maturity_countdown(self, *, plot_id: str, countdown: str) -> bool:
+        """回写单个地块成熟倒计时到配置。"""
+        target = str(plot_id or '').strip()
+        if not target:
+            return False
+        land_cfg = getattr(self.engine.config, 'land', None)
+        plots = getattr(land_cfg, 'plots', None)
+        if not isinstance(plots, list):
+            return False
+
+        for item in plots:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get('plot_id', '')).strip() != target:
+                continue
+            old = str(item.get('maturity_countdown', '') or '').strip()
+            if old == countdown:
+                return False
+            item['maturity_countdown'] = countdown
+            return True
+        return False
+
+    def _save_land_countdown_update(self, *, plot_id: str) -> None:
+        """单地块更新后立即落盘。"""
+        try:
+            self.engine.config.save()
+        except Exception as exc:
+            logger.warning('地块巡查: 成熟时间写入配置失败 | 序号={} error={}', plot_id, exc)
+            return
+        logger.debug('地块巡查: 成熟时间已写入配置 | 序号={}', plot_id)
