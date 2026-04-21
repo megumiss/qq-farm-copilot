@@ -8,6 +8,12 @@ from dataclasses import dataclass
 
 LAND_GRID_SLOPE_COL = -0.5091743119
 LAND_GRID_SLOPE_ROW = 0.5091743119
+LAND_RIGHT_ANCHOR_BASELINE = (490.0, 559.0)
+LAND_LEFT_ANCHOR_BASELINE = (51.0, 602.0)
+LAND_ANCHOR_SPAN_BASELINE = (
+    LAND_LEFT_ANCHOR_BASELINE[0] - LAND_RIGHT_ANCHOR_BASELINE[0],
+    LAND_LEFT_ANCHOR_BASELINE[1] - LAND_RIGHT_ANCHOR_BASELINE[1],
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +53,42 @@ def _order_vertices_top_clockwise(points: Sequence[tuple[float, float]]) -> list
     return [(int(round(x)), int(round(y))) for x, y in ordered]
 
 
+def _normalize_anchor(value: tuple[int, int] | tuple[float, float] | None) -> tuple[float, float] | None:
+    """Normalize anchor input to float tuple."""
+    if value is None:
+        return None
+    return float(value[0]), float(value[1])
+
+
+def _resolve_anchors_with_single_support(
+    land_right_anchor: tuple[int, int] | tuple[float, float] | None,
+    land_left_anchor: tuple[int, int] | tuple[float, float] | None,
+    *,
+    anchor_span: tuple[int, int] | tuple[float, float] | None,
+) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    """Resolve anchors and support single-anchor input.
+
+    Rules:
+    - both missing -> return (None, None)
+    - both present -> return normalized values directly
+    - single present -> infer the other by `anchor_span`
+      (left = right + span, right = left - span)
+    """
+    right = _normalize_anchor(land_right_anchor)
+    left = _normalize_anchor(land_left_anchor)
+    if right is None and left is None:
+        return None, None
+    if right is not None and left is not None:
+        return right, left
+
+    span = _normalize_anchor(anchor_span) if anchor_span is not None else LAND_ANCHOR_SPAN_BASELINE
+    if right is None and left is not None:
+        return (left[0] - span[0], left[1] - span[1]), left
+    if right is not None and left is None:
+        return right, (right[0] + span[0], right[1] + span[1])
+    return right, left
+
+
 def get_lands_from_land_anchor(
     land_right_anchor: tuple[int, int] | None,
     land_left_anchor: tuple[int, int] | None,
@@ -56,6 +98,7 @@ def get_lands_from_land_anchor(
     slope_col: float = LAND_GRID_SLOPE_COL,
     slope_row: float = LAND_GRID_SLOPE_ROW,
     start_anchor: str = 'right',
+    anchor_span: tuple[int, int] | tuple[float, float] | None = None,
 ) -> list[LandCell]:
     """Build land-center points from left/right land anchor positions.
 
@@ -67,12 +110,19 @@ def get_lands_from_land_anchor(
         slope_col: Column direction slope (dy / dx).
         slope_row: Row direction slope (dy / dx).
         start_anchor: Grid origin anchor, `right` or `left`.
+        anchor_span: Optional `(dx, dy)` from right-anchor to left-anchor.
+            Used when only one anchor is provided. Defaults to baseline span.
     Returns:
         Full land-cell info list.
         Label rule follows the original tools logic: `label = f"{col}-{rows-r}"`.
         Output order is sorted by `(col, row)` ascending, e.g. `1-1, 1-2, ...`.
     """
-    if land_right_anchor is None or land_left_anchor is None:
+    right_anchor, left_anchor = _resolve_anchors_with_single_support(
+        land_right_anchor,
+        land_left_anchor,
+        anchor_span=anchor_span,
+    )
+    if right_anchor is None or left_anchor is None:
         return []
 
     cell_rows = max(1, int(rows))
@@ -80,8 +130,6 @@ def get_lands_from_land_anchor(
     step_rows = cell_rows
     step_cols = cell_cols
 
-    right_anchor = (float(land_right_anchor[0]), float(land_right_anchor[1]))
-    left_anchor = (float(land_left_anchor[0]), float(land_left_anchor[1]))
     use_right = str(start_anchor).strip().lower() != 'left'
     start = right_anchor if use_right else left_anchor
     end = left_anchor if use_right else right_anchor

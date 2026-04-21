@@ -29,6 +29,7 @@
 - [x] 好友农场偷菜
 - [x] 好友农场帮忙
 - [x] 自动同步等级
+- [x] 地块巡查
 - [x] 任务调度时间自定义
 - [x] 偷取统计
 - [ ] 异常通知
@@ -51,6 +52,7 @@
 - `reward`：独立任务奖励领取（默认每 6 小时执行一次）
 - `gift`：物品领取任务（QQSVIP礼包、商城礼包、可选邮件领取；支持分项开关）
 - `sell`：独立出售任务（仓库批量出售）
+- `land_scan`：地块巡查任务（默认关闭；每 30 分钟；按左右滑动分段点击地块并 OCR 采集）
 
 ## 后台/多开说明
 
@@ -132,7 +134,7 @@ python main.py
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
 - `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
 - `executor`：空队列策略、默认间隔、最大失败次数、`min_task_interval_seconds`（任务最小执行间隔）
-- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold" }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
+- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
 - `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）
@@ -221,6 +223,17 @@ python main.py
       "auto_mall_gift": true,
       "auto_mail": true
     }
+  },
+  "land_scan": {
+    "enabled": false,
+    "priority": 25,
+    "trigger": "interval",
+    "daily_time": "04:00",
+    "next_run": "2026-01-01 00:00",
+    "interval_seconds": 1800,
+    "enabled_time_range": "00:00:00-23:59:59",
+    "failure_interval_seconds": 300,
+    "features": {}
   }
 }
 ```

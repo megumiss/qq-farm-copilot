@@ -6,7 +6,8 @@
       "share": "分享",
       "reward": "奖励领取",
       "gift": "物品领取",
-      "sell": "出售"
+      "sell": "出售",
+      "land_scan": "地块巡查"
     },
     "feature_labels": {
       "auto_harvest": "收获",
@@ -60,7 +61,8 @@
       "share": "分享",
       "reward": "奖励领取",
       "gift": "物品领取",
-      "sell": "出售"
+      "sell": "出售",
+      "land_scan": "地块巡查"
     },
     "task_hints": {
       "share": "仅支持微信平台"

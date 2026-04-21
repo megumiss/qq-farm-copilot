@@ -27,6 +27,7 @@ from models.config import (
 )
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
+from tasks.land_scan import TaskLandScan
 from tasks.main import TaskMain
 from tasks.reward import TaskReward
 from tasks.sell import TaskSell
@@ -482,6 +483,15 @@ class BotExecutorMixin:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskGift(engine=self, ui=self.ui)
+        return task.run(rect=rect)
+
+    def _run_task_land_scan(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_land_scan` 子流程。"""
+        rect, err = self._prepare_task_scene('land_scan')
+        if err is not None or rect is None:
+            return err or TaskResult(success=False, error='窗口未找到')
+        self._reset_device_runtime_guards()
+        task = TaskLandScan(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
 
     def _on_executor_snapshot(self, snapshot: TaskSnapshot):
