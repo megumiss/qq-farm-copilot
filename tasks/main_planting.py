@@ -32,6 +32,7 @@ from tasks.main import (
     SHOP_LIST_SWIPE_START,
 )
 from utils.bg_patch_number_ocr import BgPatchNumberItem
+from utils.land_grid import get_lands_from_land_anchor
 
 if TYPE_CHECKING:
     from core.engine.bot.local_engine import LocalBotEngine
@@ -210,6 +211,72 @@ class TaskMainPlantingMixin:
         return coords
 
     @staticmethod
+    def _merge_land_coords(
+        base_coords: list[tuple[int, int]],
+        extra_coords: list[tuple[int, int]],
+        *,
+        near_distance: float = 10.0,
+    ) -> list[tuple[int, int]]:
+        """合并并去重点位坐标。"""
+        merged: list[tuple[int, int]] = []
+        for point in [*base_coords, *extra_coords]:
+            px, py = int(point[0]), int(point[1])
+            if any(math.hypot(float(px - ox), float(py - oy)) <= float(near_distance) for ox, oy in merged):
+                continue
+            merged.append((px, py))
+        merged.sort(key=lambda p: (p[1], p[0]))
+        return merged
+
+    def _collect_need_planting_land_coords_from_detail(self) -> list[tuple[int, int]]:
+        """按土地详情 `need_planting` 获取待播种地块坐标。"""
+        pending_entries = self.parse_land_detail_plots_by_flag('need_planting')
+        if not pending_entries:
+            return []
+
+        self.ui.device.screenshot()
+        land_right_anchor = self.ui.appear_location(BTN_LAND_RIGHT, offset=30, threshold=0.95, static=False)
+        land_left_anchor = self.ui.appear_location(BTN_LAND_LEFT, offset=30, threshold=0.95, static=False)
+        if land_right_anchor is None and land_left_anchor is None:
+            logger.warning('自动播种流程: 空地补充失败，未识别到地块锚点')
+            return []
+
+        all_lands = get_lands_from_land_anchor(
+            (int(land_right_anchor[0]), int(land_right_anchor[1])) if land_right_anchor is not None else None,
+            (int(land_left_anchor[0]), int(land_left_anchor[1])) if land_left_anchor is not None else None,
+        )
+        if not all_lands:
+            logger.warning('自动播种流程: 空地补充失败，未生成地块网格')
+            return []
+
+        center_by_plot_id = {str(cell.label): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
+        center_by_order = {int(cell.order): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
+        coords: list[tuple[int, int]] = []
+        missing_refs: list[str] = []
+        for item in pending_entries:
+            plot_id = str(item.get('plot_id', '') or '').strip()
+            if plot_id and plot_id in center_by_plot_id:
+                coords.append(center_by_plot_id[plot_id])
+                continue
+            try:
+                order = int(item['order'])
+            except Exception:
+                order = 0
+            if order <= 0:
+                missing_refs.append(plot_id or f'index:{item.get("source_index", "?")}')
+                continue
+            point = center_by_order.get(order)
+            if point is None:
+                missing_refs.append(plot_id or f'order:{order}')
+                continue
+            coords.append(point)
+
+        merged_coords = self._merge_land_coords([], coords)
+        logger.info('自动播种流程: 空地补充完成 | count={}', len(merged_coords))
+        if missing_refs:
+            logger.warning('自动播种流程: 存在未映射地块 | count={}', len(missing_refs))
+        return merged_coords
+
+    @staticmethod
     def _select_center_land_coord(coords: list[tuple[int, int]]) -> tuple[int, int] | None:
         """优先选最上方地块，再选 x 最靠近中心的地块。"""
         if not coords:
@@ -328,9 +395,12 @@ class TaskMainPlantingMixin:
 
     def _plant_all(self, crop_name: str) -> list[str]:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
-        # get_lands_from_land_anchor()
-        land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
-        logger.info('自动播种流程: 空地识别完成 | count={}', len(land_coords))
+        # 模板匹配到的空地
+        detected_land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
+        detail_land_coords = self._collect_need_planting_land_coords_from_detail()
+        land_coords = self._merge_land_coords(detected_land_coords, detail_land_coords)
+        logger.info(
+            '自动播种流程: 空地识别完成 | count={}', len(land_coords))
         if not land_coords:
             logger.info('自动播种流程: 未发现空土地，跳过播种')
             return
