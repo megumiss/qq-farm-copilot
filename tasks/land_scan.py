@@ -6,6 +6,7 @@ import re
 
 from loguru import logger
 
+from core.base.timer import Timer
 from core.engine.task.registry import TaskResult
 from core.ui.assets import (
     BTN_CROP_MATURITY_TIME_SUFFIX,
@@ -79,6 +80,10 @@ LAND_SCAN_PLOTTED_LEVEL_COLORS_RGB: dict[str, tuple[int, int, int]] = {
 LAND_SCAN_UPGRADE_EMPTY_REGION_OFFSET = (-100, -50, 0, -0)
 # 非空地弹窗升级图标 ROI：相对 BTN_CROP_MATURITY_TIME_SUFFIX 中心 (dx1, dy1, dx2, dy2)。
 LAND_SCAN_UPGRADE_NON_EMPTY_REGION_OFFSET = (0, -50, 130, 50)
+# 滑动后锚点稳定判定总时长（秒）。
+LAND_SCAN_ANCHOR_STABLE_SECONDS = 0.5
+# Timer reached 附加计数门槛（reached_count > count）。
+LAND_SCAN_ANCHOR_STABLE_REQUIRED_HITS = 3
 
 
 class TaskLandScan(TaskBase):
@@ -111,7 +116,8 @@ class TaskLandScan(TaskBase):
         try:
             for _ in range(2):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
-                self.ui.device.sleep(0.5)
+            self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
+
             cells_after_left = self._collect_land_cells()
             if not cells_after_left:
                 logger.warning('地块巡查: 未识别到地块网格，跳过任务')
@@ -123,7 +129,8 @@ class TaskLandScan(TaskBase):
 
             for _ in range(2):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
-                self.ui.device.sleep(0.5)
+            self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
+
             cells_after_right = self._collect_land_cells()
             if not cells_after_right:
                 logger.warning('地块巡查: 未识别到地块网格，跳过任务')
@@ -144,8 +151,53 @@ class TaskLandScan(TaskBase):
             # TODO 画面回正
             self.ui.ui_ensure(page_main)
 
+        self._trigger_main_task_if_needed()
         logger.info('地块巡查: 结束')
         return self.ok()
+
+    def _trigger_main_task_if_needed(self) -> None:
+        """存在待播种或待升级地块时，拉起农场巡查任务。"""
+        pending_planting = bool(self.parse_land_detail_plots_by_flag('need_planting'))
+        pending_upgrade = bool(self.parse_land_detail_plots_by_flag('need_upgrade'))
+        if not pending_planting and not pending_upgrade:
+            return
+
+        self.engine._task_executor.task_call('main', force_call=False)
+        logger.info(
+            '地块巡查: 存在待处理地块，执行农场巡查 | 待播种={} 待升级={}',
+            pending_planting,
+            pending_upgrade,
+        )
+
+    def _wait_anchor_position_stable(self, *, anchor_button) -> bool:
+        """等待锚点位置稳定：同坐标保持 0.5s 且 reached 计数超过阈值后继续。"""
+        stable_seconds = float(LAND_SCAN_ANCHOR_STABLE_SECONDS)
+        required_hits = int(LAND_SCAN_ANCHOR_STABLE_REQUIRED_HITS)
+        stable_timer = Timer(stable_seconds, count=required_hits)
+        last_anchor: tuple[int, int] | None = None
+
+        while 1:
+            self.ui.device.screenshot()
+            location = self.ui.appear_location(anchor_button, offset=30, threshold=0.95, static=False)
+            current_anchor: tuple[int, int] | None = None
+            if location is not None:
+                current_anchor = (int(location[0]), int(location[1]))
+
+            if current_anchor is None:
+                last_anchor = None
+                stable_timer.clear()
+                continue
+
+            if current_anchor != last_anchor:
+                last_anchor = current_anchor
+                if stable_timer.started():
+                    stable_timer.reset()
+                else:
+                    stable_timer.start()
+                continue
+
+            if stable_timer.reached():
+                return True
 
     def _scan_cells_by_physical_columns(
         self,
