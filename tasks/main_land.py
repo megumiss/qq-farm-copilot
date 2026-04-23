@@ -150,9 +150,9 @@ class TaskMainLandMixin:
                 removal_location = None
                 if self.ui.appear(BTN_CROP_REMOVAL, offset=30, static=False):
                     removal_location = self.ui.appear_location(BTN_CROP_REMOVAL, offset=30, static=False)
-                elif self.ui.appear(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False):
+                elif self.ui.appear(BTN_LAND_POP_EMPTY, offset=(-180, -210, 230, 230), threshold=0.65, static=True):
                     removal_location = self.ui.appear_location(
-                        BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False
+                        BTN_LAND_POP_EMPTY, offset=(-180, -210, 230, 230), threshold=0.65, static=True
                     )
 
                 if removal_location is not None:

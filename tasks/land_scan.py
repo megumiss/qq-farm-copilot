@@ -201,8 +201,8 @@ class TaskLandScan(TaskBase):
             ):
                 break
             # 空土地弹窗
-            if self.ui.appear(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False):
-                removal_location = self.ui.appear_location(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False)
+            if self.ui.appear(BTN_LAND_POP_EMPTY, offset=(-180, -210, 230, 230), threshold=0.65, static=True):
+                removal_location = self.ui.appear_location(BTN_LAND_POP_EMPTY, offset=(-180, -210, 230, 230), threshold=0.65, static=True)
                 need_upgrade = self._detect_need_upgrade(anchor=removal_location, empty_plot=True)
                 need_planting = True
                 roi = self._build_land_level_region(removal_location)
