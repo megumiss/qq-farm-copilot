@@ -347,11 +347,24 @@ class TaskMainPlantingMixin:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
         # 模板匹配到的空地
         detected_land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
-        detail_targets = self.collect_land_targets_by_flag(
-            'need_planting', anchor_threshold=0.95, log_prefix='自动播种流程: 空地补充'
-        )
-        detail_land_coords = [point for _, point in detail_targets]
-        pending_plot_refs = [ref for ref, _ in detail_targets]
+
+        # 检查地块巡查任务是否开启，若关闭则不使用历史记录
+        use_land_scan_results = False
+        task_config = self.engine.config.tasks.get('land_scan')
+        if task_config and bool(getattr(task_config, 'enabled', False)):
+            use_land_scan_results = True
+
+        detail_land_coords = []
+        pending_plot_refs = []
+        if use_land_scan_results:
+            detail_targets = self.collect_land_targets_by_flag(
+                'need_planting', anchor_threshold=0.95, log_prefix='自动播种流程: 空地补充'
+            )
+            detail_land_coords = [point for _, point in detail_targets]
+            pending_plot_refs = [ref for ref, _ in detail_targets]
+        else:
+            logger.info('自动播种流程: 地块巡查任务未开启，跳过历史空地补充')
+
         land_coords = self._merge_land_coords(detected_land_coords, detail_land_coords)
         logger.info('自动播种流程: 空地识别完成 | count={}', len(land_coords))
         if not land_coords:
