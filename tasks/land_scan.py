@@ -127,7 +127,7 @@ class TaskLandScan(TaskBase):
                 cells_after_left, from_side='right', column_count=LAND_SCAN_LEFT_STAGE_COL_COUNT
             )
 
-            for _ in range(2):
+            for _ in range(3):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 
@@ -148,7 +148,7 @@ class TaskLandScan(TaskBase):
                 fixed_cols=right_scan_cols,
             )
         finally:
-            # TODO 画面回正
+            self.align_view_by_background_tree(log_prefix='地块巡查')
             self.ui.ui_ensure(page_main)
 
         self._trigger_main_task_if_needed()

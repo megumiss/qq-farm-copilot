@@ -24,18 +24,6 @@ SHOP_LIST_SWIPE_END = (270, 860)
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
 # 空地模板命中的中心点 y 轴过滤区间，避免匹配到顶部 UI/底部无关区域。
 LAND_MATCH_Y_RANGE = (350, 850)
-# 背景树锚点在基准截图中的参考坐标（用于估算画面偏移）。
-BACKGROUND_TREE_BASELINE_POINT = (188, 314)
-# 背景树偏移超过该阈值时触发画面回正。
-BACKGROUND_TREE_OFFSET_THRESHOLD = 30
-# 画面横向回正手势点位 P1。
-BACKGROUND_TREE_SWIPE_H_P1 = (230, 190)
-# 画面横向回正手势点位 P2。
-BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
-# 画面纵向回正手势点位 P1。
-BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
-# 画面纵向回正手势点位 P2。
-BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
 # 轮询背景树锚点稳定性的采样间隔。
 BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS = 0.1
 # 数字块识别区域横向范围（基于主界面截图绝对坐标）。

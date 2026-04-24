@@ -15,13 +15,7 @@ from models.config import PlantMode
 from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from tasks.main import (
     ALWAYS_SKIP_SEED_BUTTONS,
-    BACKGROUND_TREE_BASELINE_POINT,
-    BACKGROUND_TREE_OFFSET_THRESHOLD,
     BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS,
-    BACKGROUND_TREE_SWIPE_H_P1,
-    BACKGROUND_TREE_SWIPE_H_P2,
-    BACKGROUND_TREE_SWIPE_V_P1,
-    BACKGROUND_TREE_SWIPE_V_P2,
     LAND_MATCH_Y_RANGE,
     OPTIONAL_SKIP_SEED_BUTTONS,
     SEED_POPUP_NUMBER_REGION_X_MAX,
@@ -52,34 +46,7 @@ class TaskMainPlantingMixin:
 
         # 点击空白处
         self.ui.device.click_button(GOTO_MAIN)
-        while 1:
-            self.ui.device.screenshot()
-            anchor = self._get_labor_anchor_location()
-            if anchor is None:
-                logger.warning('自动播种流程: 未识别到背景树锚点')
-                break
-
-            offset_x = int(anchor[0] - BACKGROUND_TREE_BASELINE_POINT[0])
-            offset_y = int(anchor[1] - BACKGROUND_TREE_BASELINE_POINT[1])
-            if abs(offset_x) > BACKGROUND_TREE_OFFSET_THRESHOLD:
-                if offset_x > 0:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P1, BACKGROUND_TREE_SWIPE_H_P2, '左'
-                else:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P2, BACKGROUND_TREE_SWIPE_H_P1, '右'
-                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
-                logger.info('自动播种流程: 背景树横向偏移={}px，画面{}移', offset_x, direction)
-                continue
-
-            if abs(offset_y) > BACKGROUND_TREE_OFFSET_THRESHOLD:
-                if offset_y > 0:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P1, BACKGROUND_TREE_SWIPE_V_P2, '上'
-                else:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P2, BACKGROUND_TREE_SWIPE_V_P1, '下'
-                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
-                logger.info('自动播种流程: 背景树纵向偏移={}px，画面{}移', offset_y, direction)
-                continue
-
-            break
+        self.align_view_by_background_tree(log_prefix='自动播种')
 
         # 判断是否需要播种
         # has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
