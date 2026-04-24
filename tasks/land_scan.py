@@ -114,6 +114,7 @@ class TaskLandScan(TaskBase):
         # self.ui.device.click_button(GOTO_MAIN)
 
         try:
+            # 右滑
             for _ in range(2):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
@@ -127,6 +128,7 @@ class TaskLandScan(TaskBase):
                 cells_after_left, from_side='right', column_count=LAND_SCAN_LEFT_STAGE_COL_COUNT
             )
 
+            # 左滑
             for _ in range(3):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
@@ -223,6 +225,7 @@ class TaskLandScan(TaskBase):
             col_cells = list(col_map.get(physical_col, []))
             col_cells.sort(key=lambda cell: (int(cell.center[1]), int(cell.center[0])))
             for cell in col_cells:
+                
                 self._click_and_ocr_cell(cell=cell)
                 self.ui.device.click_button(GOTO_MAIN)
                 self.ui.device.sleep(0.2)

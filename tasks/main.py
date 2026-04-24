@@ -265,17 +265,11 @@ class TaskMain(
         if self.has_feature(features, 'auto_harvest'):
             self._run_feature_harvest()
 
-        # 一键除草
-        if self.has_feature(features, 'auto_weed'):
-            self._run_feature_weed()
-
-        # 一键除虫
-        if self.has_feature(features, 'auto_bug'):
-            self._run_feature_bug()
-
-        # 一键浇水
-        if self.has_feature(features, 'auto_water'):
-            self._run_feature_water()
+        self._run_feature_maintain_actions(
+            enable_weed=self.has_feature(features, 'auto_weed'),
+            enable_bug=self.has_feature(features, 'auto_bug'),
+            enable_water=self.has_feature(features, 'auto_water'),
+        )
 
         # 自动扩建
         if self.has_feature(features, 'auto_expand'):
@@ -290,7 +284,6 @@ class TaskMain(
         if self.has_feature(features, 'auto_fertilize'):
             self._run_feature_fertilize()
 
-        # TODO 自动升级
         if self.has_feature(features, 'auto_upgrade'):
             self._run_feature_upgrade()
 

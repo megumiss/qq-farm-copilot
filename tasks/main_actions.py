@@ -52,43 +52,58 @@ class TaskMainActionsMixin:
 
         return result
 
-    def _run_feature_weed(self) -> str | None:
-        """一键除草"""
-        return self._run_feature_single_action(BTN_WEED, ActionType.WEED, '一键除草')
+    def _run_feature_maintain_actions(
+        self,
+        *,
+        enable_weed: bool,
+        enable_bug: bool,
+        enable_water: bool,
+    ) -> str | None:
+        """统一执行一键除草/除虫/浇水，共用确认计时器。"""
+        action_specs = []
+        if enable_weed:
+            action_specs.append((BTN_WEED, ActionType.WEED))
+        if enable_bug:
+            action_specs.append((BTN_BUG, ActionType.BUG))
+        if enable_water:
+            action_specs.append((BTN_WATER, ActionType.WATER))
+        if not action_specs:
+            return None
+        action_buttons = [button for button, _ in action_specs]
 
-    def _run_feature_bug(self) -> str | None:
-        """一键除虫"""
-        return self._run_feature_single_action(BTN_BUG, ActionType.BUG, '一键除虫')
+        logger.info(
+            '一键维护流程: 开始 | 除草={} 除虫={} 浇水={}',
+            enable_weed,
+            enable_bug,
+            enable_water,
+        )
 
-    def _run_feature_water(self) -> str | None:
-        """一键浇水"""
-        return self._run_feature_single_action(BTN_WATER, ActionType.WATER, '一键浇水')
-
-    # TODO 优化操作速度
-    def _run_feature_single_action(self, button, stat_action: str, done_text: str) -> str | None:
-        """通用单按钮循环动作：首检未命中直接返回，命中后点击到消失。"""
-        logger.info('一键{}流程: 开始', done_text)
         self.ui.device.screenshot()
-        if not self.ui.appear(button, offset=30, static=False):
+        if not self.ui.appear_any(action_buttons, offset=30, static=False):
             return None
 
-        confirm_timer = Timer(0.2, count=1)
+        confirm_timer = Timer(0.5, count=2)
         while 1:
             self.ui.device.screenshot()
 
-            if self.ui.appear_then_click(button, offset=30, interval=1, static=False):
-                self.engine._record_stat(stat_action)
+            clicked_action: str | None = None
+            for button, stat_action in action_specs:
+                if self.ui.appear(button, offset=30, static=False):
+                    clicked_action = stat_action
+                    break
+            if self.ui.appear_then_click_any(action_buttons, offset=30, interval=0.3, static=False):
+                if clicked_action is not None:
+                    self.engine._record_stat(clicked_action)
+                confirm_timer.clear()
                 continue
-            if not self.ui.appear(button, offset=30, static=False):
+
+            if not self.ui.appear_any(action_buttons, offset=30, static=False):
                 if not confirm_timer.started():
                     confirm_timer.start()
                 if confirm_timer.reached():
-                    result = done_text
-                    break
+                    return '一键维护'
             else:
                 confirm_timer.clear()
-
-        return result
 
     # TODO
     def _run_feature_fertilize(self) -> str | None:
