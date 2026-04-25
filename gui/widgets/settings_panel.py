@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFormLayout, QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFileDialog, QFormLayout, QFrame, QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -121,6 +121,23 @@ class SettingsPanel(QWidget):
         run_mode_tip.setWordWrap(True)
         run_mode_tip.setStyleSheet('color: #d97706;')
         env_form.addRow(self._field_label('', env_card), run_mode_tip)
+
+        self.shortcut_path = LineEdit(env_card)
+        self.shortcut_path.setPlaceholderText('请选择快捷方式')
+        shortcut_row = QWidget(env_card)
+        shortcut_layout = QHBoxLayout(shortcut_row)
+        shortcut_layout.setContentsMargins(0, 0, 0, 0)
+        shortcut_layout.setSpacing(8)
+        shortcut_layout.addWidget(self.shortcut_path, 1)
+        self.shortcut_browse_btn = PushButton('选择', shortcut_row)
+        shortcut_btn_width = max(72, self.shortcut_browse_btn.sizeHint().width() + 8)
+        self.shortcut_browse_btn.setFixedWidth(shortcut_btn_width)
+        shortcut_layout.addWidget(self.shortcut_browse_btn)
+        env_form.addRow(self._field_label('快捷方式', env_card), shortcut_row)
+        shortcut_tip = CaptionLabel('在小程序窗口上方的菜单中选择添加到桌面，然后在此处选择。', env_card)
+        shortcut_tip.setWordWrap(True)
+        shortcut_tip.setStyleSheet('color: #d97706;')
+        env_form.addRow(self._field_label('', env_card), shortcut_tip)
 
         self.keyword = LineEdit(env_card)
         self.keyword.setPlaceholderText('窗口标题关键字')
@@ -267,6 +284,8 @@ class SettingsPanel(QWidget):
             sig.connect(self._save)
         self.level.valueChanged.connect(self._on_level_changed)
         self.strategy.currentIndexChanged.connect(self._on_strategy_changed)
+        self.shortcut_path.editingFinished.connect(self._save)
+        self.shortcut_browse_btn.clicked.connect(self._choose_shortcut_path)
         self.keyword.editingFinished.connect(self._on_keyword_committed)
         self.refresh_btn.clicked.connect(self._refresh_windows)
 
@@ -404,6 +423,32 @@ class SettingsPanel(QWidget):
         self._refresh_windows()
         self._save()
 
+    def _choose_shortcut_path(self) -> None:
+        raw_path = str(self.shortcut_path.text() or '').strip()
+        start_dir = ''
+        if raw_path:
+            try:
+                path = Path(raw_path)
+                if path.is_file():
+                    start_dir = str(path.parent)
+                elif path.parent.exists():
+                    start_dir = str(path.parent)
+            except Exception:
+                start_dir = ''
+        if not start_dir:
+            desktop = Path.home() / 'Desktop'
+            start_dir = str(desktop if desktop.exists() else Path.home())
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            '选择快捷方式',
+            start_dir,
+            '快捷方式 (*.lnk)',
+        )
+        if not selected:
+            return
+        self.shortcut_path.setText(str(Path(selected)))
+        self._save()
+
     def _resolve_logs_path_text(self) -> str:
         config_path = str(getattr(self.config, '_config_path', '') or '').strip()
         if config_path:
@@ -426,6 +471,7 @@ class SettingsPanel(QWidget):
         self.skip_event_crops.setChecked(bool(c.planting.skip_event_crops))
         self._set_combo_data(self.platform, c.planting.window_platform.value)
         self._set_combo_data(self.run_mode, c.safety.run_mode.value)
+        self.shortcut_path.setText(str(c.window_shortcut_path or ''))
         self.keyword.setText(str(c.window_title_keyword or ''))
         self._set_combo_data(self.window_position, c.planting.window_position.value)
         self.delay_min.setValue(float(c.safety.random_delay_min))
@@ -455,6 +501,7 @@ class SettingsPanel(QWidget):
         run_mode_value = str(self.run_mode.currentData() or RunMode.BACKGROUND.value)
         c.planting.window_platform = WindowPlatform(platform_value)
         c.safety.run_mode = RunMode(run_mode_value)
+        c.window_shortcut_path = str(self.shortcut_path.text() or '').strip()
         c.window_title_keyword = str(self.keyword.text() or '').strip()
         c.window_select_rule = str(self.window_select.currentData() or 'auto')
         c.planting.window_position = WindowPosition(

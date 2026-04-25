@@ -31,6 +31,7 @@
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `BgPatchNumberOCR` 在区域 `x:[50,480], y:[地块点击y+40, 地块点击y+80]` 识别最左数字块
 - 活动作物跳过：`SEED_BTN_HEART_FRUIT`（爱心果）固定排除；`config.planting.skip_event_crops` 默认关闭，仅控制是否额外排除 `SEED_BTN_MUGWORT`（艾草）
 - 等级同步：播种前执行等级 OCR；由 `config.planting.level_ocr_enabled` 控制，识别后回写 `config.planting.player_level`；统一 ROI 使用 `tasks/main.py` 内常量（不区分平台）
+- 小程序快捷方式：`config.window_shortcut_path` 保存桌面快捷方式路径（`.lnk`，在设置面板“窗口关键词”上方选择）
 - 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 - 版本来源：`utils/version.py::APP_VERSION`（Release 打包前由 `tools/write_version.py --tag <tag>` 自动写入）

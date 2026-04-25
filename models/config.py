@@ -534,6 +534,7 @@ class LandDetailConfig(BaseModel):
 class AppConfig(BaseModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
+    window_shortcut_path: str = ''
     window_title_keyword: str = 'QQ经典农场'
     window_select_rule: str = 'auto'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)

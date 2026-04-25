@@ -114,9 +114,10 @@ python main.py
 ### 首次运行建议检查
 
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
-2. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
-3. `planting.window_platform` 与当前平台一致（QQ / 微信）。
-4. 游戏窗口已打开且未最小化。
+2. 可在设置里选择小程序“添加到桌面”后生成的快捷方式（`window_shortcut_path`，`.lnk`）。
+3. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
+4. `planting.window_platform` 与当前平台一致（QQ / 微信）。
+5. 游戏窗口已打开且未最小化。
 
 热键：
 
@@ -137,6 +138,7 @@ python main.py
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
+- `window_shortcut_path`：小程序桌面快捷方式路径（`.lnk`）
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
