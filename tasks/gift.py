@@ -28,10 +28,9 @@ class TaskGift(TaskBase):
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行物品领取流程。"""
-        features = self.get_features('gift')
-        enable_svip = self.has_feature(features, 'auto_svip_gift', default=True)
-        enable_mall = self.has_feature(features, 'auto_mall_gift', default=True)
-        enable_mail = self.has_feature(features, 'auto_mail', default=True)
+        enable_svip = self.task.gift.feature.auto_svip_gift
+        enable_mall = self.task.gift.feature.auto_mall_gift
+        enable_mail = self.task.gift.feature.auto_mail
         logger.info('领取流程: 开始 | SVIP={} 商城={} 邮件={}', enable_svip, enable_mall, enable_mail)
 
         self.ui.ui_ensure(page_main)

@@ -30,11 +30,13 @@ from utils.bg_patch_number_ocr import BgPatchNumberItem
 if TYPE_CHECKING:
     from core.engine.bot.local_engine import LocalBotEngine
     from core.ui.ui import UI
+    from models.config import AppConfig
 
 
 class TaskMainPlantingMixin:
     """提供播种主链路与买种流程。"""
 
+    config: 'AppConfig'
     engine: 'LocalBotEngine'
     ui: 'UI'
 
@@ -210,9 +212,9 @@ class TaskMainPlantingMixin:
 
     def _wait_labor_anchor_stable(self) -> tuple[int, int] | None:
         """等待背景树锚点连续稳定一段时间后返回坐标。"""
-        stable_seconds = max(0.1, float(self.engine.config.planting.planting_stable_seconds))
+        stable_seconds = max(0.1, float(self.config.planting.planting_stable_seconds))
         stable_timer = Timer(stable_seconds, count=3)
-        timeout_seconds = max(0.1, float(self.engine.config.planting.planting_stable_timeout_seconds))
+        timeout_seconds = max(0.1, float(self.config.planting.planting_stable_timeout_seconds))
         timeout_timer = Timer(timeout_seconds, count=1).start()
         last_anchor: tuple[int, int] | None = None
         while 1:
@@ -330,8 +332,8 @@ class TaskMainPlantingMixin:
 
         before_labor_anchor = self._get_labor_anchor_location()
         seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
-        use_warehouse_first = bool(getattr(self.engine.config.planting, 'warehouse_first', True))
-        skip_event_crops = bool(getattr(self.engine.config.planting, 'skip_event_crops', False))
+        use_warehouse_first = self.config.planting.warehouse_first
+        skip_event_crops = self.config.planting.skip_event_crops
         seed_panel_items: list[BgPatchNumberItem] = []
         excluded_seed_item_indexes: set[int] = set()
         open_seed_clicks = 0
@@ -482,7 +484,7 @@ class TaskMainPlantingMixin:
 
     def _is_crop_aligned_with_strategy(self, crop_name: str) -> bool:
         """校验当前作物是否与自动策略一致。"""
-        planting = self.engine.config.planting
+        planting = self.config.planting
         expected_crop_name = None
         if planting.strategy == PlantMode.LATEST_LEVEL:
             latest_crop = get_latest_crop_for_level(planting.player_level)

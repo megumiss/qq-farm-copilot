@@ -282,7 +282,9 @@ python main.py
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>` 方法
 2. 在实例配置 `instances/<instance_id>/configs/config.json` 的 `tasks` 增加 `<name>` 配置
-3. （可选）在 `configs/ui_labels.json` 增加任务与功能文案
+3. 在任务代码中通过强类型入口读取参数：`self.task.<task_name>.feature.<field>`（任务 features）和 `self.config.planting.<field>`（播种配置）
+4. 若新增或修改 `tasks.<name>.features` 字段，执行 `.\.venv\Scripts\python.exe tools\gen_task_views.py` 生成/更新 `models/task_views.py`
+5. （可选）在 `configs/ui_labels.json` 增加任务与功能文案
 
 执行器会自动发现 `_run_task_*` 并参与调度。
 

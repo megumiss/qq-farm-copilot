@@ -21,8 +21,7 @@ class TaskShare(TaskBase):
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行分享任务并返回调度结果。"""
         _ = rect
-        platform = getattr(self.engine.config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        platform_value = self.config.planting.window_platform.value
         if platform_value != 'wechat':
             logger.warning('每日分享: 当前平台={}，仅支持微信平台，跳过执行', platform_value)
             return self.ok()

@@ -23,6 +23,8 @@ from utils.template_paths import normalize_template_platform
 class BotInitMixin:
     """Bot 初始化装配逻辑。"""
 
+    config: AppConfig
+
     def __init__(
         self,
         config: AppConfig,
@@ -48,8 +50,7 @@ class BotInitMixin:
 
         # [2] 图像识别层
         # 非 seed 模板识别改走 assets，detector 主要保留 seed 识别能力。
-        platform = getattr(config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        platform_value = config.planting.window_platform.value
         normalized_platform = normalize_template_platform(platform_value)
         self.cv_detector = CVDetector(templates_dir='templates', template_platform=normalized_platform)
         Button.set_template_platform(normalized_platform)

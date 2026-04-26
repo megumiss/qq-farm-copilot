@@ -189,11 +189,11 @@ class TaskExecutor:
     @classmethod
     def _is_task_time_enabled(cls, task: TaskItem, now: datetime) -> bool:
         """判断任务在当前时刻是否处于启用时间段（仅 interval 生效）。"""
-        trigger_text = cls._normalize_trigger_text(getattr(task, 'trigger', TaskTriggerType.INTERVAL.value))
+        trigger_text = cls._normalize_trigger_text(task.trigger)
         if trigger_text != TaskTriggerType.INTERVAL.value:
             return True
 
-        start, end = cls._enabled_time_range_seconds(getattr(task, 'enabled_time_range', ''))
+        start, end = cls._enabled_time_range_seconds(task.enabled_time_range)
         if start == end:
             return True
         current = now.hour * 3600 + now.minute * 60 + now.second
@@ -204,7 +204,7 @@ class TaskExecutor:
     @classmethod
     def _next_enabled_time_start(cls, task: TaskItem, now: datetime) -> datetime:
         """计算任务下一个可执行时间段起点。"""
-        start, end = cls._enabled_time_range_seconds(getattr(task, 'enabled_time_range', ''))
+        start, end = cls._enabled_time_range_seconds(task.enabled_time_range)
         if start == end:
             return now
 

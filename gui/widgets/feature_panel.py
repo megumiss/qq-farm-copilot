@@ -177,7 +177,7 @@ class FeaturePanel(QWidget):
 
         index = 0
         for task_name, task_cfg in self.config.tasks.items():
-            feature_map = getattr(task_cfg, 'features', {}) or {}
+            feature_map = task_cfg.features or {}
             if not isinstance(feature_map, dict) or not feature_map:
                 continue
             card = self._build_task_card(task_name, feature_map)
@@ -318,7 +318,7 @@ class FeaturePanel(QWidget):
         task_cfg = self.config.tasks.get(task_name)
         if task_cfg is None:
             return []
-        feature_map = getattr(task_cfg, 'features', {}) or {}
+        feature_map = task_cfg.features or {}
         if not isinstance(feature_map, dict):
             return []
         return self._normalize_list_value(feature_map.get(feature_name, []))
@@ -327,7 +327,7 @@ class FeaturePanel(QWidget):
         task_cfg = self.config.tasks.get(task_name)
         if task_cfg is None:
             return
-        feature_map = dict(getattr(task_cfg, 'features', {}) or {})
+        feature_map = dict(task_cfg.features or {})
         feature_map[feature_name] = self._normalize_list_value(values)
         task_cfg.features = feature_map
         self.config.save()
@@ -364,7 +364,7 @@ class FeaturePanel(QWidget):
             task_cfg = self.config.tasks.get(task_name)
             if task_cfg is None:
                 continue
-            feature_map = dict(getattr(task_cfg, 'features', {}) or {})
+            feature_map = dict(task_cfg.features or {})
             if is_feature_forced_off(task_name, feature_name):
                 feature_map[feature_name] = False
                 box.setChecked(False)
@@ -380,7 +380,7 @@ class FeaturePanel(QWidget):
             task_cfg = self.config.tasks.get(task_name)
             if task_cfg is None:
                 continue
-            feature_map = getattr(task_cfg, 'features', {}) or {}
+            feature_map = task_cfg.features or {}
             forced = is_feature_forced_off(task_name, feature_name)
             box.setEnabled(not forced)
             box.setChecked(False if forced else bool(feature_map.get(feature_name, False)))

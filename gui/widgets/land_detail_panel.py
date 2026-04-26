@@ -648,20 +648,14 @@ class LandDetailPanel(QWidget):
         return True
 
     def _load_from_config(self) -> None:
-        profile_cfg = getattr(getattr(self.config, 'land', None), 'profile', None)
-        if profile_cfg is None:
-            profile_level_text = '--'
-            profile_gold_text = '--'
-            profile_coupon_text = '--'
-            profile_exp_text = '--'
-        else:
-            level_value = int(getattr(profile_cfg, 'level', 0))
-            if level_value <= 0:
-                level_value = int(getattr(getattr(self.config, 'planting', None), 'player_level', 0))
-            profile_level_text = str(level_value) if level_value > 0 else '--'
-            profile_gold_text = str(getattr(profile_cfg, 'gold', '') or '').strip() or '--'
-            profile_coupon_text = str(getattr(profile_cfg, 'coupon', '') or '').strip() or '--'
-            profile_exp_text = str(getattr(profile_cfg, 'exp', '') or '').strip() or '--'
+        profile_cfg = self.config.land.profile
+        level_value = int(profile_cfg.level)
+        if level_value <= 0:
+            level_value = int(self.config.planting.player_level)
+        profile_level_text = str(level_value) if level_value > 0 else '--'
+        profile_gold_text = str(profile_cfg.gold or '').strip() or '--'
+        profile_coupon_text = str(profile_cfg.coupon or '').strip() or '--'
+        profile_exp_text = str(profile_cfg.exp or '').strip() or '--'
 
         value_map = {
             'level': profile_level_text,
@@ -672,7 +666,7 @@ class LandDetailPanel(QWidget):
         for key, label in self._profile_value_labels.items():
             label.setText(value_map.get(key, '--'))
 
-        items = getattr(getattr(self.config, 'land', None), 'plots', [])
+        items = self.config.land.plots
         if not isinstance(items, list):
             items = []
         self.set_land_data(items)
@@ -709,7 +703,7 @@ class LandDetailPanel(QWidget):
 
     def _refresh_on_open(self) -> None:
         """每次打开标签页时，从磁盘配置刷新当前展示。"""
-        cfg_path = str(getattr(self.config, '_config_path', '') or '').strip()
+        cfg_path = str(self.config._config_path or '').strip()
         if cfg_path:
             try:
                 self.config = AppConfig.load(cfg_path)

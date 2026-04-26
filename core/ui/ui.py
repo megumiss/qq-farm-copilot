@@ -10,6 +10,8 @@ from core.base.timer import Timer
 from core.exceptions import GamePageUnknownError, LoginRecoveryRequiredError
 from core.ui.assets import BTN_LOGIN_AGAIN
 from core.ui.page import *
+from core.vision.cv_detector import CVDetector
+from models.config import AppConfig
 from tasks.handler import Handler
 
 if TYPE_CHECKING:
@@ -37,8 +39,8 @@ class UI(Handler):
 
     def __init__(
         self,
-        config,
-        detector,
+        config: AppConfig,
+        detector: CVDetector,
         device: Device,
         crop_name_resolver: Callable[[], str],
     ):

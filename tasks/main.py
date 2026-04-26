@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from loguru import logger
 
 from core.engine.task.registry import TaskResult
@@ -14,6 +16,11 @@ from utils.bg_patch_number_ocr import BgPatchNumberOCR
 from utils.head_info_ocr import HeadInfoOCR
 from utils.ocr_utils import OCRTool
 from utils.shop_item_ocr import ShopItemOCR
+
+if TYPE_CHECKING:
+    from core.engine.bot.local_engine import LocalBotEngine
+    from core.ui.ui import UI
+    from models.config import AppConfig
 
 # 商店列表上滑的起点坐标（用于翻页查找种子）。
 SHOP_LIST_SWIPE_START = (270, 300)
@@ -42,6 +49,10 @@ OPTIONAL_SKIP_SEED_BUTTONS = [SEED_BTN_MUGWORT]
 
 class TaskMainLevelMixin:
     """提供播种前等级 OCR 与配置回写能力。"""
+
+    config: 'AppConfig'
+    engine: 'LocalBotEngine'
+    ui: 'UI'
 
     def _get_level_ocr_region(self, frame_shape: tuple[int, ...]) -> tuple[int, int, int, int] | None:
         """读取统一等级 OCR 区域并裁剪到截图范围内（不区分平台）。"""
@@ -74,15 +85,13 @@ class TaskMainLevelMixin:
 
     def _sync_head_profile_from_ocr(self, *, level: int | None, extra_info: dict[str, object] | None) -> bool:
         """将头部 OCR 结构化信息回写到 `config.land.profile`。"""
-        profile = getattr(getattr(self.engine.config, 'land', None), 'profile', None)
-        if profile is None:
-            return False
+        profile = self.config.land.profile
 
         data = extra_info if isinstance(extra_info, dict) else {}
-        old_level = int(getattr(profile, 'level', 0))
-        old_gold = self._normalize_head_profile_text(getattr(profile, 'gold', ''))
-        old_coupon = self._normalize_head_profile_text(getattr(profile, 'coupon', ''))
-        old_exp = self._normalize_head_profile_text(getattr(profile, 'exp', ''))
+        old_level = int(profile.level)
+        old_gold = self._normalize_head_profile_text(profile.gold)
+        old_coupon = self._normalize_head_profile_text(profile.coupon)
+        old_exp = self._normalize_head_profile_text(profile.exp)
 
         new_level = int(level) if isinstance(level, int) and level > 0 else old_level
         if new_level <= 0:
@@ -118,8 +127,7 @@ class TaskMainLevelMixin:
 
     def _sync_player_level_before_plant(self) -> int | None:
         """播种前识别主界面等级并回写配置。"""
-        planting = self.engine.config.planting
-        if not bool(getattr(planting, 'level_ocr_enabled', True)):
+        if not self.config.planting.level_ocr_enabled:
             return None
 
         cv_img = self.ui.device.screenshot()
@@ -148,7 +156,7 @@ class TaskMainLevelMixin:
             logger.debug('等级识别: 未匹配等级 | roi={} raw={}', roi, raw_text)
             return None
 
-        old_level = int(getattr(planting, 'player_level', 1))
+        old_level = int(self.config.planting.player_level)
         accepted_level = int(level)
         if level < old_level:
             logger.warning(
@@ -163,7 +171,7 @@ class TaskMainLevelMixin:
 
         level_changed = accepted_level > old_level
         if level_changed:
-            planting.player_level = int(accepted_level)
+            self.config.planting.player_level = int(accepted_level)
         else:
             logger.debug('等级识别: 等级未变化 | Lv{} score={:.3f}', accepted_level, score)
 
@@ -172,7 +180,7 @@ class TaskMainLevelMixin:
             return accepted_level
 
         try:
-            self.engine.config.save()
+            self.config.save()
         except Exception as exc:
             logger.warning(
                 '等级识别: 配置保存失败 | Lv{} -> Lv{} | profile_changed={} | error={}',
@@ -182,7 +190,7 @@ class TaskMainLevelMixin:
                 exc,
             )
         else:
-            config_path = str(getattr(self.engine.config, '_config_path', '') or '')
+            config_path = str(self.config._config_path or '')
             if level_changed:
                 logger.info(
                     '等级识别: 等级已更新 | Lv{} -> Lv{} | roi={} score={:.3f} raw={} config={}',
@@ -215,7 +223,7 @@ class TaskMainLevelMixin:
             except Exception as exc:
                 logger.debug('等级识别: 复用引擎配置广播失败: {}', exc)
 
-        payload = dict(self.engine.config.model_dump())
+        payload = dict(self.config.model_dump())
         direct_sender = getattr(self.engine, 'emit_config_event', None)
         if callable(direct_sender):
             try:
@@ -257,34 +265,35 @@ class TaskMain(
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：在 run 内按 feature 显式控制每个子方法。"""
-        features = self.get_features('main')
-
+        _ = rect
         self.ui.ui_ensure(page_main)
+        features = self.task.main.feature
 
         # 一键收获
-        if self.has_feature(features, 'auto_harvest'):
+        if features.auto_harvest:
             self._run_feature_harvest()
 
         self._run_feature_maintain_actions(
-            enable_weed=self.has_feature(features, 'auto_weed'),
-            enable_bug=self.has_feature(features, 'auto_bug'),
-            enable_water=self.has_feature(features, 'auto_water'),
+            enable_weed=features.auto_weed,
+            enable_bug=features.auto_bug,
+            enable_water=features.auto_water,
         )
 
         # 自动扩建
-        if self.has_feature(features, 'auto_expand'):
+        if features.auto_expand:
             self._run_feature_expand()
 
         # 自动播种
-        if self.has_feature(features, 'auto_plant'):
+        if features.auto_plant:
             self._sync_player_level_before_plant()
             self._run_feature_plant()
 
         # TODO 自动施肥
-        if self.has_feature(features, 'auto_fertilize'):
+        if features.auto_fertilize:
             self._run_feature_fertilize()
 
-        if self.has_feature(features, 'auto_upgrade'):
+        # TODO 自动升级
+        if features.auto_upgrade:
             self._run_feature_upgrade()
 
         return self.ok()

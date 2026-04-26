@@ -165,7 +165,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         if not pending_planting and not pending_upgrade:
             return
 
-        self.engine._task_executor.task_call('main', force_call=False)
+        self.task.main.call(force_call=False)
         logger.info(
             '地块巡查: 存在待处理地块，执行农场巡查 | 待播种={} 待升级={}',
             pending_planting,
@@ -659,8 +659,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         target = str(plot_id or '').strip()
         if not target:
             return False
-        land_cfg = getattr(self.engine.config, 'land', None)
-        plots = getattr(land_cfg, 'plots', None)
+        plots = self.config.land.plots
         if not isinstance(plots, list):
             return False
 
@@ -708,7 +707,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
     ) -> None:
         """单地块统一字段更新后立即落盘。"""
         try:
-            self.engine.config.save()
+            self.config.save()
         except Exception as exc:
             logger.warning(
                 '地块巡查: 地块信息写入配置失败 | 序号={} 等级={} 成熟倒计时={} 需要升级={} 需要播种={} error={}',
@@ -738,8 +737,3 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 emitter()
             except Exception:
                 return
-
-    def _get_config_path_for_log(self) -> str:
-        """返回当前配置路径，便于日志排查写入目标。"""
-        path = str(getattr(getattr(self.engine, 'config', None), '_config_path', '') or '').strip()
-        return path or '<empty>'

@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from utils.app_paths import (
     ensure_user_configs,
@@ -57,10 +57,10 @@ class RunMode(str, Enum):
     BACKGROUND = 'background'
 
 
-def is_background_mode_supported(window_platform: WindowPlatform | str) -> bool:
-    """判断当前平台是否支持后台模式。"""
-    _ = window_platform
-    return True
+class ConfigModel(BaseModel):
+    """配置模型基类：开启赋值校验，避免字段类型被运行时污染。"""
+
+    model_config = ConfigDict(validate_assignment=True)
 
 
 def resolve_effective_run_mode(run_mode: RunMode | str, window_platform: WindowPlatform | str) -> RunMode:
@@ -70,7 +70,7 @@ def resolve_effective_run_mode(run_mode: RunMode | str, window_platform: WindowP
     return mode
 
 
-class SellConfig(BaseModel):
+class SellConfig(ConfigModel):
     """定义 `SellConfig` 的配置数据结构与默认值。"""
 
     mode: SellMode = SellMode.BATCH_ALL
@@ -82,7 +82,7 @@ class SellConfig(BaseModel):
         return SellMode.BATCH_ALL
 
 
-class SafetyConfig(BaseModel):
+class SafetyConfig(ConfigModel):
     """定义 `SafetyConfig` 的配置数据结构与默认值。"""
 
     random_delay_min: float = 0.1
@@ -93,7 +93,7 @@ class SafetyConfig(BaseModel):
     debug_log_enabled: bool = False
 
 
-class ScreenshotConfig(BaseModel):
+class ScreenshotConfig(ConfigModel):
     """定义 `ScreenshotConfig` 的配置数据结构与默认值。"""
 
     capture_interval_seconds: float = 0.3
@@ -160,15 +160,6 @@ def normalize_task_enabled_time_range(value: Any) -> str:
     return DEFAULT_TASK_ENABLED_TIME_RANGE
 
 
-def resolve_task_min_interval_seconds(executor_cfg) -> int:
-    """解析任务最小执行间隔（秒）。"""
-    try:
-        value = int(getattr(executor_cfg, 'min_task_interval_seconds', DEFAULT_MIN_TASK_INTERVAL_SECONDS))
-    except Exception:
-        value = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    return max(1, value)
-
-
 def normalize_executor_task_order(value: Any) -> str:
     """规范化任务顺序配置为 `task_a>task_b>task_c`。"""
     raw = str(value or DEFAULT_EXECUTOR_TASK_ORDER).strip()
@@ -193,7 +184,7 @@ def parse_executor_task_order(value: Any) -> list[str]:
     return [item for item in normalized.split('>') if item]
 
 
-class TaskScheduleItemConfig(BaseModel):
+class TaskScheduleItemConfig(ConfigModel):
     """定义 `TaskScheduleItemConfig` 的配置数据结构与默认值。"""
 
     enabled: bool = True
@@ -269,7 +260,7 @@ class TaskScheduleItemConfig(BaseModel):
         return out
 
 
-class ExecutorConfig(BaseModel):
+class ExecutorConfig(ConfigModel):
     """定义 `ExecutorConfig` 的配置数据结构与默认值。"""
 
     min_task_interval_seconds: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
@@ -296,7 +287,7 @@ class ExecutorConfig(BaseModel):
         return max(1, int(value))
 
 
-class RecoveryConfig(BaseModel):
+class RecoveryConfig(ConfigModel):
     """定义 `RecoveryConfig` 的配置数据结构与默认值。"""
 
     task_restart_attempts: int = 3
@@ -337,7 +328,7 @@ class RecoveryConfig(BaseModel):
         return max(5.0, seconds)
 
 
-class PlantingConfig(BaseModel):
+class PlantingConfig(ConfigModel):
     """定义 `PlantingConfig` 的配置数据结构与默认值。"""
 
     strategy: PlantMode = PlantMode.LATEST_LEVEL
@@ -461,10 +452,10 @@ def normalize_land_need_planting(value: Any) -> bool:
     return normalize_land_bool_flag(value)
 
 
-class LandDetailConfig(BaseModel):
+class LandDetailConfig(ConfigModel):
     """定义农场地块详情配置结构。"""
 
-    class ProfileConfig(BaseModel):
+    class ProfileConfig(ConfigModel):
         """定义个人信息字段。"""
 
         level: int = 0
@@ -561,7 +552,7 @@ class LandDetailConfig(BaseModel):
         return [plot_map[plot_id] for plot_id in ordered_ids]
 
 
-class AppConfig(BaseModel):
+class AppConfig(ConfigModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
     window_shortcut_path: str = ''

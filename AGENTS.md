@@ -193,8 +193,9 @@
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>(ctx)`。
 2. 在 `configs/config.template.json` 与用户配置中增加 `tasks.<name>`。
 3. 任务业务代码放入 `tasks/<name>.py`（或复用已有子任务）。
-4. 在任务中通过 `engine.get_task_features('<name>')` 读取开关。
-5. 必要时补充 `configs/ui_labels.json` 文案映射。
+4. 任务中优先通过强类型入口读取参数：`self.task.<task_name>.feature.<field>`（任务参数）与 `self.config.planting.<field>`（播种配置）。
+5. 当 `tasks.<name>.features` 结构新增/变更后，执行 `.\.venv\Scripts\python.exe tools\gen_task_views.py` 重新生成 `models/task_views.py`。
+6. 必要时补充 `configs/ui_labels.json` 文案映射。
 
 ## 6. 配置字段约定（tasks）
 

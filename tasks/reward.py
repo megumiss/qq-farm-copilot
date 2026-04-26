@@ -29,9 +29,8 @@ class TaskReward(TaskBase):
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行任务奖励领取并返回调度结果。"""
         _ = rect
-        features = self.get_features('reward')
-        enable_daily = self.has_feature(features, 'claim_daily_task', default=True)
-        enable_growth = self.has_feature(features, 'claim_growth_task', default=True)
+        enable_daily = self.task.reward.feature.claim_daily_task
+        enable_growth = self.task.reward.feature.claim_growth_task
         logger.info('奖励流程: 开始 | 每日任务={} 成长任务={}', enable_daily, enable_growth)
         if enable_daily or enable_growth:
             self.ui.ui_ensure(page_task, confirm_wait=0.3)
@@ -62,8 +61,7 @@ class TaskReward(TaskBase):
     def _run_growth_flow(self):
         """执行任务奖励领取流程。"""
         logger.info('奖励流程: 检查成长任务')
-        platform = getattr(self.engine.config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        platform_value = self.config.planting.window_platform.value
         if platform_value != 'wechat':
             logger.warning('分享流程: 当前平台={}，直接领取，不分享', platform_value)
 

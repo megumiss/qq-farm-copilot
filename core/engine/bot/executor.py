@@ -26,11 +26,17 @@ from core.exceptions import (
 )
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import (
+    AppConfig,
     DEFAULT_TASK_ENABLED_TIME_RANGE,
+    TaskScheduleItemConfig,
     TaskTriggerType,
     normalize_task_enabled_time_range,
     parse_executor_task_order,
-    resolve_task_min_interval_seconds,
+)
+from models.task_views import (
+    TASK_FEATURE_CLASS_MAP,
+    TASK_VIEW_CLASS_MAP,
+    TaskViewBase,
 )
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
@@ -45,6 +51,8 @@ from utils.feature_policy import get_forced_off_features
 
 class BotExecutorMixin:
     """Bot 执行器与调度相关逻辑。"""
+
+    config: AppConfig
 
     _NEXT_RUN_PARSE_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M')
 
@@ -149,30 +157,17 @@ class BotExecutorMixin:
         self.device.stuck_record_clear()
         self.device.click_record_clear()
 
-    def _get_task_cfg(self, task_name: str):
+    def _get_task_cfg(self, task_name: str) -> TaskScheduleItemConfig | None:
         """按任务名读取调度配置。"""
-        tasks_cfg = getattr(self.config, 'tasks', None)
-        if isinstance(tasks_cfg, dict):
-            return tasks_cfg.get(task_name)
-        if tasks_cfg is None:
-            return None
-        return getattr(tasks_cfg, task_name, None)
+        return self.config.tasks.get(str(task_name))
 
     def _iter_task_config_names(self) -> list[str]:
         """按配置声明顺序返回任务名列表。"""
-        tasks_cfg = getattr(self.config, 'tasks', None)
-        if tasks_cfg is None:
-            return []
-        if isinstance(tasks_cfg, dict):
-            return [str(name) for name in tasks_cfg.keys()]
-        try:
-            return [str(name) for name in tasks_cfg.model_dump().keys()]
-        except Exception:
-            return []
+        return [str(name) for name in self.config.tasks.keys()]
 
     def _ordered_task_names(self, runners: dict[str, Callable[[TaskContext], TaskResult]] | None = None) -> list[str]:
         """按 `executor.task_order` + 配置声明顺序产出任务名列表。"""
-        ordered = parse_executor_task_order(getattr(self.config.executor, 'task_order', ''))
+        ordered = parse_executor_task_order(self.config.executor.task_order)
         known_names: set[str] = set(self._iter_task_config_names())
         if runners:
             known_names.update(str(name) for name in runners.keys())
@@ -222,6 +217,31 @@ class BotExecutorMixin:
         """序列化 `next_run` 以写入配置。"""
         return next_run.replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
 
+    def _resolve_task_schedule_fields(
+        self,
+        cfg: TaskScheduleItemConfig | None,
+        *,
+        min_interval: int,
+        default_success: int,
+        default_failure: int,
+    ) -> tuple[int, int, str, str, datetime | None]:
+        """解析任务调度字段（间隔/触发器/时段/next_run）。"""
+        success_interval = max(
+            min_interval,
+            int(cfg.interval_seconds) if cfg is not None else int(default_success),
+        )
+        failure_interval = max(
+            min_interval,
+            int(cfg.failure_interval_seconds) if cfg is not None else int(default_failure),
+        )
+        trigger_cfg = cfg.trigger if cfg is not None else TaskTriggerType.INTERVAL
+        trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
+        enabled_time_range = normalize_task_enabled_time_range(
+            cfg.enabled_time_range if cfg is not None else DEFAULT_TASK_ENABLED_TIME_RANGE
+        )
+        parsed_next_run = self._parse_task_next_run_text(cfg.next_run) if cfg is not None else None
+        return success_interval, failure_interval, trigger_text, enabled_time_range, parsed_next_run
+
     def _persist_task_next_run(self, task_name: str) -> None:
         """将任务下次执行时间回写到配置文件。"""
         item = self._executor_tasks.get(task_name)
@@ -231,7 +251,7 @@ class BotExecutorMixin:
         if cfg is None:
             return
         next_run_text = self._serialize_task_next_run_text(item.next_run)
-        if str(getattr(cfg, 'next_run', '') or '') == next_run_text:
+        if str(cfg.next_run or '') == next_run_text:
             return
         cfg.next_run = next_run_text
         try:
@@ -505,7 +525,7 @@ class BotExecutorMixin:
     ) -> dict[str, TaskItem]:
         """按配置 + runner 自动生成初始任务表。"""
         now = datetime.now()
-        min_interval = resolve_task_min_interval_seconds(self.config.executor)
+        min_interval = int(self.config.executor.min_task_interval_seconds)
         default_success = max(min_interval, int(self.config.executor.default_success_interval))
         default_failure = max(min_interval, int(self.config.executor.default_failure_interval))
 
@@ -520,24 +540,24 @@ class BotExecutorMixin:
                 logger.info(f'任务 `{task_name}` 未在配置中声明，使用执行器默认调度参数')
             order_index = index
 
-            success_interval = max(
-                min_interval,
-                int(getattr(cfg, 'interval_seconds', default_success)),
+            (
+                success_interval,
+                failure_interval,
+                trigger_text,
+                enabled_time_range,
+                parsed_next_run,
+            ) = self._resolve_task_schedule_fields(
+                cfg,
+                min_interval=min_interval,
+                default_success=default_success,
+                default_failure=default_failure,
             )
-            failure_interval = max(
-                min_interval,
-                int(getattr(cfg, 'failure_interval_seconds', default_failure)),
-            )
-            trigger_cfg = getattr(cfg, 'trigger', TaskTriggerType.INTERVAL)
-            trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
 
             next_run = now
-            if cfg is not None:
-                parsed_next_run = self._parse_task_next_run_text(getattr(cfg, 'next_run', ''))
-                if parsed_next_run is not None:
-                    next_run = parsed_next_run
-                elif getattr(cfg, 'trigger', TaskTriggerType.INTERVAL) == TaskTriggerType.DAILY:
-                    next_run = self._next_daily_target_time(cfg.daily_time, now)
+            if parsed_next_run is not None:
+                next_run = parsed_next_run
+            elif cfg is not None and cfg.trigger == TaskTriggerType.DAILY:
+                next_run = self._next_daily_target_time(cfg.daily_time, now)
 
             out[task_name] = TaskItem(
                 name=task_name,
@@ -547,9 +567,7 @@ class BotExecutorMixin:
                 success_interval=success_interval,
                 failure_interval=failure_interval,
                 trigger=trigger_text,
-                enabled_time_range=normalize_task_enabled_time_range(
-                    getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
-                ),
+                enabled_time_range=enabled_time_range,
             )
         return out
 
@@ -619,7 +637,7 @@ class BotExecutorMixin:
     def _task_seconds_by_trigger(self, task_name: str, now: datetime | None = None) -> int:
         """按任务触发类型返回下次调度间隔秒数。"""
         current = now or datetime.now()
-        min_interval = resolve_task_min_interval_seconds(self.config.executor)
+        min_interval = int(self.config.executor.min_task_interval_seconds)
         cfg = self._get_task_cfg(task_name)
         if cfg is None:
             return max(min_interval, int(self.config.executor.default_success_interval))
@@ -627,29 +645,99 @@ class BotExecutorMixin:
             return self._seconds_to_next_daily(cfg.daily_time, current)
         return max(min_interval, int(cfg.interval_seconds))
 
+    def is_task_enabled(self, task_name: str, *, runtime: bool = True) -> bool:
+        """读取任务启用状态（可选返回运行时执行器状态）。"""
+        name = str(task_name or '').strip()
+        if not name:
+            return False
+        if runtime:
+            item = self._executor_tasks.get(name)
+            if item is not None:
+                return bool(item.enabled)
+        cfg = self._get_task_cfg(name)
+        return bool(cfg and cfg.enabled)
+
+    def _feature_value(self, raw: dict[str, Any], key: str, default: Any) -> Any:
+        """按默认值类型读取 feature（配置层已完成基础归一化）。"""
+        value = raw.get(str(key), default)
+        if isinstance(default, bool):
+            return bool(value)
+        if isinstance(default, list):
+            return list(value) if isinstance(value, list) else list(default)
+        if isinstance(default, int) and not isinstance(default, bool):
+            try:
+                return int(value)
+            except Exception:
+                return int(default)
+        if isinstance(default, float):
+            try:
+                return float(value)
+            except Exception:
+                return float(default)
+        if isinstance(default, str):
+            return str(value or default)
+        return value if value is not None else default
+
+    def _build_task_view_base(self, task_name: str) -> TaskViewBase:
+        """构造任务基础视图。"""
+        name = str(task_name or '').strip()
+        cfg = self._get_task_cfg(name)
+        if not isinstance(cfg, TaskScheduleItemConfig):
+            cfg = TaskScheduleItemConfig()
+        return TaskViewBase(
+            name=name,
+            enabled=self.is_task_enabled(name, runtime=True),
+            config_enabled=self.is_task_enabled(name, runtime=False),
+            trigger=cfg.trigger,
+            interval_seconds=int(cfg.interval_seconds),
+            failure_interval_seconds=int(cfg.failure_interval_seconds),
+            daily_time=str(cfg.daily_time),
+            enabled_time_range=str(cfg.enabled_time_range),
+            next_run=str(cfg.next_run),
+            _task_call=lambda force_call: bool(self._task_executor and self._task_executor.task_call(name, force_call)),
+        )
+
+    @staticmethod
+    def _task_view_base_kwargs(base: TaskViewBase) -> dict[str, Any]:
+        """将基础任务视图转为可复用构造参数。"""
+        return {
+            'name': base.name,
+            'enabled': base.enabled,
+            'config_enabled': base.config_enabled,
+            'trigger': base.trigger,
+            'interval_seconds': base.interval_seconds,
+            'failure_interval_seconds': base.failure_interval_seconds,
+            'daily_time': base.daily_time,
+            'enabled_time_range': base.enabled_time_range,
+            'next_run': base.next_run,
+            '_task_call': base._task_call,
+        }
+
+    def build_task_view(self, task_name: str) -> TaskViewBase:
+        """按任务名构造强类型视图。"""
+        name = str(task_name or '').strip()
+        base = self._build_task_view_base(name)
+        base_kwargs = self._task_view_base_kwargs(base)
+        raw = self.get_task_features(name)
+        feature_cls = TASK_FEATURE_CLASS_MAP.get(name)
+        view_cls = TASK_VIEW_CLASS_MAP.get(name)
+        if feature_cls is None or view_cls is None:
+            return TaskViewBase(**base_kwargs)
+
+        feature_defaults = feature_cls()
+        feature_kwargs: dict[str, Any] = {}
+        for field_name in feature_cls.__dataclass_fields__.keys():
+            default_value = getattr(feature_defaults, field_name)
+            feature_kwargs[field_name] = self._feature_value(raw, field_name, default_value)
+        feature = feature_cls(**feature_kwargs)
+        return view_cls(**base_kwargs, feature=feature)
+
     def get_task_features(self, task_name: str) -> dict[str, Any]:
         """获取 `task_features` 信息。"""
         cfg = self._get_task_cfg(task_name)
         if cfg is None:
             return {}
-        raw = getattr(cfg, 'features', {}) or {}
-        if not isinstance(raw, dict):
-            return {}
-        features: dict[str, Any] = {}
-        for key, value in raw.items():
-            name = str(key)
-            if isinstance(value, list):
-                cleaned: list[str] = []
-                seen: set[str] = set()
-                for item in value:
-                    text = str(item or '').strip()
-                    if not text or text in seen:
-                        continue
-                    seen.add(text)
-                    cleaned.append(text)
-                features[name] = cleaned
-                continue
-            features[name] = bool(value)
+        features: dict[str, Any] = dict(cfg.features or {})
         for key in get_forced_off_features(str(task_name)):
             features[key] = False
         return features
@@ -662,7 +750,7 @@ class BotExecutorMixin:
         if not self._executor_tasks:
             return
         # 统一按当前配置计算每个任务的启停状态与执行间隔。
-        min_interval = resolve_task_min_interval_seconds(self.config.executor)
+        min_interval = int(self.config.executor.min_task_interval_seconds)
         default_success = max(min_interval, int(self.config.executor.default_success_interval))
         default_failure = max(min_interval, int(self.config.executor.default_failure_interval))
         now = datetime.now()
@@ -698,28 +786,26 @@ class BotExecutorMixin:
             else:
                 enabled = bool(cfg.enabled and has_runner)
             order_index = index
-            success_interval = max(
-                min_interval,
-                int(getattr(cfg, 'interval_seconds', default_success)),
+            (
+                success_interval,
+                failure_interval,
+                trigger_text,
+                enabled_time_range,
+                parsed_next_run,
+            ) = self._resolve_task_schedule_fields(
+                cfg,
+                min_interval=min_interval,
+                default_success=default_success,
+                default_failure=default_failure,
             )
-            failure_interval = max(
-                min_interval,
-                int(getattr(cfg, 'failure_interval_seconds', default_failure)),
-            )
-            trigger_cfg = getattr(cfg, 'trigger', TaskTriggerType.INTERVAL)
-            trigger_text = trigger_cfg.value if isinstance(trigger_cfg, TaskTriggerType) else str(trigger_cfg)
             kwargs = {
                 'enabled': enabled,
                 'order_index': order_index,
                 'success_interval': success_interval,
                 'failure_interval': failure_interval,
                 'trigger': trigger_text,
-                'enabled_time_range': normalize_task_enabled_time_range(
-                    getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
-                ),
+                'enabled_time_range': enabled_time_range,
             }
-
-            parsed_next_run = self._parse_task_next_run_text(getattr(cfg, 'next_run', '')) if cfg is not None else None
             if parsed_next_run is not None:
                 kwargs['next_run'] = parsed_next_run
             elif enabled and item and item.next_run < now:
@@ -922,7 +1008,7 @@ class BotExecutorMixin:
             result.success
             and result.next_run_seconds is None
             and cfg is not None
-            and getattr(cfg, 'trigger', TaskTriggerType.INTERVAL) == TaskTriggerType.DAILY
+            and cfg.trigger == TaskTriggerType.DAILY
             and self._task_executor is not None
         ):
             self._task_executor.task_delay(

@@ -6,7 +6,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -14,7 +14,11 @@ from PIL import Image as PILImage
 
 from core.base.button import Button
 from core.base.timer import Timer
+from models.config import AppConfig
 from models.farm_state import Action, ActionType
+
+if TYPE_CHECKING:
+    from core.engine.bot.local_engine import LocalBotEngine
 
 
 class DeviceStuckError(RuntimeError):
@@ -34,9 +38,9 @@ class Device:
     _TOO_MANY_CLICK_SINGLE_THRESHOLD = 20
     _TOO_MANY_CLICK_DUAL_THRESHOLD = 12
 
-    def __init__(self, engine: Any):
+    def __init__(self, engine: 'LocalBotEngine'):
         """初始化对象并准备运行所需状态。"""
-        self.engine = engine
+        self.engine: LocalBotEngine = engine
         self.rect: tuple[int, int, int, int] | None = None
         self.image: np.ndarray | None = None
         self.preview_image: PILImage.Image | None = None
@@ -47,14 +51,18 @@ class Device:
         self._screenshot_interval_seconds = self._resolve_screenshot_interval_seconds()
         self._screenshot_interval_timer = Timer(self._screenshot_interval_seconds)
 
+    @property
+    def config(self) -> AppConfig:
+        """返回当前实例配置（强类型）。"""
+        return self.engine.config
+
     def set_rect(self, rect: tuple[int, int, int, int]):
         """设置 `rect` 参数。"""
         self.rect = rect
 
     def _resolve_screenshot_interval_seconds(self) -> float:
         """读取配置中的截图最小间隔（秒）。"""
-        screenshot_cfg = getattr(getattr(self.engine, 'config', None), 'screenshot', None)
-        value = getattr(screenshot_cfg, 'capture_interval_seconds', 0.3)
+        value = self.config.screenshot.capture_interval_seconds
         try:
             return max(0.0, float(value))
         except Exception:
@@ -175,8 +183,7 @@ class Device:
         """按窗口 nonclient 配置裁剪预览图。"""
         if image is None:
             return None
-        platform = getattr(self.engine.config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
+        platform_value = self.config.planting.window_platform.value
         return self.engine.window_manager.crop_window_image_for_preview(image, platform_value)
 
     def set_image(self, image: np.ndarray | None):

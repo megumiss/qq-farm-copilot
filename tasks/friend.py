@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from loguru import logger
 
@@ -91,12 +90,11 @@ class TaskFriend(TaskBase):
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：递进遍历可操作好友，直到没有可继续目标。"""
         _ = rect
-        features = self.get_features('friend')
-        enable_steal = self.has_feature(features, 'auto_steal')
-        enable_help = self.has_feature(features, 'auto_help')
-        enable_accept_request = self.has_feature(features, 'auto_accept_request', default=True)
-        enable_steal_stats = self.has_feature(features, 'steal_stats', default=False)
-        self._friend_blacklist = self._read_blacklist(features)
+        enable_steal = self.task.friend.feature.auto_steal
+        enable_help = self.task.friend.feature.auto_help
+        enable_accept_request = self.task.friend.feature.auto_accept_request
+        enable_steal_stats = self.task.friend.feature.steal_stats
+        self._friend_blacklist = self._read_blacklist(self.task.friend.feature.blacklist)
         logger.info(
             '好友巡查: 开始 | 偷菜={} 帮忙={} 同意请求={} 偷取统计={}',
             enable_steal,
@@ -184,12 +182,11 @@ class TaskFriend(TaskBase):
         """从好友列表页进入某个好友详情页。"""
         # 查找列表上的操作图标
         self.ui.device.screenshot()
-        features = self.get_features('friend')
         list_steal = self._collect_operable_friend_list_icons(
-            enable_steal=self.has_feature(features, 'auto_steal'),
+            enable_steal=self.task.friend.feature.auto_steal,
         )
         list_help = self._collect_operable_friend_list_icons(
-            enable_help=self.has_feature(features, 'auto_help'),
+            enable_help=self.task.friend.feature.auto_help,
         )
         logger.info('好友巡查: 列表可操作目标 | 偷菜={} 帮忙={}', len(list_steal), len(list_help))
 
@@ -360,11 +357,8 @@ class TaskFriend(TaskBase):
         return text.lower()
 
     @staticmethod
-    def _read_blacklist(features: dict[str, Any]) -> list[str]:
+    def _read_blacklist(raw: list[str]) -> list[str]:
         """从任务 feature 中读取黑名单并去重。"""
-        if not isinstance(features, dict):
-            return []
-        raw = features.get('blacklist', [])
         if not isinstance(raw, list):
             return []
         out: list[str] = []
