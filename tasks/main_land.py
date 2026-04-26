@@ -150,9 +150,9 @@ class TaskMainLandMixin:
                 removal_location = None
                 if self.ui.appear(BTN_CROP_REMOVAL, offset=30, static=False):
                     removal_location = self.ui.appear_location(BTN_CROP_REMOVAL, offset=30, static=False)
-                elif self.ui.appear(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False):
+                elif self.ui.appear(BTN_LAND_POP_EMPTY, offset=(-160, -180, 280, 280), threshold=0.65):
                     removal_location = self.ui.appear_location(
-                        BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False
+                        BTN_LAND_POP_EMPTY, offset=(-160, -180, 280, 280), threshold=0.65
                     )
 
                 if removal_location is not None:
@@ -198,6 +198,7 @@ class TaskMainLandMixin:
             logger.info('自动扩建: 未发现待扩建土地')
             return None
 
+        confirm_timer = Timer(0.5, count=2)
         while 1:
             self.ui.device.screenshot()
 
@@ -212,8 +213,13 @@ class TaskMainLandMixin:
             ):
                 continue
             if not self.ui.appear(BTN_EXPAND, offset=30, static=False):
-                logger.info('自动扩建: 已完成')
-                break
+                if not confirm_timer.started():
+                    confirm_timer.start()
+                if confirm_timer.reached():
+                    logger.info('自动扩建: 已完成')
+                    break
+            else:
+                confirm_timer.clear()
 
         return None
 

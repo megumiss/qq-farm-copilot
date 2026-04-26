@@ -4,52 +4,40 @@ from __future__ import annotations
 
 import threading
 import time
-import traceback
 from datetime import datetime, timedelta
 from typing import Callable
 
 from loguru import logger
-
-from core.exceptions import TaskRetryCurrentError
 from core.engine.task.registry import TaskContext, TaskItem, TaskResult, TaskSnapshot
 from models.config import TaskTriggerType, normalize_task_enabled_time_range
 
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
 TaskDoneHook = Callable[[str, TaskResult], None]
-IdleHook = Callable[[], None]
-TaskErrorHook = Callable[[str, Exception, str], None]
 
 
 class TaskExecutor:
-    """通用任务执行器：维护任务队列并在后台线程中按优先级调度。"""
+    """通用任务执行器：维护任务队列并按固定顺序索引调度。"""
 
     def __init__(
         self,
         tasks: dict[str, TaskItem],
         runners: dict[str, TaskRunner],
         *,
-        empty_queue_policy: str = 'stay',
         on_snapshot: SnapshotHook | None = None,
         on_task_done: TaskDoneHook | None = None,
-        on_task_error: TaskErrorHook | None = None,
-        on_idle: IdleHook | None = None,
     ):
         """注入任务定义、执行回调和事件钩子，准备调度线程状态。"""
         self._tasks = tasks
         self._runners = runners
-        self._empty_queue_policy = str(empty_queue_policy or 'stay')
         self._on_snapshot = on_snapshot
         self._on_task_done = on_task_done
-        self._on_task_error = on_task_error
-        self._on_idle = on_idle
 
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._running_task: str | None = None
-        self._last_idle_at = 0.0
 
     def start(self):
         """启动执行线程；若已在运行则忽略重复启动。"""
@@ -109,11 +97,6 @@ class TaskExecutor:
         """返回是否已收到停止请求。"""
         return self._stop_event.is_set()
 
-    def set_empty_queue_policy(self, policy: str):
-        """设置空队列时策略（如 `stay` 或 `goto_main`）。"""
-        with self._lock:
-            self._empty_queue_policy = str(policy or 'stay')
-
     def update_task(self, name: str, **kwargs):
         """按字段增量更新某个任务配置。"""
         with self._lock:
@@ -168,8 +151,8 @@ class TaskExecutor:
                 pending.append(task)
             else:
                 waiting.append(task)
-        # 对齐 NIKKE：待执行队列优先看任务优先级。
-        pending.sort(key=lambda t: t.priority)
+        # 待执行队列按固定顺序索引排序（来自 executor.task_order）。
+        pending.sort(key=lambda t: t.order_index)
         waiting.sort(key=lambda t: t.next_run)
         return TaskSnapshot(
             running_task=self._running_task,
@@ -183,13 +166,12 @@ class TaskExecutor:
         return TaskItem(
             name=item.name,
             enabled=item.enabled,
-            priority=item.priority,
+            order_index=item.order_index,
             next_run=item.next_run,
             success_interval=item.success_interval,
             failure_interval=item.failure_interval,
             trigger=item.trigger,
             enabled_time_range=item.enabled_time_range,
-            max_failures=item.max_failures,
             failure_count=item.failure_count,
         )
 
@@ -265,6 +247,8 @@ class TaskExecutor:
         # 对齐 NIKKE task_delay 语义：任务显式给出下一次延迟时优先使用。
         if result.next_run_seconds is not None:
             interval = int(result.next_run_seconds)
+            task.next_run = now + timedelta(seconds=max(1, interval))
+            return
         task.next_run = now + timedelta(seconds=max(1, min_interval, interval))
 
     def _loop(self):
@@ -305,17 +289,7 @@ class TaskExecutor:
                     continue
 
                 if not task:
-                    # 空队列时可执行 idle hook（例如回主界面），并短暂休眠。
-                    if (
-                        self._empty_queue_policy == 'goto_main'
-                        and self._on_idle
-                        and time.time() - self._last_idle_at > 2.0
-                    ):
-                        self._last_idle_at = time.time()
-                        try:
-                            self._on_idle()
-                        except Exception as exc:
-                            logger.debug(f'idle hook error: {exc}')
+                    # 空队列时短暂休眠。
                     time.sleep(0.12)
                     continue
 
@@ -345,15 +319,7 @@ class TaskExecutor:
                             error=f'runner returned invalid result: {type(result)}',
                         )
                 except Exception as exc:
-                    if isinstance(exc, TaskRetryCurrentError):
-                        logger.warning(f'task `{task.name}` retry requested: {exc}')
-                    else:
-                        logger.exception(f'task `{task.name}` crashed: {exc}')
-                    if self._on_task_error:
-                        try:
-                            self._on_task_error(task.name, exc, traceback.format_exc())
-                        except Exception as hook_exc:
-                            logger.debug(f'task error hook failed: {hook_exc}')
+                    logger.exception(f'task `{task.name}` crashed: {exc}')
                     result = TaskResult(success=False, error=str(exc))
 
                 with self._lock:

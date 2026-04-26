@@ -64,8 +64,13 @@ class BotInitMixin:
         self._executor_tasks: dict[str, TaskItem] = {}
         self._accept_executor_events = False
         self._fatal_error_stop_requested = False
-        self._task_error_delay_overrides: dict[str, int] = {}
-        self._task_error_type_names: dict[str, str] = {}
+        self._task_exception_retry_counts: dict[str, int] = {}
+        self._restart_task_payload: dict[str, str | int] | None = None
+        self._recovery_total_count: int = 0
+        self._recovery_last_error: str = '--'
+        self._recovery_last_action: str = '--'
+        self._recovery_last_outcome: str = '--'
+        self._recovery_last_task: str = '--'
 
         self.scheduler.state_changed.connect(self.state_changed.emit)
         self.scheduler.stats_updated.connect(self.stats_updated.emit)

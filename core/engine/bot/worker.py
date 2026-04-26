@@ -14,6 +14,23 @@ from PIL import Image as PILImage
 from core.engine.bot.local_engine import LocalBotEngine
 from models.config import AppConfig
 
+DEFAULT_LOG_RETENTION_DAYS = 7
+MIN_LOG_RETENTION_DAYS = 1
+MAX_LOG_RETENTION_DAYS = 365
+
+
+def _normalize_log_retention_days(value: Any, default: int = DEFAULT_LOG_RETENTION_DAYS) -> int:
+    """归一化日志保留天数。"""
+    try:
+        days = int(str(value).strip())
+    except Exception:
+        days = int(default)
+    if days < MIN_LOG_RETENTION_DAYS:
+        return MIN_LOG_RETENTION_DAYS
+    if days > MAX_LOG_RETENTION_DAYS:
+        return MAX_LOG_RETENTION_DAYS
+    return days
+
 
 def _configure_worker_logger(
     event_queue,
@@ -21,16 +38,18 @@ def _configure_worker_logger(
     *,
     runtime_paths: dict[str, Any] | None = None,
     instance_id: str = 'default',
+    retention_days: int = DEFAULT_LOG_RETENTION_DAYS,
 ) -> None:
     """按配置重建 worker 日志输出级别。"""
     level = 'DEBUG' if bool(enable_debug) else 'INFO'
+    days = _normalize_log_retention_days(retention_days)
     logger.remove()
     logs_dir = str((runtime_paths or {}).get('logs_dir') or 'logs')
     os.makedirs(logs_dir, exist_ok=True)
     logger.add(
         os.path.join(logs_dir, f'qq_farm_copilot_worker_{instance_id}_{{time:YYYY-MM-DD}}.log'),
         rotation='00:00',
-        retention='7 days',
+        retention=f'{days} days',
         level=level,
         format='{time:YYYY-MM-DD HH:mm:ss} | {level:<7} | {message}',
         encoding='utf-8',
@@ -102,11 +121,15 @@ def bot_worker_main(
 ) -> None:
     """worker 进程主循环。"""
     config = _load_config(initial_config, config_path=str((runtime_paths or {}).get('config_path') or ''))
+    retention_days = _normalize_log_retention_days(
+        (runtime_paths or {}).get('log_retention_days', DEFAULT_LOG_RETENTION_DAYS)
+    )
     _configure_worker_logger(
         event_queue,
         config.safety.debug_log_enabled,
         runtime_paths=runtime_paths,
         instance_id=instance_id,
+        retention_days=retention_days,
     )
     engine = LocalBotEngine(config, runtime_paths=runtime_paths, instance_id=instance_id)
 
@@ -199,8 +222,24 @@ def bot_worker_main(
                         new_cfg.safety.debug_log_enabled,
                         runtime_paths=runtime_paths,
                         instance_id=instance_id,
+                        retention_days=retention_days,
                     )
                     engine.update_config(new_cfg)
+                    _safe_put(event_queue, _make_command_result(cmd_id, cmd, True))
+                    continue
+
+                if cmd == 'apply_log_retention':
+                    payload_dict = payload if isinstance(payload, dict) else {}
+                    retention_days = _normalize_log_retention_days(payload_dict.get('days', retention_days))
+                    if isinstance(runtime_paths, dict):
+                        runtime_paths['log_retention_days'] = str(retention_days)
+                    _configure_worker_logger(
+                        event_queue,
+                        engine.config.safety.debug_log_enabled,
+                        runtime_paths=runtime_paths,
+                        instance_id=instance_id,
+                        retention_days=retention_days,
+                    )
                     _safe_put(event_queue, _make_command_result(cmd_id, cmd, True))
                     continue
 

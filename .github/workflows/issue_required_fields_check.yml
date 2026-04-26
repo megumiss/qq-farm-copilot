@@ -53,9 +53,13 @@ jobs:
               );
             }
 
+            function stripIssuePrefix(rawTitle, prefixRegex) {
+              return rawTitle.replace(prefixRegex, "").trim();
+            }
+
             const isEnhancementIssue = labels.has("enhancement") || /^\[suggestion\]/i.test(title);
             if (isEnhancementIssue) {
-              const suggestionTitle = title.replace(/^\[suggestion\]\s*:?\s*/i, "").trim();
+              const suggestionTitle = stripIssuePrefix(title, /^\[suggestion\]\s*[:：]?\s*/i);
               if (suggestionTitle) {
                 core.info("Enhancement title validation passed.");
                 return;
@@ -90,8 +94,12 @@ jobs:
               return;
             }
 
+            const bugTitle = stripIssuePrefix(title, /^\[bug\]\s*[:：]?\s*/i);
             const requiredBugFields = ["运行方式", "平台", "脚本内选择了正确的平台", "版本号"];
             const missingBugFields = [];
+            if (isMissing(bugTitle)) {
+              missingBugFields.push("标题");
+            }
             for (const field of requiredBugFields) {
               const value = extractSectionValue(field);
               if (isMissing(value)) {

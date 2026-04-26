@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from core.base.timer import Timer
-from core.exceptions import GamePageUnknownError, TaskRetryCurrentError
+from core.exceptions import GamePageUnknownError, LoginRecoveryRequiredError
 from core.ui.assets import BTN_LOGIN_AGAIN
 from core.ui.page import *
 from tasks.handler import Handler
@@ -58,7 +58,7 @@ class UI(Handler):
             return all(self.appear(btn, offset=(30, 30), static=False) for btn in check)
         return self.appear(check, offset=(30, 30), static=False)
 
-    def ui_get_current_page(self, timeout=2.0):
+    def ui_get_current_page(self, timeout=15.0):
         """识别当前页面；未知时尝试回主与弹窗处理，直到超时。"""
         logger.info('开始识别当前页面')
         deadline = Timer(timeout, count=1).start()
@@ -195,9 +195,9 @@ class UI(Handler):
         return False
 
     def _handle_login_again_retry(self) -> bool:
-        """命中“重新登录”先点击，再重试当前任务。"""
+        """命中“重新登录”先点击，再触发登录恢复流程。"""
         if self.appear_then_click(BTN_LOGIN_AGAIN, offset=30, interval=1, static=False):
-            raise TaskRetryCurrentError('login again handled, retry current task')
+            raise LoginRecoveryRequiredError('login again handled, start login recovery flow')
         return False
 
     def ui_goto_main(self):

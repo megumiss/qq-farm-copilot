@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QAbstractSpinBox, QApplication, QWidget
 
 from core.instance.manager import InstanceManager
 from utils.app_paths import resolve_runtime_path, user_app_dir
-from utils.logger import setup_logger
+from utils.logger import cleanup_expired_logs, load_log_retention_days, setup_logger
 
 
 class _NoWheelSpinBoxFilter(QObject):
@@ -81,10 +81,12 @@ def main():
     instance_manager.load()
     active = instance_manager.get_active()
     enable_debug = bool(active and active.config.safety.debug_log_enabled)
+    log_retention_days = load_log_retention_days()
     log_dir = str(user_app_dir() / 'logs')
 
     # 初始化日志（主进程日志）
-    setup_logger(log_dir=log_dir, enable_debug=enable_debug)
+    setup_logger(log_dir=log_dir, enable_debug=enable_debug, retention_days=log_retention_days)
+    cleanup_expired_logs(user_app_dir(), retention_days=log_retention_days)
 
     # 启动GUI
     _set_windows_app_id()

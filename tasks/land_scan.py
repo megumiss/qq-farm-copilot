@@ -19,6 +19,7 @@ from core.ui.assets import (
 )
 from core.ui.page import GOTO_MAIN, page_main
 from tasks.base import TaskBase
+from tasks.main_actions import TaskMainActionsMixin
 from utils.land_grid import LandCell, get_lands_from_land_anchor
 from utils.ocr_utils import OCRItem, OCRTool
 
@@ -86,7 +87,7 @@ LAND_SCAN_ANCHOR_STABLE_SECONDS = 0.5
 LAND_SCAN_ANCHOR_STABLE_REQUIRED_HITS = 3
 
 
-class TaskLandScan(TaskBase):
+class TaskLandScan(TaskMainActionsMixin, TaskBase):
     """按预设顺序遍历地块并进行 OCR 收集。"""
 
     def __init__(self, engine, ui, *, ocr_tool: OCRTool | None = None):
@@ -114,6 +115,7 @@ class TaskLandScan(TaskBase):
         # self.ui.device.click_button(GOTO_MAIN)
 
         try:
+            # 右滑
             for _ in range(2):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
@@ -127,7 +129,8 @@ class TaskLandScan(TaskBase):
                 cells_after_left, from_side='right', column_count=LAND_SCAN_LEFT_STAGE_COL_COUNT
             )
 
-            for _ in range(2):
+            # 左滑
+            for _ in range(3):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 
@@ -148,7 +151,7 @@ class TaskLandScan(TaskBase):
                 fixed_cols=right_scan_cols,
             )
         finally:
-            # TODO 画面回正
+            self.align_view_by_background_tree(log_prefix='地块巡查')
             self.ui.ui_ensure(page_main)
 
         self._trigger_main_task_if_needed()
@@ -223,11 +226,19 @@ class TaskLandScan(TaskBase):
             col_cells = list(col_map.get(physical_col, []))
             col_cells.sort(key=lambda cell: (int(cell.center[1]), int(cell.center[0])))
             for cell in col_cells:
+                self._run_actions_before_ocr_cell()
                 self._click_and_ocr_cell(cell=cell)
                 self.ui.device.click_button(GOTO_MAIN)
                 self.ui.device.sleep(0.2)
+                self.ui.device.stuck_record_clear()
+                self.ui.device.click_record_clear()
 
         return
+
+    def _run_actions_before_ocr_cell(self) -> None:
+        """点击地块前先做一键收获与三项维护，减少弹窗噪声。"""
+        self._run_feature_harvest()
+        self._run_feature_maintain_actions(enable_weed=True, enable_bug=True, enable_water=True)
 
     def _resolve_scan_columns(self, cells: list[LandCell], *, from_side: str, column_count: int) -> list[int]:
         """根据当前网格确定本轮应扫描的物理列（排除前确定，避免补列）。"""
@@ -253,8 +264,12 @@ class TaskLandScan(TaskBase):
             ):
                 break
             # 空土地弹窗
-            if self.ui.appear(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False):
-                removal_location = self.ui.appear_location(BTN_LAND_POP_EMPTY, offset=30, threshold=0.65, static=False)
+            if not self.ui.appear(BTN_CROP_REMOVAL, offset=30, static=False) and self.ui.appear(
+                BTN_LAND_POP_EMPTY, offset=(-160, -180, 280, 280), threshold=0.65
+            ):
+                removal_location = self.ui.appear_location(
+                    BTN_LAND_POP_EMPTY, offset=(-160, -180, 280, 280), threshold=0.65
+                )
                 need_upgrade = self._detect_need_upgrade(anchor=removal_location, empty_plot=True)
                 need_planting = True
                 roi = self._build_land_level_region(removal_location)

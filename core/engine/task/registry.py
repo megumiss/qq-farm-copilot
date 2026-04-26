@@ -10,6 +10,7 @@ from models.config import (
     DEFAULT_TASK_ENABLED_TIME_RANGE,
     TaskTriggerType,
     normalize_task_enabled_time_range,
+    parse_executor_task_order,
     resolve_task_min_interval_seconds,
 )
 
@@ -23,13 +24,12 @@ class TaskItem:
 
     name: str
     enabled: bool
-    priority: int
+    order_index: int
     next_run: datetime
     success_interval: int
     failure_interval: int
     trigger: str = TaskTriggerType.INTERVAL.value
     enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
-    max_failures: int = 3
     failure_count: int = 0
 
 
@@ -66,18 +66,33 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
     min_interval = resolve_task_min_interval_seconds(config.executor)
     default_success = max(min_interval, int(config.executor.default_success_interval))
     default_failure = max(min_interval, int(config.executor.default_failure_interval))
-    max_failures = max(1, int(config.executor.max_failures))
     tasks_cfg = getattr(config, 'tasks', None)
     if tasks_cfg is None:
         return {}
 
     if isinstance(tasks_cfg, dict):
-        task_names = [str(name) for name in tasks_cfg.keys()]
+        config_names = [str(name) for name in tasks_cfg.keys()]
     else:
         try:
-            task_names = [str(name) for name in tasks_cfg.model_dump().keys()]
+            config_names = [str(name) for name in tasks_cfg.model_dump().keys()]
         except Exception:
             return {}
+
+    known_names = set(config_names)
+    task_names: list[str] = []
+    seen: set[str] = set()
+    for task_name in parse_executor_task_order(getattr(config.executor, 'task_order', '')):
+        name = str(task_name)
+        if not name or name in seen or name not in known_names:
+            continue
+        seen.add(name)
+        task_names.append(name)
+    for task_name in config_names:
+        name = str(task_name)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        task_names.append(name)
 
     out: dict[str, TaskItem] = {}
     for index, task_name in enumerate(task_names, start=1):
@@ -89,7 +104,7 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
         out[task_name] = TaskItem(
             name=task_name,
             enabled=bool(getattr(cfg, 'enabled', True)),
-            priority=max(1, int(getattr(cfg, 'priority', index * 10))),
+            order_index=index,
             next_run=now,
             success_interval=max(
                 min_interval,
@@ -103,6 +118,5 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
             enabled_time_range=normalize_task_enabled_time_range(
                 getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
             ),
-            max_failures=max_failures,
         )
     return out

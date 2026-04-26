@@ -31,18 +31,6 @@ SHOP_LIST_SWIPE_END = (270, 860)
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
 # 空地模板命中的中心点 y 轴过滤区间，避免匹配到顶部 UI/底部无关区域。
 LAND_MATCH_Y_RANGE = (350, 850)
-# 背景树锚点在基准截图中的参考坐标（用于估算画面偏移）。
-BACKGROUND_TREE_BASELINE_POINT = (188, 314)
-# 背景树偏移超过该阈值时触发画面回正。
-BACKGROUND_TREE_OFFSET_THRESHOLD = 30
-# 画面横向回正手势点位 P1。
-BACKGROUND_TREE_SWIPE_H_P1 = (230, 190)
-# 画面横向回正手势点位 P2。
-BACKGROUND_TREE_SWIPE_H_P2 = (200, 190)
-# 画面纵向回正手势点位 P1。
-BACKGROUND_TREE_SWIPE_V_P1 = (200, 250)
-# 画面纵向回正手势点位 P2。
-BACKGROUND_TREE_SWIPE_V_P2 = (200, 220)
 # 轮询背景树锚点稳定性的采样间隔。
 BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS = 0.1
 # 数字块识别区域横向范围（基于主界面截图绝对坐标）。
@@ -277,39 +265,35 @@ class TaskMain(
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """执行主流程：在 run 内按 feature 显式控制每个子方法。"""
+        _ = rect
         self.ui.ui_ensure(page_main)
+        features = self.task.main.feature
 
         # 一键收获
-        if self.task.main.feature.auto_harvest:
+        if features.auto_harvest:
             self._run_feature_harvest()
 
-        # 一键除草
-        if self.task.main.feature.auto_weed:
-            self._run_feature_weed()
-
-        # 一键除虫
-        if self.task.main.feature.auto_bug:
-            self._run_feature_bug()
-
-        # 一键浇水
-        if self.task.main.feature.auto_water:
-            self._run_feature_water()
+        self._run_feature_maintain_actions(
+            enable_weed=features.auto_weed,
+            enable_bug=features.auto_bug,
+            enable_water=features.auto_water,
+        )
 
         # 自动扩建
-        if self.task.main.feature.auto_expand:
+        if features.auto_expand:
             self._run_feature_expand()
 
         # 自动播种
-        if self.task.main.feature.auto_plant:
+        if features.auto_plant:
             self._sync_player_level_before_plant()
             self._run_feature_plant()
 
         # TODO 自动施肥
-        if self.task.main.feature.auto_fertilize:
+        if features.auto_fertilize:
             self._run_feature_fertilize()
 
         # TODO 自动升级
-        if self.task.main.feature.auto_upgrade:
+        if features.auto_upgrade:
             self._run_feature_upgrade()
 
         return self.ok()

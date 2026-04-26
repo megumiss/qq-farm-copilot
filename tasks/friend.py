@@ -680,9 +680,44 @@ class TaskFriend(TaskBase):
 
     def _help_in_friend_farm(self):
         """在好友农场执行浇水/除草/除虫，完成后尝试回家。"""
-        self._run_help_single_action(BTN_WATER, ActionType.WATER, '帮好友浇水')
-        self._run_help_single_action(BTN_WEED, ActionType.WEED, '帮好友除草')
-        self._run_help_single_action(BTN_BUG, ActionType.BUG, '帮好友除虫')
+        self._run_help_maintain_actions()
+
+    def _run_help_maintain_actions(self) -> bool:
+        """统一执行帮好友浇水/除草/除虫，共用确认计时器。"""
+        action_specs = [
+            (BTN_WATER, ActionType.WATER),
+            (BTN_WEED, ActionType.WEED),
+            (BTN_BUG, ActionType.BUG),
+        ]
+        action_buttons = [button for button, _ in action_specs]
+
+        self.ui.device.screenshot()
+        if not self.ui.appear_any(action_buttons, offset=30, static=False):
+            return False
+
+        confirm_timer = Timer(0.5, count=2)
+        while 1:
+            self.ui.device.screenshot()
+
+            clicked_action: str | None = None
+            for button, stat_action in action_specs:
+                if self.ui.appear(button, offset=30, static=False):
+                    clicked_action = stat_action
+                    break
+            if self.ui.appear_then_click_any(action_buttons, offset=30, interval=1, static=False):
+                if clicked_action is not None:
+                    self.engine._record_stat(clicked_action)
+                confirm_timer.clear()
+                continue
+
+            if not self.ui.appear_any(action_buttons, offset=30, static=False):
+                if not confirm_timer.started():
+                    confirm_timer.start()
+                if confirm_timer.reached():
+                    logger.info('好友巡查: 完成动作 | 帮好友维护')
+                    return True
+            else:
+                confirm_timer.clear()
 
     def _run_help_single_action(self, button, stat_action: str, done_text: str) -> bool:
         self.ui.device.screenshot()

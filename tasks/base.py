@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
 
 from loguru import logger
 
@@ -22,6 +22,21 @@ from models.task_views import (
 if TYPE_CHECKING:
     from core.engine.bot.local_engine import LocalBotEngine
     from core.ui.ui import UI
+
+# 背景树回正默认锚点基准坐标。
+DEFAULT_ALIGN_BASELINE_POINT = (188, 314)
+# 背景树回正默认偏移阈值（像素）。
+DEFAULT_ALIGN_OFFSET_THRESHOLD = 30
+# 背景树回正默认横向手势点位 P1/P2。
+DEFAULT_ALIGN_SWIPE_H_P1 = (230, 190)
+DEFAULT_ALIGN_SWIPE_H_P2 = (200, 190)
+# 背景树回正默认纵向手势点位 P1/P2。
+DEFAULT_ALIGN_SWIPE_V_P1 = (200, 250)
+DEFAULT_ALIGN_SWIPE_V_P2 = (200, 220)
+# 背景树回正默认手势参数。
+DEFAULT_ALIGN_SWIPE_SPEED = 30
+DEFAULT_ALIGN_SWIPE_DELAY = 0.2
+DEFAULT_ALIGN_SWIPE_HOLD = 0.1
 
 
 @dataclass(slots=True)
@@ -74,6 +89,90 @@ class TaskBase:
     def config(self) -> AppConfig:
         """当前实例完整配置（强类型）。"""
         return self.engine.config
+
+    def get_features(self, task_name: str) -> dict[str, Any]:
+        """获取任务特性开关字典。"""
+        return self.engine.get_task_features(task_name)
+
+    def align_view_by_background_tree(
+        self,
+        *,
+        baseline_point: tuple[int, int] = DEFAULT_ALIGN_BASELINE_POINT,
+        offset_threshold: int = DEFAULT_ALIGN_OFFSET_THRESHOLD,
+        swipe_h_p1: tuple[int, int] = DEFAULT_ALIGN_SWIPE_H_P1,
+        swipe_h_p2: tuple[int, int] = DEFAULT_ALIGN_SWIPE_H_P2,
+        swipe_v_p1: tuple[int, int] = DEFAULT_ALIGN_SWIPE_V_P1,
+        swipe_v_p2: tuple[int, int] = DEFAULT_ALIGN_SWIPE_V_P2,
+        swipe_speed: int = DEFAULT_ALIGN_SWIPE_SPEED,
+        swipe_delay: float = DEFAULT_ALIGN_SWIPE_DELAY,
+        swipe_hold: float = DEFAULT_ALIGN_SWIPE_HOLD,
+        log_prefix: str = '画面回正',
+    ) -> bool:
+        """按背景树锚点将画面回正。"""
+        from core.ui.assets import BTN_BACKGROUND_TREE
+
+        while 1:
+            self.ui.device.screenshot()
+            anchor = self.ui.appear_location(BTN_BACKGROUND_TREE, offset=30, threshold=0.8, static=False)
+            if anchor is None:
+                logger.warning('{}: 未识别到背景树锚点', log_prefix)
+                return False
+
+            offset_x = int(anchor[0] - int(baseline_point[0]))
+            offset_y = int(anchor[1] - int(baseline_point[1]))
+            if abs(offset_x) > int(offset_threshold):
+                if offset_x > 0:
+                    p1, p2, direction = swipe_h_p1, swipe_h_p2, '左'
+                else:
+                    p1, p2, direction = swipe_h_p2, swipe_h_p1, '右'
+                self.ui.device.swipe(
+                    (int(p1[0]), int(p1[1])),
+                    (int(p2[0]), int(p2[1])),
+                    speed=int(swipe_speed),
+                    delay=float(swipe_delay),
+                    hold=float(swipe_hold),
+                )
+                logger.info('{}: 背景树横向偏移={}px，画面{}移', log_prefix, offset_x, direction)
+                continue
+
+            if abs(offset_y) > int(offset_threshold):
+                if offset_y > 0:
+                    p1, p2, direction = swipe_v_p1, swipe_v_p2, '上'
+                else:
+                    p1, p2, direction = swipe_v_p2, swipe_v_p1, '下'
+                self.ui.device.swipe(
+                    (int(p1[0]), int(p1[1])),
+                    (int(p2[0]), int(p2[1])),
+                    speed=int(swipe_speed),
+                    delay=float(swipe_delay),
+                    hold=float(swipe_hold),
+                )
+                logger.info('{}: 背景树纵向偏移={}px，画面{}移', log_prefix, offset_y, direction)
+                continue
+
+            return True
+
+    def is_task_enabled(self, task_name: str) -> bool:
+        """按任务名读取调度启用状态。"""
+        tasks_cfg = getattr(getattr(self.engine, 'config', None), 'tasks', None)
+        if tasks_cfg is None:
+            return False
+        if isinstance(tasks_cfg, dict):
+            cfg = tasks_cfg.get(str(task_name))
+        else:
+            cfg = getattr(tasks_cfg, str(task_name), None)
+        return bool(getattr(cfg, 'enabled', False))
+
+    @staticmethod
+    def has_feature(features: Mapping[str, Any] | None, key: str, default: bool = False) -> bool:
+        """读取特性开关并归一化为 bool。"""
+        if not isinstance(features, Mapping):
+            return bool(default)
+        return bool(features.get(str(key), default))
+
+    def is_feature_enabled(self, task_name: str, key: str, default: bool = False) -> bool:
+        """按任务名读取某个特性开关。"""
+        return self.has_feature(self.get_features(task_name), key, default=default)
 
     @staticmethod
     def parse_truthy(value: Any) -> bool:

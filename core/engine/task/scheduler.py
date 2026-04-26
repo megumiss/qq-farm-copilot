@@ -50,6 +50,11 @@ class TaskScheduler(QObject):
             'running_tasks': 0,
             'pending_tasks': 0,
             'waiting_tasks': 0,
+            'recovery_total': 0,
+            'recovery_last_error': '--',
+            'recovery_last_action': '--',
+            'recovery_last_outcome': '--',
+            'recovery_last_task': '--',
         }
 
     @property
@@ -117,6 +122,11 @@ class TaskScheduler(QObject):
             'running_tasks',
             'pending_tasks',
             'waiting_tasks',
+            'recovery_total',
+            'recovery_last_error',
+            'recovery_last_action',
+            'recovery_last_outcome',
+            'recovery_last_task',
         ):
             if key in kwargs and self._runtime_metrics.get(key) != kwargs[key]:
                 self._runtime_metrics[key] = kwargs[key]

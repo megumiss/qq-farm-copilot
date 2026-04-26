@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from PyQt6.QtCore import QDateTime, QTime, Qt, pyqtSignal
+from PyQt6.QtCore import QDateTime, Qt, QTime, pyqtSignal
 from PyQt6.QtWidgets import (
     QDateTimeEdit,
     QFormLayout,
@@ -20,7 +20,6 @@ from qfluentwidgets import (
     CaptionLabel,
     CheckBox,
     ComboBox,
-    CompactSpinBox,
     DateTimeEdit,
     ScrollArea,
     SpinBox,
@@ -34,13 +33,14 @@ from models.config import (
     AppConfig,
     TaskTriggerType,
     normalize_task_enabled_time_range,
+    parse_executor_task_order,
     resolve_task_min_interval_seconds,
 )
 from utils.app_paths import load_config_json_object
 
 
 class TaskPanel(QWidget):
-    """任务 + 执行器策略配置。"""
+    """任务调度配置面板。"""
 
     config_changed = pyqtSignal(object)
 
@@ -86,7 +86,7 @@ class TaskPanel(QWidget):
         waterfall.addLayout(right_col, 1)
         columns = [left_col, right_col]
         col_heights = [0, 0]
-        self._task_order = [str(name) for name in getattr(self.config, 'tasks', {}).keys()]
+        self._task_order = self._resolve_task_order()
 
         for task_name in self._task_order:
             task_cfg = self.config.tasks.get(task_name)
@@ -97,15 +97,39 @@ class TaskPanel(QWidget):
             columns[target].addWidget(card)
             col_heights[target] += max(1, int(card.sizeHint().height()))
 
-        exec_card = self._build_executor_card()
-        target = 0 if col_heights[0] <= col_heights[1] else 1
-        columns[target].addWidget(exec_card)
-        col_heights[target] += max(1, int(exec_card.sizeHint().height()))
-
         for col in columns:
             col.addStretch()
         content_layout.addLayout(waterfall)
         content_layout.addStretch()
+
+    def _resolve_task_order(self) -> list[str]:
+        tasks_cfg = getattr(self.config, 'tasks', None)
+        if isinstance(tasks_cfg, dict):
+            task_names = [str(name) for name in tasks_cfg.keys()]
+        elif tasks_cfg is None:
+            task_names = []
+        else:
+            try:
+                task_names = [str(name) for name in tasks_cfg.model_dump().keys()]
+            except Exception:
+                task_names = []
+
+        known = set(task_names)
+        out: list[str] = []
+        seen: set[str] = set()
+        for name in parse_executor_task_order(getattr(self.config.executor, 'task_order', '')):
+            task_name = str(name)
+            if not task_name or task_name in seen or task_name not in known:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+        for name in task_names:
+            task_name = str(name)
+            if not task_name or task_name in seen:
+                continue
+            seen.add(task_name)
+            out.append(task_name)
+        return out
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:
@@ -230,28 +254,6 @@ class TaskPanel(QWidget):
         self._task_widgets[task_name] = widgets
         return card
 
-    def _build_executor_card(self) -> StableElevatedCardWidget:
-        card = StableElevatedCardWidget(self)
-        self._apply_card_style(card, 'executorConfigCard')
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(9)
-        self._add_card_title(layout, '执行器')
-
-        form = QFormLayout()
-        self._style_form(form)
-        self._empty_policy = ComboBox(card)
-        self._empty_policy.addItem('停留当前页', userData='stay')
-        self._empty_policy.addItem('回到主页面', userData='goto_main')
-        self._empty_policy.currentIndexChanged.connect(self._auto_save)
-        self._max_failures = CompactSpinBox(card)
-        self._max_failures.setRange(1, 20)
-        self._max_failures.valueChanged.connect(self._auto_save)
-        form.addRow(self._field_label('空队列策略', card), self._empty_policy)
-        form.addRow(self._field_label('最大连续失败', card), self._max_failures)
-        layout.addLayout(form)
-        return card
-
     def _task_min_interval_seconds(self) -> int:
         return resolve_task_min_interval_seconds(self.config.executor)
 
@@ -344,15 +346,10 @@ class TaskPanel(QWidget):
             if isinstance(next_run, QDateTimeEdit):
                 next_run.setDateTime(self._parse_next_run_datetime(str(getattr(task_cfg, 'next_run', ''))))
 
-        self._set_combo_data(self._empty_policy, c.executor.empty_queue_policy)
-        self._max_failures.setValue(max(1, int(c.executor.max_failures)))
-
     def _auto_save(self) -> None:
         if self._loading:
             return
         c = self.config
-        c.executor.empty_queue_policy = str(self._empty_policy.currentData())
-        c.executor.max_failures = int(self._max_failures.value())
 
         for task_name in self._task_order:
             task_cfg = c.tasks.get(task_name)
@@ -394,5 +391,6 @@ class TaskPanel(QWidget):
     def set_config(self, config: AppConfig) -> None:
         self.config = config
         self._loading = True
+        self._task_order = self._resolve_task_order()
         self._load_config()
         self._loading = False

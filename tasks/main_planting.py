@@ -15,13 +15,7 @@ from models.config import PlantMode
 from models.game_data import get_best_crop_for_level, get_latest_crop_for_level
 from tasks.main import (
     ALWAYS_SKIP_SEED_BUTTONS,
-    BACKGROUND_TREE_BASELINE_POINT,
-    BACKGROUND_TREE_OFFSET_THRESHOLD,
     BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS,
-    BACKGROUND_TREE_SWIPE_H_P1,
-    BACKGROUND_TREE_SWIPE_H_P2,
-    BACKGROUND_TREE_SWIPE_V_P1,
-    BACKGROUND_TREE_SWIPE_V_P2,
     LAND_MATCH_Y_RANGE,
     OPTIONAL_SKIP_SEED_BUTTONS,
     SEED_POPUP_NUMBER_REGION_X_MAX,
@@ -48,40 +42,13 @@ class TaskMainPlantingMixin:
 
     def _run_feature_plant(self) -> str | None:
         """自动播种"""
-        logger.info('自动播种流程: 开始')
+        logger.info('自动播种: 开始')
         self.ui.ui_ensure(page_main)
         # self._buy_seeds(self.engine._resolve_crop_name())
 
         # 点击空白处
         self.ui.device.click_button(GOTO_MAIN)
-        while 1:
-            self.ui.device.screenshot()
-            anchor = self._get_labor_anchor_location()
-            if anchor is None:
-                logger.warning('自动播种流程: 未识别到背景树锚点')
-                break
-
-            offset_x = int(anchor[0] - BACKGROUND_TREE_BASELINE_POINT[0])
-            offset_y = int(anchor[1] - BACKGROUND_TREE_BASELINE_POINT[1])
-            if abs(offset_x) > BACKGROUND_TREE_OFFSET_THRESHOLD:
-                if offset_x > 0:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P1, BACKGROUND_TREE_SWIPE_H_P2, '左'
-                else:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_H_P2, BACKGROUND_TREE_SWIPE_H_P1, '右'
-                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
-                logger.info('自动播种流程: 背景树横向偏移={}px，画面{}移', offset_x, direction)
-                continue
-
-            if abs(offset_y) > BACKGROUND_TREE_OFFSET_THRESHOLD:
-                if offset_y > 0:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P1, BACKGROUND_TREE_SWIPE_V_P2, '上'
-                else:
-                    p1, p2, direction = BACKGROUND_TREE_SWIPE_V_P2, BACKGROUND_TREE_SWIPE_V_P1, '下'
-                self.ui.device.swipe(p1, p2, speed=30, delay=0.5, hold=0.1)
-                logger.info('自动播种流程: 背景树纵向偏移={}px，画面{}移', offset_y, direction)
-                continue
-
-            break
+        self.align_view_by_background_tree(log_prefix='自动播种')
 
         # 判断是否需要播种
         # has_land = self.ui.appear_any(LAND_LIST, offset=30, threshold=0.89, static=False)
@@ -149,7 +116,7 @@ class TaskMainPlantingMixin:
 
         land_buttons = self._get_icon_land_buttons()
         if not land_buttons:
-            logger.warning('自动播种流程: 未找到 icon_land 模板')
+            logger.warning('自动播种: 未找到 icon_land 模板')
             return []
 
         priority = {
@@ -201,7 +168,7 @@ class TaskMainPlantingMixin:
         coords.sort(key=lambda p: (p[1], p[0]))
 
         logger.info(
-            '自动播种流程: 地块匹配完成 | 模板={} raw_total={} raw_in_range={} dedup={} coords={} y_range={}',
+            '自动播种: 地块匹配完成 | 模板={} raw_total={} raw_in_range={} dedup={} coords={} y_range={}',
             len(land_buttons),
             raw_total,
             len(raw_hits),
@@ -265,7 +232,7 @@ class TaskMainPlantingMixin:
 
             if timeout_timer.reached():
                 logger.warning(
-                    '自动播种流程: 背景树锚点稳定等待超时 | timeout={}s',
+                    '自动播种: 背景树锚点稳定等待超时 | timeout={}s',
                     timeout_seconds,
                 )
                 return None
@@ -300,7 +267,7 @@ class TaskMainPlantingMixin:
         region = self._build_seed_popup_number_region(land_click_point)
         items = self.seed_number_ocr.detect_items(cv_img, region=region)
         logger.info(
-            '自动播种流程: 种子数量 | click_y={} region={} count={} nums={}',
+            '自动播种: 种子数量 | click_y={} region={} count={} nums={}',
             int(land_click_point[1]),
             region,
             len(items),
@@ -349,15 +316,18 @@ class TaskMainPlantingMixin:
         """执行整块农田播种流程（识别空地、拉种子、补种购买）。"""
         # 模板匹配到的空地
         detected_land_coords = self._collect_land_coords_for_plant(threshold=0.85, y_range=LAND_MATCH_Y_RANGE)
-        detail_targets = self.collect_land_targets_by_flag(
-            'need_planting', anchor_threshold=0.95, log_prefix='自动播种流程: 空地补充'
-        )
+        if self.is_task_enabled('land_scan'):
+            detail_targets = self.collect_land_targets_by_flag(
+                'need_planting', anchor_threshold=0.95, log_prefix='自动播种: 空地补充'
+            )
+        else:
+            detail_targets = []
         detail_land_coords = [point for _, point in detail_targets]
         pending_plot_refs = [ref for ref, _ in detail_targets]
         land_coords = self._merge_land_coords(detected_land_coords, detail_land_coords)
-        logger.info('自动播种流程: 空地识别完成 | count={}', len(land_coords))
+        logger.info('自动播种: 空地识别完成 | count={}', len(land_coords))
         if not land_coords:
-            logger.info('自动播种流程: 未发现空土地，跳过播种')
+            logger.info('自动播种: 未发现空土地，跳过播种')
             return
 
         before_labor_anchor = self._get_labor_anchor_location()
@@ -385,7 +355,7 @@ class TaskMainPlantingMixin:
                     )
                     available_count = int(len(number_items) - len(excluded_seed_item_indexes))
                     logger.info(
-                        '自动播种流程: 作物排除结果 | templates={} total={} excluded={} available={} skip_event_crops={}',
+                        '自动播种: 作物排除结果 | templates={} total={} excluded={} available={} skip_event_crops={}',
                         [btn.name for btn in self._get_seed_buttons_for_exclusion(skip_event_crops=skip_event_crops)],
                         len(number_items),
                         len(excluded_seed_item_indexes),
@@ -393,19 +363,25 @@ class TaskMainPlantingMixin:
                         skip_event_crops,
                     )
                     if available_count <= 0:
-                        logger.info('自动播种流程: 仓库数字块全部命中排除模板，购买种子')
+                        logger.info('自动播种: 仓库数字块全部命中排除模板，购买种子')
                         buy_result = self._buy_seeds(crop_name)
                         if buy_result:
                             return self._plant_all(crop_name)
-                        logger.warning('自动播种流程: 购买种子失败或未完成，结束本轮播种')
+                        logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种')
                         return
                 break
+            # 地块详情弹窗出现“铲子”图标，说明地块已种植，结束本轮播种。
+            if self.ui.appear(BTN_CROP_REMOVAL, offset=30, static=False):
+                logger.info('自动播种: 该地块已种植，结束本轮播种 | point=({}, {})', int(land_x), int(land_y))
+                self.ui.device.click_button(GOTO_MAIN)
+                self.ui.device.sleep(0.2)
+                return
             if open_seed_clicks >= 2:
-                logger.info('自动播种流程: 未识别到种子，购买种子')
+                logger.info('自动播种: 未识别到种子，购买种子')
                 buy_result = self._buy_seeds(crop_name)
                 if buy_result:
                     return self._plant_all(crop_name)
-                logger.warning('自动播种流程: 购买种子失败或未完成，结束本轮播种')
+                logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种')
                 return
 
         after_labor_anchor = self._wait_labor_anchor_stable()
@@ -414,10 +390,10 @@ class TaskMainPlantingMixin:
             dy = float(after_labor_anchor[1] - before_labor_anchor[1])
             drift = math.hypot(dx, dy)
             if drift > 3.0:
-                logger.info('自动播种流程: 画面偏移 {:.1f}px，已修正播种坐标', drift)
+                logger.info('自动播种: 画面偏移 {:.1f}px，已修正播种坐标', drift)
             land_coords = self._shift_land_coords(land_coords, dx, dy)
         else:
-            logger.warning('自动播种流程: 背景树锚点识别失败，继续使用原始地块坐标')
+            logger.warning('自动播种: 背景树锚点识别失败，继续使用原始地块坐标')
 
         # 选择种子
         seed_det = None
@@ -439,7 +415,7 @@ class TaskMainPlantingMixin:
                 left_center_y = int(left_seed.box[1] + left_seed.box[3] / 2.0)
                 seed_drag_point = (left_center_x, left_center_y)
                 logger.info(
-                    '自动播种流程: 仓库优先已启用，使用最左数字块 | box={} text={} score={:.3f} drag_point={}',
+                    '自动播种: 仓库优先已启用，使用最左数字块 | box={} text={} score={:.3f} drag_point={}',
                     left_seed.box,
                     left_seed.text,
                     left_seed.score,
@@ -447,7 +423,7 @@ class TaskMainPlantingMixin:
                 )
             else:
                 logger.warning(
-                    '自动播种流程: 仓库优先已启用，但未识别到可用数字块 | total={} excluded={} skip_event_crops={}',
+                    '自动播种: 仓库优先已启用，但未识别到可用数字块 | total={} excluded={} skip_event_crops={}',
                     len(number_items),
                     len(active_excluded_indexes),
                     skip_event_crops,
@@ -495,8 +471,8 @@ class TaskMainPlantingMixin:
         finally:
             if dragging:
                 self.engine.device.drag_up()
-                logger.info('自动播种流程: 播种完成')
-                self.backfill_land_flag_false(pending_plot_refs, 'need_planting', log_prefix='自动播种流程')
+                logger.info('自动播种: 播种完成')
+                self.backfill_land_flag_false(pending_plot_refs, 'need_planting', log_prefix='自动播种')
 
         return
 

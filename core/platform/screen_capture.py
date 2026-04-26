@@ -10,6 +10,7 @@ import mss
 from loguru import logger
 from PIL import Image
 
+from core.exceptions import WindowCaptureError
 from models.config import RunMode
 from utils.image_utils import save_screenshot
 from utils.run_mode_decorator import UNSET
@@ -22,16 +23,23 @@ class ScreenCapture:
     PW_RENDERFULLCONTENT = 0x00000002
     DIB_RGB_COLORS = 0
     BI_RGB = 0
+    PRINT_WINDOW_FAILURE_RAISE_SECONDS = 6.0
+    PRINT_WINDOW_FAILURE_RAISE_COUNT = 20
 
     def __init__(self, save_dir: str = 'screenshots', run_mode: RunMode = RunMode.BACKGROUND):
         self._save_dir = save_dir
         self._run_mode = run_mode
         self._mss_local = threading.local()
+        self._print_failure_started_at = 0.0
+        self._print_failure_count = 0
+        self._print_failure_reason = ''
         os.makedirs(save_dir, exist_ok=True)
 
     def update_run_mode(self, run_mode: RunMode):
         """更新运行模式。"""
         self._run_mode = run_mode
+        if run_mode != RunMode.BACKGROUND:
+            self._reset_print_failure_state()
 
     def resolve_dispatch_option(self, key: str):
         """为分发装饰器提供选项解析。"""
@@ -99,22 +107,26 @@ class ScreenCapture:
         rect = wintypes.RECT()
         if not user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(rect)):
             logger.error('PrintWindow截屏失败: GetWindowRect 调用失败')
+            self._record_print_failure('GetWindowRect 调用失败')
             return None
         width = int(rect.right - rect.left)
         height = int(rect.bottom - rect.top)
         if width <= 0 or height <= 0:
             logger.error(f'PrintWindow截屏失败: 非法窗口尺寸 {width}x{height}')
+            self._record_print_failure(f'非法窗口尺寸 {width}x{height}')
             return None
 
         hwnd_dc = user32.GetWindowDC(wintypes.HWND(hwnd))
         if not hwnd_dc:
             logger.error('PrintWindow截屏失败: GetWindowDC 失败')
+            self._record_print_failure('GetWindowDC 失败')
             return None
 
         mem_dc = gdi32.CreateCompatibleDC(hwnd_dc)
         if not mem_dc:
             user32.ReleaseDC(wintypes.HWND(hwnd), hwnd_dc)
             logger.error('PrintWindow截屏失败: CreateCompatibleDC 失败')
+            self._record_print_failure('CreateCompatibleDC 失败')
             return None
 
         bitmap = gdi32.CreateCompatibleBitmap(hwnd_dc, width, height)
@@ -122,6 +134,7 @@ class ScreenCapture:
             gdi32.DeleteDC(mem_dc)
             user32.ReleaseDC(wintypes.HWND(hwnd), hwnd_dc)
             logger.error('PrintWindow截屏失败: CreateCompatibleBitmap 失败')
+            self._record_print_failure('CreateCompatibleBitmap 失败')
             return None
 
         class BITMAPINFOHEADER(ctypes.Structure):
@@ -152,6 +165,7 @@ class ScreenCapture:
                 ok = user32.PrintWindow(wintypes.HWND(hwnd), mem_dc, 0)
             if not ok:
                 logger.error('PrintWindow截屏失败: PrintWindow 返回 0')
+                self._record_print_failure('PrintWindow 返回 0')
                 return None
 
             bmi = BITMAPINFO()
@@ -175,12 +189,15 @@ class ScreenCapture:
             )
             if rows != height:
                 logger.error(f'PrintWindow截屏失败: GetDIBits 行数异常 ({rows}/{height})')
+                self._record_print_failure(f'GetDIBits 行数异常 ({rows}/{height})')
                 return None
 
             image = Image.frombytes('RGB', (width, height), buffer.raw, 'raw', 'BGRX')
+            self._reset_print_failure_state()
             return self._crop_print_image_to_client(hwnd, image, rect)
         except Exception as e:
             logger.error(f'PrintWindow截屏失败: {e}')
+            self._record_print_failure(f'异常: {type(e).__name__}')
             return None
         finally:
             if old_obj:
@@ -188,6 +205,33 @@ class ScreenCapture:
             gdi32.DeleteObject(bitmap)
             gdi32.DeleteDC(mem_dc)
             user32.ReleaseDC(wintypes.HWND(hwnd), hwnd_dc)
+
+    def _reset_print_failure_state(self) -> None:
+        """清空 PrintWindow 连续失败状态。"""
+        self._print_failure_started_at = 0.0
+        self._print_failure_count = 0
+        self._print_failure_reason = ''
+
+    def _record_print_failure(self, reason: str) -> None:
+        """记录 PrintWindow 失败；超过阈值抛异常触发上层恢复。"""
+        now = time.monotonic()
+        text = str(reason or 'unknown').strip() or 'unknown'
+        if self._print_failure_started_at <= 0 or text != self._print_failure_reason:
+            self._print_failure_started_at = now
+            self._print_failure_count = 1
+            self._print_failure_reason = text
+            return
+
+        self._print_failure_count += 1
+        elapsed = max(0.0, now - self._print_failure_started_at)
+        if elapsed >= float(self.PRINT_WINDOW_FAILURE_RAISE_SECONDS) or self._print_failure_count >= int(
+            self.PRINT_WINDOW_FAILURE_RAISE_COUNT
+        ):
+            fail_count = int(self._print_failure_count)
+            self._reset_print_failure_state()
+            raise WindowCaptureError(
+                f'capture failed continuously: reason={text}, elapsed={elapsed:.1f}s, count={fail_count}'
+            )
 
     @staticmethod
     def _crop_print_image_to_client(hwnd: int, image: Image.Image, window_rect: wintypes.RECT) -> Image.Image:
