@@ -20,7 +20,6 @@ from qfluentwidgets import (
     CaptionLabel,
     CheckBox,
     ComboBox,
-    CompactSpinBox,
     DateTimeEdit,
     ScrollArea,
     SpinBox,
@@ -41,7 +40,7 @@ from utils.app_paths import load_config_json_object
 
 
 class TaskPanel(QWidget):
-    """任务 + 执行器策略配置。"""
+    """任务调度配置面板。"""
 
     config_changed = pyqtSignal(object)
 
@@ -97,11 +96,6 @@ class TaskPanel(QWidget):
             target = 0 if col_heights[0] <= col_heights[1] else 1
             columns[target].addWidget(card)
             col_heights[target] += max(1, int(card.sizeHint().height()))
-
-        exec_card = self._build_executor_card()
-        target = 0 if col_heights[0] <= col_heights[1] else 1
-        columns[target].addWidget(exec_card)
-        col_heights[target] += max(1, int(exec_card.sizeHint().height()))
 
         for col in columns:
             col.addStretch()
@@ -260,28 +254,6 @@ class TaskPanel(QWidget):
         self._task_widgets[task_name] = widgets
         return card
 
-    def _build_executor_card(self) -> StableElevatedCardWidget:
-        card = StableElevatedCardWidget(self)
-        self._apply_card_style(card, 'executorConfigCard')
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(9)
-        self._add_card_title(layout, '执行器')
-
-        form = QFormLayout()
-        self._style_form(form)
-        self._empty_policy = ComboBox(card)
-        self._empty_policy.addItem('停留当前页', userData='stay')
-        self._empty_policy.addItem('回到主页面', userData='goto_main')
-        self._empty_policy.currentIndexChanged.connect(self._auto_save)
-        self._max_failures = CompactSpinBox(card)
-        self._max_failures.setRange(1, 20)
-        self._max_failures.valueChanged.connect(self._auto_save)
-        form.addRow(self._field_label('空队列策略', card), self._empty_policy)
-        form.addRow(self._field_label('最大连续失败', card), self._max_failures)
-        layout.addLayout(form)
-        return card
-
     def _task_min_interval_seconds(self) -> int:
         return resolve_task_min_interval_seconds(self.config.executor)
 
@@ -374,15 +346,10 @@ class TaskPanel(QWidget):
             if isinstance(next_run, QDateTimeEdit):
                 next_run.setDateTime(self._parse_next_run_datetime(str(getattr(task_cfg, 'next_run', ''))))
 
-        self._set_combo_data(self._empty_policy, c.executor.empty_queue_policy)
-        self._max_failures.setValue(max(1, int(c.executor.max_failures)))
-
     def _auto_save(self) -> None:
         if self._loading:
             return
         c = self.config
-        c.executor.empty_queue_policy = str(self._empty_policy.currentData())
-        c.executor.max_failures = int(self._max_failures.value())
 
         for task_name in self._task_order:
             task_cfg = c.tasks.get(task_name)

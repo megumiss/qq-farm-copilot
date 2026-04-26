@@ -312,6 +312,10 @@ class BotEngine(QObject):
             deadline = time.time() + max(0.1, float(timeout))
             app = QCoreApplication.instance()
             while time.time() < deadline:
+                # 若 worker 已被外部 stop/shutdown 回收，当前同步命令应立即中断，
+                # 避免在 close 竞态下继续等待到超时。
+                if self._worker is None or not self._worker.is_alive():
+                    return False
                 self._drain_events()
                 result = self._responses.pop(req_id, None)
                 if result is not None:

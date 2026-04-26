@@ -30,7 +30,6 @@ class TaskItem:
     failure_interval: int
     trigger: str = TaskTriggerType.INTERVAL.value
     enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
-    max_failures: int = 3
     failure_count: int = 0
 
 
@@ -67,7 +66,6 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
     min_interval = resolve_task_min_interval_seconds(config.executor)
     default_success = max(min_interval, int(config.executor.default_success_interval))
     default_failure = max(min_interval, int(config.executor.default_failure_interval))
-    max_failures = max(1, int(config.executor.max_failures))
     tasks_cfg = getattr(config, 'tasks', None)
     if tasks_cfg is None:
         return {}
@@ -120,6 +118,5 @@ def build_default_tasks(config: 'AppConfig') -> dict[str, TaskItem]:
             enabled_time_range=normalize_task_enabled_time_range(
                 getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
             ),
-            max_failures=max_failures,
         )
     return out

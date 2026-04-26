@@ -273,20 +273,9 @@ class ExecutorConfig(BaseModel):
     """定义 `ExecutorConfig` 的配置数据结构与默认值。"""
 
     min_task_interval_seconds: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    empty_queue_policy: str = 'stay'
     task_order: str = DEFAULT_EXECUTOR_TASK_ORDER
     default_success_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
     default_failure_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    max_failures: int = 3
-
-    @field_validator('empty_queue_policy', mode='before')
-    @classmethod
-    def _normalize_empty_queue_policy(cls, value):
-        """规范化 `empty_queue_policy` 输入值。"""
-        text = str(value or 'stay').strip().lower()
-        if text not in {'stay', 'goto_main'}:
-            return 'stay'
-        return text
 
     @field_validator('task_order', mode='before')
     @classmethod

@@ -14,7 +14,6 @@ from models.config import TaskTriggerType, normalize_task_enabled_time_range
 TaskRunner = Callable[[TaskContext], TaskResult]
 SnapshotHook = Callable[[TaskSnapshot], None]
 TaskDoneHook = Callable[[str, TaskResult], None]
-IdleHook = Callable[[], None]
 
 
 class TaskExecutor:
@@ -25,25 +24,20 @@ class TaskExecutor:
         tasks: dict[str, TaskItem],
         runners: dict[str, TaskRunner],
         *,
-        empty_queue_policy: str = 'stay',
         on_snapshot: SnapshotHook | None = None,
         on_task_done: TaskDoneHook | None = None,
-        on_idle: IdleHook | None = None,
     ):
         """注入任务定义、执行回调和事件钩子，准备调度线程状态。"""
         self._tasks = tasks
         self._runners = runners
-        self._empty_queue_policy = str(empty_queue_policy or 'stay')
         self._on_snapshot = on_snapshot
         self._on_task_done = on_task_done
-        self._on_idle = on_idle
 
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._running_task: str | None = None
-        self._last_idle_at = 0.0
 
     def start(self):
         """启动执行线程；若已在运行则忽略重复启动。"""
@@ -102,11 +96,6 @@ class TaskExecutor:
     def is_stop_requested(self) -> bool:
         """返回是否已收到停止请求。"""
         return self._stop_event.is_set()
-
-    def set_empty_queue_policy(self, policy: str):
-        """设置空队列时策略（如 `stay` 或 `goto_main`）。"""
-        with self._lock:
-            self._empty_queue_policy = str(policy or 'stay')
 
     def update_task(self, name: str, **kwargs):
         """按字段增量更新某个任务配置。"""
@@ -183,7 +172,6 @@ class TaskExecutor:
             failure_interval=item.failure_interval,
             trigger=item.trigger,
             enabled_time_range=item.enabled_time_range,
-            max_failures=item.max_failures,
             failure_count=item.failure_count,
         )
 
@@ -301,17 +289,7 @@ class TaskExecutor:
                     continue
 
                 if not task:
-                    # 空队列时可执行 idle hook（例如回主界面），并短暂休眠。
-                    if (
-                        self._empty_queue_policy == 'goto_main'
-                        and self._on_idle
-                        and time.time() - self._last_idle_at > 2.0
-                    ):
-                        self._last_idle_at = time.time()
-                        try:
-                            self._on_idle()
-                        except Exception as exc:
-                            logger.debug(f'idle hook error: {exc}')
+                    # 空队列时短暂休眠。
                     time.sleep(0.12)
                     continue
 

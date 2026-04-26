@@ -509,7 +509,6 @@ class BotExecutorMixin:
         min_interval = resolve_task_min_interval_seconds(self.config.executor)
         default_success = max(min_interval, int(self.config.executor.default_success_interval))
         default_failure = max(min_interval, int(self.config.executor.default_failure_interval))
-        max_failures = max(1, int(self.config.executor.max_failures))
 
         task_names = self._ordered_task_names(runners)
 
@@ -552,7 +551,6 @@ class BotExecutorMixin:
                 enabled_time_range=normalize_task_enabled_time_range(
                     getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
                 ),
-                max_failures=max_failures,
             )
         return out
 
@@ -668,13 +666,8 @@ class BotExecutorMixin:
         min_interval = resolve_task_min_interval_seconds(self.config.executor)
         default_success = max(min_interval, int(self.config.executor.default_success_interval))
         default_failure = max(min_interval, int(self.config.executor.default_failure_interval))
-        max_failures = max(1, int(self.config.executor.max_failures))
         now = datetime.now()
         runners = runners or self._collect_task_runners()
-
-        if self._task_executor:
-            # 执行器已启动：直接热更新运行中的任务参数。
-            self._task_executor.set_empty_queue_policy(self.config.executor.empty_queue_policy)
 
         task_names = self._ordered_task_names(runners)
         for task_name in task_names:
@@ -689,7 +682,6 @@ class BotExecutorMixin:
                 failure_interval=default_failure,
                 trigger=TaskTriggerType.INTERVAL.value,
                 enabled_time_range=DEFAULT_TASK_ENABLED_TIME_RANGE,
-                max_failures=max_failures,
             )
 
         stale_names = [name for name in list(self._executor_tasks.keys()) if name not in task_names]
@@ -726,7 +718,6 @@ class BotExecutorMixin:
                 'enabled_time_range': normalize_task_enabled_time_range(
                     getattr(cfg, 'enabled_time_range', DEFAULT_TASK_ENABLED_TIME_RANGE)
                 ),
-                'max_failures': max_failures,
             }
 
             parsed_next_run = self._parse_task_next_run_text(getattr(cfg, 'next_run', '')) if cfg is not None else None
@@ -744,7 +735,6 @@ class BotExecutorMixin:
                 item.failure_interval = int(kwargs['failure_interval'])
                 item.trigger = str(kwargs['trigger'])
                 item.enabled_time_range = str(kwargs['enabled_time_range'])
-                item.max_failures = int(kwargs['max_failures'])
                 if 'next_run' in kwargs:
                     item.next_run = kwargs['next_run']
 
@@ -757,10 +747,8 @@ class BotExecutorMixin:
         self._task_executor = TaskExecutor(
             tasks=self._executor_tasks,
             runners=runners,
-            empty_queue_policy=self.config.executor.empty_queue_policy,
             on_snapshot=self._on_executor_snapshot,
             on_task_done=self._on_executor_task_done,
-            on_idle=self._on_executor_idle,
         )
         self._task_executor.start()
 
@@ -973,17 +961,3 @@ class BotExecutorMixin:
                 logger.debug(f'fatal stop failed: {exc}')
 
         threading.Thread(target=_stop_engine, name='FatalErrorStopper', daemon=True).start()
-
-    def _on_executor_idle(self):
-        """执行器空闲时触发：按策略尝试回主界面。"""
-        if not self._accept_executor_events:
-            return
-        if not self.ui:
-            return
-        rect = self.window_manager.get_capture_rect()
-        if rect and self.device:
-            self.device.set_rect(rect)
-        try:
-            self.ui.ui_goto_main()
-        except Exception as exc:
-            logger.debug(f'idle ensure main failed: {exc}')
