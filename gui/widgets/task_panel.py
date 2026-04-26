@@ -34,7 +34,6 @@ from models.config import (
     TaskTriggerType,
     normalize_task_enabled_time_range,
     parse_executor_task_order,
-    resolve_task_min_interval_seconds,
 )
 from utils.app_paths import load_config_json_object
 
@@ -103,21 +102,12 @@ class TaskPanel(QWidget):
         content_layout.addStretch()
 
     def _resolve_task_order(self) -> list[str]:
-        tasks_cfg = getattr(self.config, 'tasks', None)
-        if isinstance(tasks_cfg, dict):
-            task_names = [str(name) for name in tasks_cfg.keys()]
-        elif tasks_cfg is None:
-            task_names = []
-        else:
-            try:
-                task_names = [str(name) for name in tasks_cfg.model_dump().keys()]
-            except Exception:
-                task_names = []
+        task_names = [str(name) for name in self.config.tasks.keys()]
 
         known = set(task_names)
         out: list[str] = []
         seen: set[str] = set()
-        for name in parse_executor_task_order(getattr(self.config.executor, 'task_order', '')):
+        for name in parse_executor_task_order(self.config.executor.task_order):
             task_name = str(name)
             if not task_name or task_name in seen or task_name not in known:
                 continue
@@ -254,9 +244,6 @@ class TaskPanel(QWidget):
         self._task_widgets[task_name] = widgets
         return card
 
-    def _task_min_interval_seconds(self) -> int:
-        return resolve_task_min_interval_seconds(self.config.executor)
-
     @staticmethod
     def _split_interval(seconds: int) -> tuple[int, int]:
         value = max(1, int(seconds))
@@ -317,11 +304,11 @@ class TaskPanel(QWidget):
                 interval_unit = widgets['interval_unit']
                 if isinstance(interval_value, SpinBox) and isinstance(interval_unit, ComboBox):
                     value, unit = self._split_interval(
-                        max(self._task_min_interval_seconds(), task_cfg.interval_seconds)
+                        max(int(self.config.executor.min_task_interval_seconds), task_cfg.interval_seconds)
                     )
                     interval_value.setValue(value)
                     self._set_combo_data(interval_unit, unit)
-                start, end = self._parse_enabled_time_range(getattr(task_cfg, 'enabled_time_range', ''))
+                start, end = self._parse_enabled_time_range(task_cfg.enabled_time_range)
                 start_edit = widgets.get('enabled_time_start')
                 end_edit = widgets.get('enabled_time_end')
                 if isinstance(start_edit, TimeEdit) and isinstance(end_edit, TimeEdit):
@@ -344,7 +331,7 @@ class TaskPanel(QWidget):
 
             next_run = widgets.get('next_run')
             if isinstance(next_run, QDateTimeEdit):
-                next_run.setDateTime(self._parse_next_run_datetime(str(getattr(task_cfg, 'next_run', ''))))
+                next_run.setDateTime(self._parse_next_run_datetime(task_cfg.next_run))
 
     def _auto_save(self) -> None:
         if self._loading:
@@ -364,7 +351,10 @@ class TaskPanel(QWidget):
                 value = int(widgets['interval_value'].value())
                 factor = int(widgets['interval_unit'].currentData() or 1)
                 task_cfg.trigger = TaskTriggerType.INTERVAL
-                task_cfg.interval_seconds = max(self._task_min_interval_seconds(), value * max(1, factor))
+                task_cfg.interval_seconds = max(
+                    int(self.config.executor.min_task_interval_seconds),
+                    value * max(1, factor),
+                )
                 start_edit = widgets.get('enabled_time_start')
                 end_edit = widgets.get('enabled_time_end')
                 start = '00:00:00'

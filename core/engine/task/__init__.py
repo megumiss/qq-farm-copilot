@@ -6,7 +6,6 @@ from core.engine.task.registry import (
     TaskItem,
     TaskResult,
     TaskSnapshot,
-    build_default_tasks,
 )
 from core.engine.task.scheduler import BotState, TaskScheduler
 
@@ -18,5 +17,4 @@ __all__ = [
     'TaskResult',
     'TaskScheduler',
     'TaskSnapshot',
-    'build_default_tasks',
 ]

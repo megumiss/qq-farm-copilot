@@ -96,8 +96,8 @@ def generate() -> str:
 
         feature_cls_name = f'{to_class_name(task_name)}Features' if features else 'EmptyFeatures'
         view_cls_name = f'{to_class_name(task_name)}TaskView'
-        feature_map_lines.append(f"    {py_literal(task_name)}: {feature_cls_name},")
-        view_map_lines.append(f"    {py_literal(task_name)}: {view_cls_name},")
+        feature_map_lines.append(f'    {py_literal(task_name)}: {feature_cls_name},')
+        view_map_lines.append(f'    {py_literal(task_name)}: {view_cls_name},')
 
     typing_any = 'Any, ' if need_any else ''
     header = f'''"""任务配置强类型视图（自动生成，请勿手改）。"""
@@ -122,7 +122,6 @@ class TaskViewBase:
     name: str
     enabled: bool
     config_enabled: bool
-    priority: int
     trigger: TaskTriggerType | str
     interval_seconds: int
     failure_interval_seconds: int
@@ -141,7 +140,7 @@ class TaskViewBase:
         feature_block = feature_block + '\n'
     view_block = '\n'.join(view_classes)
 
-    map_block = f'''
+    map_block = f"""
 TASK_FEATURE_CLASS_MAP = {{
 {chr(10).join(feature_map_lines)}
 }}
@@ -149,7 +148,7 @@ TASK_FEATURE_CLASS_MAP = {{
 TASK_VIEW_CLASS_MAP = {{
 {chr(10).join(view_map_lines)}
 }}
-'''
+"""
 
     return header + feature_block + view_block + map_block
 
@@ -162,4 +161,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -90,10 +90,6 @@ class TaskBase:
         """当前实例完整配置（强类型）。"""
         return self.engine.config
 
-    def get_features(self, task_name: str) -> dict[str, Any]:
-        """获取任务特性开关字典。"""
-        return self.engine.get_task_features(task_name)
-
     def align_view_by_background_tree(
         self,
         *,
@@ -154,25 +150,8 @@ class TaskBase:
 
     def is_task_enabled(self, task_name: str) -> bool:
         """按任务名读取调度启用状态。"""
-        tasks_cfg = getattr(getattr(self.engine, 'config', None), 'tasks', None)
-        if tasks_cfg is None:
-            return False
-        if isinstance(tasks_cfg, dict):
-            cfg = tasks_cfg.get(str(task_name))
-        else:
-            cfg = getattr(tasks_cfg, str(task_name), None)
-        return bool(getattr(cfg, 'enabled', False))
-
-    @staticmethod
-    def has_feature(features: Mapping[str, Any] | None, key: str, default: bool = False) -> bool:
-        """读取特性开关并归一化为 bool。"""
-        if not isinstance(features, Mapping):
-            return bool(default)
-        return bool(features.get(str(key), default))
-
-    def is_feature_enabled(self, task_name: str, key: str, default: bool = False) -> bool:
-        """按任务名读取某个特性开关。"""
-        return self.has_feature(self.get_features(task_name), key, default=default)
+        cfg = self.config.tasks.get(str(task_name))
+        return bool(cfg and cfg.enabled)
 
     @staticmethod
     def parse_truthy(value: Any) -> bool:

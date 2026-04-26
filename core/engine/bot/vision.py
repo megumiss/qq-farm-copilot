@@ -36,8 +36,6 @@ class BotVisionMixin:
                 return None
             window = initialized_window
 
-        platform = getattr(self.config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
         if effective_mode == RunMode.FOREGROUND:
             self.window_manager.activate_window()

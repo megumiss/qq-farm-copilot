@@ -20,7 +20,6 @@ class TaskViewBase:
     name: str
     enabled: bool
     config_enabled: bool
-    priority: int
     trigger: TaskTriggerType | str
     interval_seconds: int
     failure_interval_seconds: int

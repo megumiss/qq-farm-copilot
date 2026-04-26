@@ -63,12 +63,6 @@ class ConfigModel(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
 
-def is_background_mode_supported(window_platform: WindowPlatform | str) -> bool:
-    """判断当前平台是否支持后台模式。"""
-    _ = window_platform
-    return True
-
-
 def resolve_effective_run_mode(run_mode: RunMode | str, window_platform: WindowPlatform | str) -> RunMode:
     """根据配置计算生效运行模式。"""
     _ = window_platform
@@ -164,15 +158,6 @@ def normalize_task_enabled_time_range(value: Any) -> str:
             return f'{start}-{end}'
         return DEFAULT_TASK_ENABLED_TIME_RANGE
     return DEFAULT_TASK_ENABLED_TIME_RANGE
-
-
-def resolve_task_min_interval_seconds(executor_cfg) -> int:
-    """解析任务最小执行间隔（秒）。"""
-    try:
-        value = int(getattr(executor_cfg, 'min_task_interval_seconds', DEFAULT_MIN_TASK_INTERVAL_SECONDS))
-    except Exception:
-        value = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    return max(1, value)
 
 
 def normalize_executor_task_order(value: Any) -> str:

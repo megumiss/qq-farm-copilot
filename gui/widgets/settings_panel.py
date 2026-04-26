@@ -450,7 +450,7 @@ class SettingsPanel(QWidget):
         self._save()
 
     def _resolve_logs_path_text(self) -> str:
-        config_path = str(getattr(self.config, '_config_path', '') or '').strip()
+        config_path = str(self.config._config_path or '').strip()
         if config_path:
             try:
                 cfg_path = Path(config_path).resolve()
