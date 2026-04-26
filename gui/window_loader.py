@@ -5,6 +5,8 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any, Callable
 
+from models.config import AppConfig
+
 GUI_MODULE = 'gui.main_window_core'
 GUI_API_VERSION = 2
 BOOT_PROTOCOL = 1
@@ -30,7 +32,7 @@ def _load_builder() -> Callable[[Any, dict[str, Any]], Any]:
     return builder
 
 
-def build_main_window(config: Any):
+def build_main_window(config: AppConfig):
     builder = _load_builder()
     return builder(
         config,

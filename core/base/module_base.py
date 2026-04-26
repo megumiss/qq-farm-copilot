@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -11,6 +11,7 @@ from loguru import logger
 from core.base.button import Button
 from core.base.timer import Timer
 from core.vision.cv_detector import CVDetector
+from models.config import AppConfig
 
 if TYPE_CHECKING:
     from core.platform.device import Device
@@ -19,7 +20,9 @@ if TYPE_CHECKING:
 class ModuleBase:
     """提供按钮识别与点击的基础能力，供 UI/任务模块复用。"""
 
-    def __init__(self, config: Any, detector: CVDetector, device: Device):
+    config: AppConfig
+
+    def __init__(self, config: AppConfig, detector: CVDetector, device: Device):
         """注入配置、检测器与设备对象，并注册统一的按钮匹配入口。"""
         self.config = config
         self.cv_detector = detector

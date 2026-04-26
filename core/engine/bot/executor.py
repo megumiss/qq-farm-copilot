@@ -26,6 +26,7 @@ from core.exceptions import (
 )
 from core.platform.device import DeviceStuckError, DeviceTooManyClickError
 from models.config import (
+    AppConfig,
     DEFAULT_TASK_ENABLED_TIME_RANGE,
     TaskScheduleItemConfig,
     TaskTriggerType,
@@ -50,6 +51,8 @@ from utils.feature_policy import get_forced_off_features
 
 class BotExecutorMixin:
     """Bot 执行器与调度相关逻辑。"""
+
+    config: AppConfig
 
     _NEXT_RUN_PARSE_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M')
 

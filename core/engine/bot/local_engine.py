@@ -8,6 +8,7 @@ from core.engine.bot.bootstrap import BotInitMixin
 from core.engine.bot.executor import BotExecutorMixin
 from core.engine.bot.runtime import BotRuntimeMixin
 from core.engine.bot.vision import BotVisionMixin
+from models.config import AppConfig
 
 
 class LocalBotEngine(BotInitMixin, BotExecutorMixin, BotRuntimeMixin, BotVisionMixin, QObject):
@@ -20,5 +21,11 @@ class LocalBotEngine(BotInitMixin, BotExecutorMixin, BotRuntimeMixin, BotVisionM
     detection_result = pyqtSignal(object)
     config_updated = pyqtSignal(dict)
 
-    def __init__(self, config, *, runtime_paths=None, instance_id: str = 'default'):
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        runtime_paths: dict[str, str] | None = None,
+        instance_id: str = 'default',
+    ):
         super().__init__(config, runtime_paths=runtime_paths, instance_id=instance_id)

@@ -9,12 +9,14 @@ import numpy as np
 from PIL import Image as PILImage
 
 from core.vision.cv_detector import DetectResult
-from models.config import RunMode, resolve_effective_run_mode
+from models.config import AppConfig, RunMode, resolve_effective_run_mode
 from models.farm_state import Action, ActionType
 
 
 class BotVisionMixin:
     """Bot 截图、识别与点击桥接逻辑。"""
+
+    config: AppConfig
 
     def _prepare_window(self) -> tuple | None:
         """刷新并激活窗口，返回当前有效截图区域。"""

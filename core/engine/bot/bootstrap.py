@@ -23,6 +23,8 @@ from utils.template_paths import normalize_template_platform
 class BotInitMixin:
     """Bot 初始化装配逻辑。"""
 
+    config: AppConfig
+
     def __init__(
         self,
         config: AppConfig,

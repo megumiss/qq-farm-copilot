@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 class BotRuntimeMixin:
     """Bot 生命周期与运行态控制逻辑。"""
 
+    config: AppConfig
+
     _WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS = 15.0
     _WINDOW_LAUNCH_POLL_INTERVAL_SECONDS = 1.0
     _WINDOW_LAUNCH_COOLDOWN_SECONDS = 15.0
