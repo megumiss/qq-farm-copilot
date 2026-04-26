@@ -1,4 +1,5 @@
 {
+  "window_shortcut_path": "",
   "window_title_keyword": "QQ经典农场",
   "window_select_rule": "auto",
   "safety": {
@@ -108,11 +109,15 @@
   },
   "executor": {
     "min_task_interval_seconds": 5,
-    "empty_queue_policy": "stay",
     "task_order": "land_scan>main>friend>sell>reward>gift>share",
     "default_success_interval": 5,
-    "default_failure_interval": 5,
-    "max_failures": 3
+    "default_failure_interval": 5
+  },
+  "recovery": {
+    "task_restart_attempts": 3,
+    "task_retry_delay_seconds": 1,
+    "startup_retry_step_sleep_seconds": 0.5,
+    "startup_stabilize_timeout_seconds": 90.0
   },
   "planting": {
     "strategy": "latest_level",

@@ -18,13 +18,26 @@ class BotVisionMixin:
 
     def _prepare_window(self) -> tuple | None:
         """刷新并激活窗口，返回当前有效截图区域。"""
-        platform = getattr(self.config.planting, 'window_platform', 'qq')
-        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
-        window = self.window_manager.refresh_window_info(
-            self.config.window_title_keyword, self.config.window_select_rule, platform_value
+        window, launched = self._resolve_target_window(
+            allow_shortcut_launch=True,
+            wait_timeout=15.0,
+            poll_interval=0.5,
+            emit_hint=False,
         )
         if not window:
             return None
+        if launched:
+            initialized_window, initialized_rect = self._initialize_window_after_launch(
+                window=window,
+                emit_hint=True,
+                reason='检测到窗口被重新拉起',
+            )
+            if initialized_window is None or initialized_rect is None:
+                return None
+            window = initialized_window
+
+        platform = getattr(self.config.planting, 'window_platform', 'qq')
+        platform_value = platform.value if hasattr(platform, 'value') else str(platform)
         effective_mode = resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
         if effective_mode == RunMode.FOREGROUND:
             self.window_manager.activate_window()

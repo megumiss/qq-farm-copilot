@@ -28,6 +28,12 @@ class DeviceTooManyClickError(RuntimeError):
 class Device:
     """提供 `Device` 的设备能力适配接口。"""
 
+    _STUCK_SECONDS = 180.0
+    _STUCK_LONG_WAIT_SECONDS = 300.0
+    _CLICK_RECORD_MAXLEN = 30
+    _TOO_MANY_CLICK_SINGLE_THRESHOLD = 20
+    _TOO_MANY_CLICK_DUAL_THRESHOLD = 12
+
     def __init__(self, engine: Any):
         """初始化对象并准备运行所需状态。"""
         self.engine = engine
@@ -35,7 +41,7 @@ class Device:
         self.image: np.ndarray | None = None
         self.preview_image: PILImage.Image | None = None
         self.detect_record: set[str] = set()
-        self.click_record = deque(maxlen=15)
+        self.click_record = deque(maxlen=self._CLICK_RECORD_MAXLEN)
         self.stuck_long_wait_list = {'login_check', 'pause'}
         self._stuck_started_at = time.perf_counter()
         self._screenshot_interval_seconds = self._resolve_screenshot_interval_seconds()
@@ -312,12 +318,16 @@ class Device:
         for key in self.click_record:
             count[key] = count.get(key, 0) + 1
         sorted_counts = sorted(count.items(), key=lambda item: item[1], reverse=True)
-        if sorted_counts[0][1] >= 12:
+        if sorted_counts[0][1] >= self._TOO_MANY_CLICK_SINGLE_THRESHOLD:
             logger.warning(f'Too many click for one target: {sorted_counts[0][0]}')
             logger.warning(f'History click: {[str(prev) for prev in self.click_record]}')
             self.click_record_clear()
             raise DeviceTooManyClickError(f'too many click for `{sorted_counts[0][0]}`')
-        if len(sorted_counts) >= 2 and sorted_counts[0][1] >= 6 and sorted_counts[1][1] >= 6:
+        if (
+            len(sorted_counts) >= 2
+            and sorted_counts[0][1] >= self._TOO_MANY_CLICK_DUAL_THRESHOLD
+            and sorted_counts[1][1] >= self._TOO_MANY_CLICK_DUAL_THRESHOLD
+        ):
             logger.warning(f'Too many click between two targets: {sorted_counts[0][0]}, {sorted_counts[1][0]}')
             logger.warning(f'History click: {[str(prev) for prev in self.click_record]}')
             self.click_record_clear()
@@ -332,9 +342,9 @@ class Device:
     def stuck_record_check(self):
         """检查是否长时间无有效点击。"""
         elapsed = time.perf_counter() - self._stuck_started_at
-        if elapsed < 360.0:
+        if elapsed < self._STUCK_SECONDS:
             return False
-        if elapsed < 480.0:
+        if elapsed < self._STUCK_LONG_WAIT_SECONDS:
             for button in self.stuck_long_wait_list:
                 if button in self.detect_record:
                     return False

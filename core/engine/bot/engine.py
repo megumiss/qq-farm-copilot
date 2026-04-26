@@ -40,6 +40,11 @@ class _SchedulerSnapshot:
             'running_tasks': 0,
             'pending_tasks': 0,
             'waiting_tasks': 0,
+            'recovery_total': 0,
+            'recovery_last_error': '--',
+            'recovery_last_action': '--',
+            'recovery_last_outcome': '--',
+            'recovery_last_task': '--',
             'elapsed': '--',
             'state': 'idle',
         }
@@ -122,6 +127,18 @@ class BotEngine(QObject):
             return
         self._ensure_worker()
 
+    def _log_local(self, level: str, message: str) -> None:
+        """主进程本地日志：写 logger，并同步转发到 UI。"""
+        text = str(message or '').strip()
+        if not text:
+            return
+        raw_level = str(level or 'INFO').strip().upper()
+        allowed = {'TRACE', 'DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR', 'CRITICAL'}
+        use_level = raw_level if raw_level in allowed else 'INFO'
+        logger.log(use_level, text)
+        stamp = time.strftime('%H:%M:%S')
+        self.log_message.emit(f'{stamp} | {use_level:<7} | {text}')
+
     def _ensure_worker(self) -> bool:
         if self._worker and self._worker.is_alive():
             return True
@@ -148,7 +165,7 @@ class BotEngine(QObject):
             self._event_queue = event_queue
             return bool(self._worker.is_alive())
         except Exception as exc:
-            self.log_message.emit(f'启动 worker 失败: {exc}')
+            self._log_local('ERROR', f'启动 worker 失败: {exc}')
             for q in (command_queue, event_queue):
                 if q is None:
                     continue
@@ -229,6 +246,11 @@ class BotEngine(QObject):
             return
 
     def _drain_events(self, max_events: int = 200) -> None:
+        if self._worker is not None and not self._worker.is_alive():
+            self._log_local('ERROR', 'worker 进程已退出，已重置为 idle')
+            self._shutdown_worker(force=False)
+            return
+
         if self._event_queue is None:
             return
 
@@ -285,7 +307,7 @@ class BotEngine(QObject):
         except Exception as exc:
             if wait:
                 self._pending_response_ids.discard(req_id)
-            self.log_message.emit(f'发送命令失败 `{cmd}`: {exc}')
+            self._log_local('ERROR', f'发送命令失败 `{cmd}`: {exc}')
             return False
 
         if not wait:
@@ -295,6 +317,10 @@ class BotEngine(QObject):
             deadline = time.time() + max(0.1, float(timeout))
             app = QCoreApplication.instance()
             while time.time() < deadline:
+                # 若 worker 已被外部 stop/shutdown 回收，当前同步命令应立即中断，
+                # 避免在 close 竞态下继续等待到超时。
+                if self._worker is None or not self._worker.is_alive():
+                    return False
                 self._drain_events()
                 result = self._responses.pop(req_id, None)
                 if result is not None:
@@ -302,7 +328,7 @@ class BotEngine(QObject):
                     if not ok:
                         err = str(result.get('error') or '').strip()
                         if err:
-                            self.log_message.emit(f'命令失败 `{cmd}`: {err}')
+                            self._log_local('ERROR', f'命令失败 `{cmd}`: {err}')
                     return ok
                 if app is not None:
                     app.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 5)
@@ -311,7 +337,7 @@ class BotEngine(QObject):
             self._pending_response_ids.discard(req_id)
             self._responses.pop(req_id, None)
 
-        self.log_message.emit(f'命令超时 `{cmd}`')
+        self._log_local('ERROR', f'命令超时 `{cmd}`')
         return False
 
     def _shutdown_worker(self, *, force: bool = True) -> None:
@@ -376,7 +402,7 @@ class BotEngine(QObject):
         cold_start = not (self._worker and self._worker.is_alive())
         start_timeout = 120.0 if cold_start else 30.0
         if cold_start:
-            self.log_message.emit('引擎冷启动中，正在预热组件...')
+            self._log_local('INFO', '引擎冷启动中，正在预热组件...')
         ok = self._send_command('start', wait=True, timeout=start_timeout, ensure_worker=True)
         if not ok:
             # 启动失败时回收空闲 worker，避免残留后台进程。
@@ -398,7 +424,7 @@ class BotEngine(QObject):
     def stop(self, *, keep_prewarm: bool = True):
         # 对齐 NIKKE：停止时进程级强停，不依赖业务侧协作取消。
         self._shutdown_worker(force=True)
-        self.log_message.emit('Bot已停止')
+        self._log_local('INFO', 'Bot已停止')
         if keep_prewarm and self._allow_idle_prewarm:
             QTimer.singleShot(0, self._prewarm_worker)
 

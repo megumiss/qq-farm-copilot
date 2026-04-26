@@ -33,14 +33,16 @@
 - [x] 地块巡查
 - [x] 任务调度时间自定义
 - [x] 偷取统计
-- [ ] 异常通知
-- [ ] 自动重启
+- [x] 一键启动
+- [ ] 异常发送通知
+- [x] 异常自动重启
 - [x] 支持QQ/微信平台后台运行
 - [x] 支持QQ/微信平台多开
 
 ## 当前实现概览
 
 - 架构：`BotEngine` + `TaskExecutor` + UI 页面识别（`core/ui`）
+- 异常恢复：`executor/runtime` 统一异常分支处理 + 内置 `restart` 任务重启窗口
 - 调度：统一任务执行器，支持 `INTERVAL` / `DAILY`
 - 实例配置：`%APPDATA%\QQFarmCopilot\instances\<instance_id>\configs\config.json` 中 `tasks` 为**动态字典**
 - 全局设置：`%APPDATA%\QQFarmCopilot\app_settings.json` 支持 `logging.retention_days`（日志保留天数，单位天）
@@ -114,9 +116,10 @@ python main.py
 ### 首次运行建议检查
 
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
-2. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
-3. `planting.window_platform` 与当前平台一致（QQ / 微信）。
-4. 游戏窗口已打开且未最小化。
+2. 可在设置里选择小程序“添加到桌面”后生成的快捷方式（`window_shortcut_path`，`.lnk`）。
+3. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
+4. `planting.window_platform` 与当前平台一致（QQ / 微信）。
+5. 游戏窗口已打开且未最小化。
 
 热键：
 
@@ -137,11 +140,13 @@ python main.py
 核心字段：
 
 - `window_title_keyword`：窗口标题关键词（默认 `QQ经典农场`）
+- `window_shortcut_path`：小程序桌面快捷方式路径（`.lnk`）
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
 - `planting`：种植策略、等级、平台、窗口位置、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
-- `executor`：空队列策略、默认间隔、最大失败次数、`min_task_interval_seconds`（任务最小执行间隔）
+- `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
+- `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
 - `executor.task_order`：任务固定顺序配置（示例：`main>friend>land_scan>share>reward>gift>sell`）
 - `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典

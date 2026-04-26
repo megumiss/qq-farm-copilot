@@ -273,20 +273,9 @@ class ExecutorConfig(BaseModel):
     """定义 `ExecutorConfig` 的配置数据结构与默认值。"""
 
     min_task_interval_seconds: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    empty_queue_policy: str = 'stay'
     task_order: str = DEFAULT_EXECUTOR_TASK_ORDER
     default_success_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
     default_failure_interval: int = DEFAULT_MIN_TASK_INTERVAL_SECONDS
-    max_failures: int = 3
-
-    @field_validator('empty_queue_policy', mode='before')
-    @classmethod
-    def _normalize_empty_queue_policy(cls, value):
-        """规范化 `empty_queue_policy` 输入值。"""
-        text = str(value or 'stay').strip().lower()
-        if text not in {'stay', 'goto_main'}:
-            return 'stay'
-        return text
 
     @field_validator('task_order', mode='before')
     @classmethod
@@ -305,6 +294,47 @@ class ExecutorConfig(BaseModel):
     def _normalize_default_intervals(cls, value):
         """规范化执行器默认间隔（秒）。"""
         return max(1, int(value))
+
+
+class RecoveryConfig(BaseModel):
+    """定义 `RecoveryConfig` 的配置数据结构与默认值。"""
+
+    task_restart_attempts: int = 3
+    task_retry_delay_seconds: int = 1
+    startup_retry_step_sleep_seconds: float = 0.5
+    startup_stabilize_timeout_seconds: float = 90.0
+
+    @field_validator('task_restart_attempts', mode='before')
+    @classmethod
+    def _normalize_task_restart_attempts(cls, value):
+        """规范化任务异常重启次数。"""
+        return max(1, int(value))
+
+    @field_validator('task_retry_delay_seconds', mode='before')
+    @classmethod
+    def _normalize_task_retry_delay_seconds(cls, value):
+        """规范化任务重试延迟。"""
+        return max(1, int(value))
+
+    @field_validator('startup_retry_step_sleep_seconds', mode='before')
+    @classmethod
+    def _normalize_startup_retry_step_sleep_seconds(cls, value):
+        """规范化启动重试步进睡眠（秒）。"""
+        try:
+            seconds = float(value)
+        except Exception:
+            seconds = 0.5
+        return max(0.1, seconds)
+
+    @field_validator('startup_stabilize_timeout_seconds', mode='before')
+    @classmethod
+    def _normalize_startup_stabilize_timeout_seconds(cls, value):
+        """规范化启动收敛总超时（秒）。"""
+        try:
+            seconds = float(value)
+        except Exception:
+            seconds = 90.0
+        return max(5.0, seconds)
 
 
 class PlantingConfig(BaseModel):
@@ -534,12 +564,14 @@ class LandDetailConfig(BaseModel):
 class AppConfig(BaseModel):
     """定义 `AppConfig` 的配置数据结构与默认值。"""
 
+    window_shortcut_path: str = ''
     window_title_keyword: str = 'QQ经典农场'
     window_select_rule: str = 'auto'
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
     tasks: dict[str, TaskScheduleItemConfig] = Field(default_factory=dict)
     executor: ExecutorConfig = Field(default_factory=ExecutorConfig)
+    recovery: RecoveryConfig = Field(default_factory=RecoveryConfig)
     planting: PlantingConfig = Field(default_factory=PlantingConfig)
     land: LandDetailConfig = Field(default_factory=LandDetailConfig)
     sell: SellConfig = Field(default_factory=SellConfig)
