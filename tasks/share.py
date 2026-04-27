@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import pyautogui
 from loguru import logger
 
 from core.engine.task.registry import TaskResult
 from core.ui.assets import BTN_CLAIM_YELLOW, BTN_SHARE_GREEN, BTN_SHARE_RED_POINT
 from core.ui.page import page_main, page_share
 from tasks.base import TaskBase
+from utils.win_input import press_escape
 
 
 class TaskShare(TaskBase):
@@ -53,6 +53,7 @@ class TaskShare(TaskBase):
             if self.ui.appear_then_click(BTN_SHARE_GREEN, offset=30, interval=3, static=False):
                 self.ui.device.sleep(1 + times * 2)
                 times += 1
-                pyautogui.press('escape')
+                if not press_escape():
+                    logger.warning('每日分享: 发送 ESC 失败')
                 continue
         return

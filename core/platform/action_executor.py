@@ -6,7 +6,6 @@ import random
 import time
 from ctypes import wintypes
 
-import pyautogui
 from loguru import logger
 
 from models.config import RunMode
@@ -19,12 +18,10 @@ WM_MOUSEMOVE = 0x0200
 WM_LBUTTONDOWN = 0x0201
 WM_LBUTTONUP = 0x0202
 MK_LBUTTON = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
 
 user32 = ctypes.windll.user32
-
-# 禁用 pyautogui 的安全暂停（我们自己控制延迟）
-pyautogui.PAUSE = 0.1
-pyautogui.FAILSAFE = True
 
 
 class ActionExecutor:
@@ -148,11 +145,62 @@ class ActionExecutor:
         return True
 
     @staticmethod
-    def _click_foreground(abs_x: int, abs_y: int) -> bool:
+    def _set_cursor_pos(abs_x: int, abs_y: int) -> bool:
+        """将系统鼠标移动到绝对坐标。"""
+        return bool(user32.SetCursorPos(int(abs_x), int(abs_y)))
+
+    @staticmethod
+    def _get_cursor_pos() -> tuple[int, int]:
+        """读取当前鼠标绝对坐标。"""
+        point = wintypes.POINT()
+        ok = bool(user32.GetCursorPos(ctypes.byref(point)))
+        if not ok:
+            return 0, 0
+        return int(point.x), int(point.y)
+
+    @classmethod
+    def _move_cursor_foreground(cls, abs_x: int, abs_y: int, duration: float = 0.0) -> bool:
+        """前台模式移动鼠标，支持负坐标多屏。"""
+        target_x = int(abs_x)
+        target_y = int(abs_y)
+        total_duration = max(0.0, float(duration))
+        if total_duration <= 0:
+            return cls._set_cursor_pos(target_x, target_y)
+
+        start_x, start_y = cls._get_cursor_pos()
+        steps = max(1, min(120, int(round(total_duration * 120.0))))
+        step_sleep = total_duration / float(steps)
+        for step in range(1, steps + 1):
+            ratio = float(step) / float(steps)
+            move_x = int(round(start_x + (target_x - start_x) * ratio))
+            move_y = int(round(start_y + (target_y - start_y) * ratio))
+            if not cls._set_cursor_pos(move_x, move_y):
+                return False
+            if step < steps and step_sleep > 0:
+                time.sleep(step_sleep)
+        return True
+
+    @staticmethod
+    def _mouse_left_down_foreground() -> bool:
+        """前台模式按下鼠标左键。"""
+        user32.mouse_event(int(MOUSEEVENTF_LEFTDOWN), 0, 0, 0, 0)
+        return True
+
+    @staticmethod
+    def _mouse_left_up_foreground() -> bool:
+        """前台模式释放鼠标左键。"""
+        user32.mouse_event(int(MOUSEEVENTF_LEFTUP), 0, 0, 0, 0)
+        return True
+
+    @classmethod
+    def _click_foreground(cls, abs_x: int, abs_y: int) -> bool:
         """前台鼠标点击。"""
-        pyautogui.moveTo(int(abs_x), int(abs_y), duration=0.02)
-        time.sleep(0.05)
-        pyautogui.click(int(abs_x), int(abs_y))
+        if not cls._move_cursor_foreground(int(abs_x), int(abs_y), duration=0.02):
+            return False
+        time.sleep(0.03)
+        cls._mouse_left_down_foreground()
+        time.sleep(0.03)
+        cls._mouse_left_up_foreground()
         return True
 
     @DecoratorConfig.when(RUN_MODE=RunMode.BACKGROUND)
@@ -229,8 +277,7 @@ class ActionExecutor:
 
     @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
     def _move_by_mode(self, abs_x: int, abs_y: int, duration: float = 0.0) -> bool:
-        pyautogui.moveTo(abs_x, abs_y, duration=max(0.0, float(duration)))
-        return True
+        return self._move_cursor_foreground(int(abs_x), int(abs_y), duration=max(0.0, float(duration)))
 
     def mouse_down(self) -> bool:
         """按下鼠标左键。"""
@@ -252,8 +299,7 @@ class ActionExecutor:
 
     @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
     def _mouse_down_by_mode(self) -> bool:
-        pyautogui.mouseDown()
-        return True
+        return self._mouse_left_down_foreground()
 
     def mouse_up(self) -> bool:
         """释放鼠标左键。"""
@@ -275,8 +321,7 @@ class ActionExecutor:
 
     @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
     def _mouse_up_by_mode(self) -> bool:
-        pyautogui.mouseUp()
-        return True
+        return self._mouse_left_up_foreground()
 
     def execute_action(self, action: Action) -> OperationResult:
         """执行单个操作"""
@@ -431,22 +476,29 @@ class ActionExecutor:
         else:
             log_p2 = (int(rel_p2[0]), int(rel_p2[1]))
 
+        pressed = False
         try:
-            pyautogui.moveTo(x1, y1, duration=0.0)
-            pyautogui.mouseDown()
-            pyautogui.moveTo(x2, y2, duration=duration)
+            if not self._move_cursor_foreground(x1, y1, duration=0.0):
+                return False
+            self._mouse_left_down_foreground()
+            pressed = True
+            if not self._move_cursor_foreground(x2, y2, duration=duration):
+                return False
             if hold_value > 0:
                 time.sleep(hold_value)
-            pyautogui.mouseUp()
+            self._mouse_left_up_foreground()
+            pressed = False
             logger.info(f'滑动: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]})')
             return True
         except Exception as e:
-            try:
-                pyautogui.mouseUp()
-            except Exception:
-                pass
             logger.error(f'滑动失败: ({log_p1[0]}, {log_p1[1]}) -> ({log_p2[0]}, {log_p2[1]}) | 错误: {e}')
             return False
+        finally:
+            if pressed:
+                try:
+                    self._mouse_left_up_foreground()
+                except Exception:
+                    pass
 
     def _swipe_decel_profile(
         self,
@@ -479,7 +531,6 @@ class ActionExecutor:
         weighted_steps = float(head_steps) + float(tail_steps) * tail_weight
         head_step_duration = total_duration / weighted_steps
         tail_step_duration = head_step_duration * tail_weight
-        planned_duration = head_steps * head_step_duration + tail_steps * tail_step_duration
 
         if not self.move_abs(x1, y1, duration=0.0):
             return False

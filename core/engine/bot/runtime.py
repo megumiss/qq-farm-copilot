@@ -422,8 +422,9 @@ class BotRuntimeMixin:
             logger.info(f'{reason}，执行窗口初始化...')
 
         pos_value = self.config.planting.window_position.value
+        screen_index = int(self.config.planting.window_screen_index)
         platform_value = self.config.planting.window_platform.value
-        self.window_manager.resize_window(pos_value, platform_value)
+        self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
         self._wait_window_capture_stable(timeout=0.5, interval=0.04)
 
         refreshed = self.window_manager.refresh_cached_window_info() or self._find_window_silent()
@@ -582,6 +583,7 @@ class BotRuntimeMixin:
         loop_count = 0
         last_progress_log_at = 0.0
         pos_value = self.config.planting.window_position.value
+        screen_index = int(self.config.planting.window_screen_index)
         platform_value = self.config.planting.window_platform.value
         cached_window = self.window_manager.refresh_cached_window_info() or self._find_window_silent()
         last_window_hwnd = int(getattr(cached_window, 'hwnd', 0) or 0)
@@ -608,7 +610,7 @@ class BotRuntimeMixin:
             current_hwnd = int(getattr(window, 'hwnd', 0) or 0)
             if current_hwnd > 0 and current_hwnd != last_window_hwnd:
                 logger.info(f'启动窗口句柄变化: 0x{last_window_hwnd:X} -> 0x{current_hwnd:X}，重新校准窗口尺寸')
-                self.window_manager.resize_window(pos_value, platform_value)
+                self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
                 self._wait_window_capture_stable(timeout=0.5, interval=0.04)
                 refreshed = self.window_manager.refresh_cached_window_info() or self._find_window_silent()
                 if refreshed is not None:
@@ -617,7 +619,7 @@ class BotRuntimeMixin:
             if current_hwnd > 0:
                 last_window_hwnd = current_hwnd
 
-            rect = self._apply_window_runtime_context(window)
+            self._apply_window_runtime_context(window)
 
             try:
                 self.ui.ui_wait_loading()
@@ -707,8 +709,9 @@ class BotRuntimeMixin:
 
         # [窗口阶段] 调整窗口尺寸与位置，确保截图区域稳定。
         pos_value = self.config.planting.window_position.value
+        screen_index = int(self.config.planting.window_screen_index)
         platform_value = self.config.planting.window_platform.value
-        self.window_manager.resize_window(pos_value, platform_value)
+        self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
         self._wait_window_capture_stable(timeout=0.5, interval=0.04)
         # 统一走 _find_window_silent（已包含平台过滤 + index 规则），避免非 auto 分支绕过平台筛选。
         window = self.window_manager.refresh_cached_window_info() or self._find_window_silent()

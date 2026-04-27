@@ -350,6 +350,7 @@ class PlantingConfig(ConfigModel):
     player_level: int = 10
     level_ocr_enabled: bool = True
     window_platform: WindowPlatform = WindowPlatform.QQ
+    window_screen_index: int = 0
     window_position: WindowPosition = WindowPosition.LEFT_CENTER
     planting_stable_seconds: float = 0.5
     planting_stable_timeout_seconds: float = 3.0
@@ -363,6 +364,18 @@ class PlantingConfig(ConfigModel):
         except Exception:
             level = 1
         return max(1, min(999, level))
+
+    @field_validator('window_screen_index', mode='before')
+    @classmethod
+    def _normalize_window_screen_index(cls, value):
+        """规范化 `window_screen_index` 输入值。"""
+        if isinstance(value, bool):
+            return 0
+        try:
+            index = int(value)
+        except Exception:
+            index = 0
+        return max(0, index)
 
 
 LAND_COL_COUNT = 6

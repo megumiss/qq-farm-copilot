@@ -19,7 +19,7 @@ from qfluentwidgets import (
     SpinBox,
 )
 
-from core.platform.window_manager import WindowInfo, WindowManager
+from core.platform.window_manager import DisplayInfo, WindowInfo, WindowManager
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
 from models.game_data import get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
@@ -182,6 +182,7 @@ class SettingsPanel(QWidget):
         select_layout.addWidget(self.refresh_btn)
         env_form.addRow(self._field_label('选择窗口', env_card), select_row)
 
+        self.window_screen = ComboBox(env_card)
         self.window_position = ComboBox(env_card)
         self.window_position.addItem('左中', userData=WindowPosition.LEFT_CENTER.value)
         self.window_position.addItem('居中', userData=WindowPosition.CENTER.value)
@@ -190,7 +191,22 @@ class SettingsPanel(QWidget):
         self.window_position.addItem('右上', userData=WindowPosition.TOP_RIGHT.value)
         self.window_position.addItem('左下', userData=WindowPosition.LEFT_BOTTOM.value)
         self.window_position.addItem('右下', userData=WindowPosition.RIGHT_BOTTOM.value)
-        env_form.addRow(self._field_label('窗口位置', env_card), self.window_position)
+        window_pos_row = QWidget(env_card)
+        window_pos_layout = QHBoxLayout(window_pos_row)
+        window_pos_layout.setContentsMargins(0, 0, 0, 0)
+        window_pos_layout.setSpacing(8)
+        window_pos_layout.addWidget(CaptionLabel('屏幕', window_pos_row))
+        window_pos_layout.addWidget(self.window_screen, 1)
+        window_pos_layout.addWidget(CaptionLabel('位置', window_pos_row))
+        window_pos_layout.addWidget(self.window_position, 1)
+        env_form.addRow(self._field_label('窗口位置', env_card), window_pos_row)
+        window_position_tip = CaptionLabel(
+            '小程序窗口限制，只建议主屏幕和目标屏幕缩放相同时指定屏幕。',
+            env_card,
+        )
+        window_position_tip.setWordWrap(True)
+        window_position_tip.setStyleSheet('color: #d97706;')
+        env_form.addRow(self._field_label('', env_card), window_position_tip)
 
         advanced_card, advanced_form = self._build_group_card(
             content,
@@ -299,6 +315,7 @@ class SettingsPanel(QWidget):
             self.shortcut_launch_delay.valueChanged,
             self.window_restart_delay.valueChanged,
             self.window_select.currentIndexChanged,
+            self.window_screen.currentIndexChanged,
             self.window_position.currentIndexChanged,
             self.delay_min.valueChanged,
             self.delay_max.valueChanged,
@@ -428,6 +445,24 @@ class SettingsPanel(QWidget):
         self._set_combo_data(self.window_select, current)
         self.window_select.blockSignals(False)
 
+    def _refresh_displays(self) -> None:
+        current = int(self.window_screen.currentData() or self.config.planting.window_screen_index or 0)
+        self.window_screen.blockSignals(True)
+        self.window_screen.clear()
+        displays = self._wm.list_displays()
+        primary_index = 1
+        for info in displays:
+            if bool(info.is_primary):
+                primary_index = int(info.index)
+            self.window_screen.addItem(self._format_display_option_label(info), userData=int(info.index))
+        if self.window_screen.count() <= 0:
+            self.window_screen.addItem('#1 0x0 100%', userData=1)
+        target = int(primary_index if current <= 0 else current)
+        self._set_combo_data(self.window_screen, target)
+        if self.window_screen.currentIndex() < 0 and self.window_screen.count() > 0:
+            self.window_screen.setCurrentIndex(0)
+        self.window_screen.blockSignals(False)
+
     @staticmethod
     def _format_window_option_label(index: int, info: WindowInfo) -> str:
         title = str(info.title).replace('\n', ' ').strip()
@@ -446,6 +481,11 @@ class SettingsPanel(QWidget):
             f'({int(info.left)},{int(info.top)}) | '
             f'0x{int(info.hwnd):X}'
         )
+
+    @staticmethod
+    def _format_display_option_label(info: DisplayInfo) -> str:
+        primary_text = ' 主屏' if bool(info.is_primary) else ''
+        return f'#{int(info.index)} {int(info.width)}x{int(info.height)} {int(info.scale_percent)}%{primary_text}'
 
     def _on_keyword_committed(self) -> None:
         self._refresh_windows()
@@ -503,6 +543,8 @@ class SettingsPanel(QWidget):
         self.shortcut_launch_delay.setValue(int(c.window_shortcut_launch_delay_seconds))
         self.window_restart_delay.setValue(int(c.window_restart_delay_seconds))
         self.keyword.setText(str(c.window_title_keyword or ''))
+        self._refresh_displays()
+        self._set_combo_data(self.window_screen, int(c.planting.window_screen_index))
         self._set_combo_data(self.window_position, c.planting.window_position.value)
         self.delay_min.setValue(float(c.safety.random_delay_min))
         self.delay_max.setValue(float(c.safety.random_delay_max))
@@ -536,6 +578,7 @@ class SettingsPanel(QWidget):
         c.window_restart_delay_seconds = int(self.window_restart_delay.value())
         c.window_title_keyword = str(self.keyword.text() or '').strip()
         c.window_select_rule = str(self.window_select.currentData() or 'auto')
+        c.planting.window_screen_index = int(self.window_screen.currentData() or 0)
         c.planting.window_position = WindowPosition(
             str(self.window_position.currentData() or WindowPosition.LEFT_CENTER.value)
         )

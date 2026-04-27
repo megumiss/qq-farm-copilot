@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pyautogui
 from loguru import logger
 
 from core.engine.task.registry import TaskResult
@@ -14,6 +13,7 @@ from core.ui.assets import (
 )
 from core.ui.page import page_main, page_task
 from tasks.base import TaskBase
+from utils.win_input import press_escape
 
 BTN_TASK_DAILY_TAB = ASSET_NAME_TO_CONST.get('btn_task_daily')
 BTN_TASK_GROWTH_TAB = ASSET_NAME_TO_CONST.get('btn_task_growth')
@@ -76,7 +76,8 @@ class TaskReward(TaskBase):
                     BTN_SHARE_YELLOW, offset=30, interval=3, static=False
                 ):
                     self.ui.device.sleep(2)
-                    pyautogui.press('escape')
+                    if not press_escape():
+                        logger.warning('奖励流程: 发送 ESC 失败')
                     continue
                 if platform_value != 'wechat' and self.ui.appear_then_click(
                     BTN_DIRECT_CLAIM, offset=30, interval=1, static=False

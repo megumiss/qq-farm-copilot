@@ -25,6 +25,30 @@ class WindowInfo:
     process_name: str = ''
 
 
+@dataclass
+class DisplayInfo:
+    """封装显示器信息（按序号存取）。"""
+
+    index: int
+    monitor: int
+    left: int
+    top: int
+    right: int
+    bottom: int
+    work_left: int
+    work_top: int
+    work_right: int
+    work_bottom: int
+    width: int
+    height: int
+    work_width: int
+    work_height: int
+    scale_percent: int
+    dpi: int
+    is_primary: bool
+    device_name: str = ''
+
+
 class MONITORINFO(ctypes.Structure):
     """封装 `MONITORINFO` 相关的数据与行为。"""
 
@@ -36,16 +60,31 @@ class MONITORINFO(ctypes.Structure):
     ]
 
 
+class MONITORINFOEX(ctypes.Structure):
+    """扩展版本的显示器信息（含设备名）。"""
+
+    _fields_ = [
+        ('cbSize', ctypes.wintypes.DWORD),
+        ('rcMonitor', ctypes.wintypes.RECT),
+        ('rcWork', ctypes.wintypes.RECT),
+        ('dwFlags', ctypes.wintypes.DWORD),
+        ('szDevice', ctypes.c_wchar * 32),
+    ]
+
+
 class WindowManager:
     """封装 `WindowManager` 相关的数据与行为。"""
 
     TARGET_CLIENT_WIDTH = 540
     TARGET_CLIENT_HEIGHT = 960
+    _MONITORINFOF_PRIMARY = 0x00000001
+    _MONITOR_DEFAULTTONULL = 0
     _MONITOR_DEFAULTTONEAREST = 2
     _SWP_NOZORDER = 0x0004
     _SWP_NOOWNERZORDER = 0x0200
     _GWL_STYLE = -16
     _GWL_EXSTYLE = -20
+    _MDT_EFFECTIVE_DPI = 0
 
     def __init__(self):
         """初始化对象并准备运行所需状态。"""
@@ -158,31 +197,225 @@ class WindowManager:
         except Exception:
             return None
 
-    def _get_work_area_for_window(self, hwnd: int) -> ctypes.wintypes.RECT | None:
-        """获取 `work area for window` 信息。"""
-        user32 = ctypes.windll.user32
-        monitor = 0
+    @staticmethod
+    def _get_system_scale_percent() -> int:
+        """读取系统缩放百分比。"""
         try:
-            monitor = user32.MonitorFromWindow(ctypes.wintypes.HWND(hwnd), self._MONITOR_DEFAULTTONEAREST)
+            dpi = int(ctypes.windll.user32.GetDpiForSystem())
         except Exception:
-            monitor = 0
-        if monitor:
-            monitor_info = MONITORINFO()
-            monitor_info.cbSize = ctypes.sizeof(MONITORINFO)
-            ok = bool(user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)))
-            if ok:
-                return ctypes.wintypes.RECT(
-                    monitor_info.rcWork.left,
-                    monitor_info.rcWork.top,
-                    monitor_info.rcWork.right,
-                    monitor_info.rcWork.bottom,
+            dpi = 96
+        scale = int(round((float(dpi) / 96.0) * 100))
+        return max(50, min(scale, 500))
+
+    def _get_monitor_scale_percent(self, monitor: int) -> int:
+        """读取指定显示器缩放百分比。"""
+        monitor_value = int(monitor or 0)
+        if monitor_value <= 0:
+            return self._get_system_scale_percent()
+        try:
+            shcore = ctypes.windll.shcore
+            dpi_x = ctypes.wintypes.UINT(0)
+            dpi_y = ctypes.wintypes.UINT(0)
+            hr = int(
+                shcore.GetDpiForMonitor(
+                    ctypes.c_void_p(monitor_value),
+                    int(self._MDT_EFFECTIVE_DPI),
+                    ctypes.byref(dpi_x),
+                    ctypes.byref(dpi_y),
                 )
+            )
+            if hr == 0 and int(dpi_x.value) > 0:
+                scale = int(round((float(dpi_x.value) / 96.0) * 100))
+                return max(50, min(scale, 500))
+        except Exception:
+            pass
+        return self._get_system_scale_percent()
+
+    def list_displays(self) -> list[DisplayInfo]:
+        """枚举当前系统显示器列表（按主屏优先）。"""
+        user32 = ctypes.windll.user32
+        displays: list[DisplayInfo] = []
+        monitor_handles: list[int] = []
+
+        callback_type = ctypes.WINFUNCTYPE(
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.wintypes.RECT),
+            ctypes.c_long,
+        )
+
+        def _enum_proc(hmonitor, _hdc, _rect, _lparam) -> int:
+            monitor_handles.append(int(hmonitor or 0))
+            return 1
+
+        enum_proc = callback_type(_enum_proc)
+        try:
+            ok = bool(user32.EnumDisplayMonitors(0, 0, enum_proc, 0))
+            if not ok:
+                monitor_handles.clear()
+        except Exception:
+            monitor_handles.clear()
+
+        for seq, monitor in enumerate(monitor_handles, start=1):
+            if int(monitor) <= 0:
+                continue
+            info = MONITORINFOEX()
+            info.cbSize = ctypes.sizeof(MONITORINFOEX)
+            ok = bool(user32.GetMonitorInfoW(ctypes.c_void_p(int(monitor)), ctypes.byref(info)))
+            if not ok:
+                continue
+
+            left = int(info.rcMonitor.left)
+            top = int(info.rcMonitor.top)
+            right = int(info.rcMonitor.right)
+            bottom = int(info.rcMonitor.bottom)
+            work_left = int(info.rcWork.left)
+            work_top = int(info.rcWork.top)
+            work_right = int(info.rcWork.right)
+            work_bottom = int(info.rcWork.bottom)
+            width = max(0, right - left)
+            height = max(0, bottom - top)
+            work_width = max(0, work_right - work_left)
+            work_height = max(0, work_bottom - work_top)
+            scale_percent = int(self._get_monitor_scale_percent(int(monitor)))
+            dpi = int(round((float(scale_percent) / 100.0) * 96))
+            is_primary = bool(int(info.dwFlags) & int(self._MONITORINFOF_PRIMARY))
+            device_name = str(info.szDevice or '').strip('\x00').strip()
+            displays.append(
+                DisplayInfo(
+                    index=int(seq),
+                    monitor=int(monitor),
+                    left=left,
+                    top=top,
+                    right=right,
+                    bottom=bottom,
+                    work_left=work_left,
+                    work_top=work_top,
+                    work_right=work_right,
+                    work_bottom=work_bottom,
+                    width=width,
+                    height=height,
+                    work_width=work_width,
+                    work_height=work_height,
+                    scale_percent=scale_percent,
+                    dpi=dpi,
+                    is_primary=is_primary,
+                    device_name=device_name,
+                )
+            )
+
+        if not displays:
+            scale_percent = self._get_system_scale_percent()
+            dpi = int(round((float(scale_percent) / 100.0) * 96))
+            screen_w = int(user32.GetSystemMetrics(0))
+            screen_h = int(user32.GetSystemMetrics(1))
+            work_area = ctypes.wintypes.RECT()
+            ok = bool(user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work_area), 0))
+            if ok:
+                work_left = int(work_area.left)
+                work_top = int(work_area.top)
+                work_right = int(work_area.right)
+                work_bottom = int(work_area.bottom)
+            else:
+                work_left = 0
+                work_top = 0
+                work_right = screen_w
+                work_bottom = screen_h
+            displays.append(
+                DisplayInfo(
+                    index=1,
+                    monitor=0,
+                    left=0,
+                    top=0,
+                    right=screen_w,
+                    bottom=screen_h,
+                    work_left=work_left,
+                    work_top=work_top,
+                    work_right=work_right,
+                    work_bottom=work_bottom,
+                    width=max(0, screen_w),
+                    height=max(0, screen_h),
+                    work_width=max(0, work_right - work_left),
+                    work_height=max(0, work_bottom - work_top),
+                    scale_percent=scale_percent,
+                    dpi=dpi,
+                    is_primary=True,
+                    device_name='',
+                )
+            )
+        return displays
+
+    def _resolve_display_for_window(self, hwnd: int) -> DisplayInfo | None:
+        """按窗口句柄解析所在显示器；失败时回退首屏。"""
+        displays = self.list_displays()
+        if not displays:
+            return None
+
+        target_hwnd = int(hwnd or 0)
+        if target_hwnd > 0:
+            try:
+                monitor = int(
+                    ctypes.windll.user32.MonitorFromWindow(
+                        ctypes.wintypes.HWND(target_hwnd),
+                        int(self._MONITOR_DEFAULTTONEAREST),
+                    )
+                    or 0
+                )
+            except Exception:
+                monitor = 0
+            if monitor > 0:
+                for item in displays:
+                    if int(item.monitor) == monitor:
+                        return item
+        return self._primary_display(displays)
+
+    @staticmethod
+    def _primary_display(displays: list[DisplayInfo]) -> DisplayInfo:
+        """在显示器列表中选择主屏；未命中时回退首项。"""
+        for item in displays:
+            if bool(item.is_primary):
+                return item
+        return displays[0]
+
+    def _resolve_display_for_index(self, screen_index: int, hwnd: int = 0) -> DisplayInfo | None:
+        """按配置序号选择显示器；`<=0` 使用主屏。"""
+        displays = self.list_displays()
+        if not displays:
+            return None
+        primary = self._primary_display(displays)
+        idx = int(screen_index)
+        if idx <= 0:
+            return primary
+        for item in displays:
+            if int(item.index) == idx:
+                return item
+        logger.warning(f'屏幕序号越界({idx}/{len(displays)})，回退到主屏#{primary.index}')
+        return primary
+
+    def _get_work_area_for_window(self, hwnd: int) -> ctypes.wintypes.RECT | None:
+        """获取窗口当前所在显示器的工作区。"""
+        display = self._resolve_display_for_window(hwnd)
+        if display is not None:
+            return ctypes.wintypes.RECT(display.work_left, display.work_top, display.work_right, display.work_bottom)
 
         work_area = ctypes.wintypes.RECT()
-        ok = bool(user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work_area), 0))
+        ok = bool(ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work_area), 0))
         if not ok:
             return None
         return work_area
+
+    def _get_work_area_for_screen_index(
+        self, screen_index: int, hwnd: int
+    ) -> tuple[ctypes.wintypes.RECT | None, DisplayInfo | None]:
+        """获取配置屏幕对应的工作区。"""
+        display = self._resolve_display_for_index(screen_index, hwnd=hwnd)
+        if display is not None:
+            return (
+                ctypes.wintypes.RECT(display.work_left, display.work_top, display.work_right, display.work_bottom),
+                display,
+            )
+        return self._get_work_area_for_window(hwnd), None
 
     def get_display_metrics(self, hwnd: int | None = None) -> dict[str, int] | None:
         """读取屏幕/显示器分辨率与缩放信息。"""
@@ -203,27 +436,25 @@ class WindowManager:
                 'work_height': screen_h,
                 'dpi': 96,
                 'scale_percent': 100,
+                'monitor_index': 1,
             }
 
+            target_display: DisplayInfo | None = None
             if target_hwnd > 0:
-                scale_percent = int(self._get_window_scale_percent(target_hwnd))
-                metrics['scale_percent'] = scale_percent
-                metrics['dpi'] = int(round((scale_percent / 100.0) * 96))
+                target_display = self._resolve_display_for_window(target_hwnd)
+            else:
+                displays = self.list_displays()
+                if displays:
+                    target_display = self._primary_display(displays)
 
-                monitor = user32.MonitorFromWindow(ctypes.wintypes.HWND(target_hwnd), self._MONITOR_DEFAULTTONEAREST)
-                if monitor:
-                    monitor_info = MONITORINFO()
-                    monitor_info.cbSize = ctypes.sizeof(MONITORINFO)
-                    ok = bool(user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)))
-                    if ok:
-                        monitor_w = int(monitor_info.rcMonitor.right - monitor_info.rcMonitor.left)
-                        monitor_h = int(monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top)
-                        work_w = int(monitor_info.rcWork.right - monitor_info.rcWork.left)
-                        work_h = int(monitor_info.rcWork.bottom - monitor_info.rcWork.top)
-                        metrics['monitor_width'] = monitor_w
-                        metrics['monitor_height'] = monitor_h
-                        metrics['work_width'] = work_w
-                        metrics['work_height'] = work_h
+            if target_display is not None:
+                metrics['monitor_width'] = int(target_display.width)
+                metrics['monitor_height'] = int(target_display.height)
+                metrics['work_width'] = int(target_display.work_width)
+                metrics['work_height'] = int(target_display.work_height)
+                metrics['scale_percent'] = int(target_display.scale_percent)
+                metrics['dpi'] = int(target_display.dpi)
+                metrics['monitor_index'] = int(target_display.index)
 
             return metrics
         except Exception as exc:
@@ -640,7 +871,7 @@ class WindowManager:
         y = max(wa_top, min(y, wa_bottom - window_height))
         return x, y
 
-    def resize_window(self, position: str = 'left_center', platform: str = 'qq') -> bool:
+    def resize_window(self, position: str = 'left_center', platform: str = 'qq', screen_index: int = 1) -> bool:
         """按平台规则将窗口调整到目标尺寸并放置到指定位置。
 
         核心目标：
@@ -654,9 +885,25 @@ class WindowManager:
             hwnd = self._cached_window.hwnd
             base_width = self.TARGET_CLIENT_WIDTH
             base_height = self.TARGET_CLIENT_HEIGHT
+            target_work_area, target_display = self._get_work_area_for_screen_index(screen_index, hwnd)
+            if not target_work_area:
+                logger.error('调整窗口大小失败: 无法获取目标屏幕工作区')
+                return False
+
+            target_display_index = int(getattr(target_display, 'index', 1))
+            target_scale_percent = int(getattr(target_display, 'scale_percent', 0) or 0)
+            if target_scale_percent <= 0:
+                target_scale_percent = int(self._get_window_scale_percent(hwnd))
+            target_display_desc = f'#{target_display_index}'
+            if target_display is not None:
+                target_display_desc = (
+                    f'#{target_display.index} '
+                    f'{target_display.width}x{target_display.height} '
+                    f'{target_display.scale_percent}%'
+                )
 
             # 1) 读取当前窗口缩放与非客户区参数（边框/标题栏）。
-            scale_percent = self._get_window_scale_percent(hwnd)
+            scale_percent = int(target_scale_percent)
             border_width, title_height, matched_scale = self._get_nonclient_metrics(platform, scale_percent)
             platform_key = (platform or '').strip().lower()
             is_wechat = platform_key in ('wechat', 'wx', 'weixin')
@@ -700,13 +947,8 @@ class WindowManager:
                 height_add = int(border_width * 2 + title_height)
                 formula_desc = 'QQ公式: 最终外框=目标物理尺寸'
 
-            # 3) 计算目标放置坐标（工作区内，避免遮挡任务栏）。
-            work_area = self._get_work_area_for_window(hwnd)
-            if not work_area:
-                logger.error('调整窗口大小失败: 无法获取工作区')
-                return False
-
-            pos_x, pos_y = self._calculate_position(work_area, target_outer_w, target_outer_h, position)
+            # 3) 计算目标放置坐标（目标屏工作区内，避免遮挡任务栏）。
+            pos_x, pos_y = self._calculate_position(target_work_area, target_outer_w, target_outer_h, position)
 
             before_outer_text = f'{before_outer[0]}x{before_outer[1]}' if before_outer else 'unknown'
             before_client_text = f'{before_client[0]}x{before_client[1]}' if before_client else 'unknown'
@@ -714,22 +956,22 @@ class WindowManager:
                 f'[窗口调整][开始] 公式={formula_desc} 调整前外框={before_outer_text} '
                 f'调整前客户区={before_client_text} 目标外框={target_outer_w}x{target_outer_h} '
                 f'目标客户区={target_client_w}x{target_client_h} '
-                f'非客户区={nonclient_w}x{nonclient_h} 位置={position} 目标坐标=({pos_x},{pos_y})'
+                f'非客户区={nonclient_w}x{nonclient_h} 屏幕={target_display_desc} '
+                f'位置={position} 目标坐标=({pos_x},{pos_y})'
             )
 
-            # 4) 尝试应用窗口外框尺寸与位置。
-            ok, apply_method = self._set_window_outer_rect(
+            # 4) 尝试应用窗口外框尺寸与位置（跨屏场景用迭代可消除 DPI 换算抖动）。
+            ok, resize_msg = self._set_window_outer_size_with_retry(
                 hwnd=hwnd,
                 x=pos_x,
                 y=pos_y,
-                width=target_outer_w,
-                height=target_outer_h,
+                target_outer_width=target_outer_w,
+                target_outer_height=target_outer_h,
+                max_rounds=6,
             )
             if not ok:
-                logger.error(f'调整窗口大小失败: {apply_method}')
+                logger.error(f'调整窗口大小失败: {resize_msg}')
                 return False
-
-            resize_msg = f'单次应用完成; 目标外框={target_outer_w}x{target_outer_h}; 应用={apply_method}'
 
             # 5) 回读最终尺寸，计算客户区/外框误差并更新缓存。
             final_rect = self._get_window_rect(hwnd)
@@ -785,11 +1027,12 @@ class WindowManager:
                 f'外框误差=({outer_err_w},{outer_err_h}) 校验基准={judged_by}'
             )
 
+            actual_outer_text = f'{self._cached_window.width}x{self._cached_window.height}'
             logger.debug(
                 f'[窗口调整][细节] 目标客户区={target_client_w}x{target_client_h}, '
-                f'平台={platform}, DPI缩放={scale_percent}% (匹配={matched_scale}%), '
+                f'平台={platform}, 屏幕={target_display_desc}, DPI缩放={scale_percent}% (匹配={matched_scale}%), '
                 f'增量=(宽+{width_add},高+{height_add},边框={border_width},标题={title_height}), '
-                f'目标外框={target_outer_w}x{target_outer_h}, 实际外框={self._cached_window.width}x{self._cached_window.height}, '
+                f'目标外框={target_outer_w}x{target_outer_h}, 实际外框={actual_outer_text}, '
                 f'实际客户区={actual_client_text}'
             )
 
@@ -800,13 +1043,15 @@ class WindowManager:
                     f'目标客户区={target_client_w}x{target_client_h}, 实际客户区={actual_client_text}, '
                     f'目标外框={target_outer_w}x{target_outer_h}, 实际外框={actual_outer_w}x{actual_outer_h}, '
                     f'{judged_by}误差=({judge_err_w},{judge_err_h}), '
-                    f'位置=({self._cached_window.left},{self._cached_window.top}) [{position}]'
+                    f'位置=({self._cached_window.left},{self._cached_window.top}) '
+                    f'[{target_display_desc} | {position}]'
                 )
             else:
                 logger.info(
                     f'窗口调整完成: 客户区={actual_client_text}, '
                     f'外框={actual_outer_w}x{actual_outer_h}, 校验={judged_by}, '
-                    f'位置=({self._cached_window.left},{self._cached_window.top}) [{position}]'
+                    f'位置=({self._cached_window.left},{self._cached_window.top}) '
+                    f'[{target_display_desc} | {position}]'
                 )
             logger.debug(f'[窗口调整][应用] {resize_msg}')
             return True

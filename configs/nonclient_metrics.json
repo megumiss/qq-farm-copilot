@@ -9,7 +9,9 @@
         "125": { "border_width": 1, "title_height": 49 },
         "150": { "border_width": 2, "title_height": 58 },
         "175": { "border_width": 2, "title_height": 68 },
-        "200": { "border_width": 2, "title_height": 78 }
+        "200": { "border_width": 2, "title_height": 78 },
+        "225": { "border_width": 2, "title_height": 88 },
+        "250": { "border_width": 3, "title_height": 97 }
       }
     },
     "wechat": {
@@ -18,7 +20,9 @@
         "125": { "border_width": 1, "title_height": 54 },
         "150": { "border_width": 2, "title_height": 64 },
         "175": { "border_width": 2, "title_height": 75 },
-        "200": { "border_width": 2, "title_height": 86 }
+        "200": { "border_width": 2, "title_height": 86 },
+        "225": { "border_width": 2, "title_height": 97 },
+        "250": { "border_width": 3, "title_height": 107 }
       }
     }
   }
