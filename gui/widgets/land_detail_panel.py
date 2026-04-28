@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QSignalBlocker, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QShowEvent
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
@@ -708,16 +708,6 @@ class LandDetailPanel(QWidget):
         self._set_edit_mode(False)
         self._load_from_config()
 
-    def _refresh_on_open(self) -> None:
-        """每次打开标签页时，从磁盘配置刷新当前展示。"""
-        cfg_path = str(self.config._config_path or '').strip()
-        if cfg_path:
-            try:
-                self.config = AppConfig.load(cfg_path)
-            except Exception:
-                pass
-        self._load_from_config()
-
     def _on_countdown_tick(self) -> None:
         changed = False
         for cell in self._cells.values():
@@ -725,7 +715,3 @@ class LandDetailPanel(QWidget):
                 changed = True
         if not changed:
             return
-
-    def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-        self._refresh_on_open()
