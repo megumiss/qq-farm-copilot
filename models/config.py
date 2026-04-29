@@ -352,6 +352,7 @@ class PlantingConfig(ConfigModel):
     window_platform: WindowPlatform = WindowPlatform.QQ
     window_screen_index: int = 0
     window_position: WindowPosition = WindowPosition.LEFT_CENTER
+    virtual_desktop_index: int = 0
     planting_stable_seconds: float = 0.5
     planting_stable_timeout_seconds: float = 3.0
 
@@ -369,6 +370,18 @@ class PlantingConfig(ConfigModel):
     @classmethod
     def _normalize_window_screen_index(cls, value):
         """规范化 `window_screen_index` 输入值。"""
+        if isinstance(value, bool):
+            return 0
+        try:
+            index = int(value)
+        except Exception:
+            index = 0
+        return max(0, index)
+
+    @field_validator('virtual_desktop_index', mode='before')
+    @classmethod
+    def _normalize_virtual_desktop_index(cls, value):
+        """规范化 `virtual_desktop_index` 输入值。"""
         if isinstance(value, bool):
             return 0
         try:

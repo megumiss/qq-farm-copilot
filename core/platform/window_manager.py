@@ -85,6 +85,7 @@ class WindowManager:
     _GWL_STYLE = -16
     _GWL_EXSTYLE = -20
     _MDT_EFFECTIVE_DPI = 0
+    _GA_ROOT = 2
 
     def __init__(self):
         """初始化对象并准备运行所需状态。"""
@@ -1057,6 +1058,97 @@ class WindowManager:
             return True
         except Exception as e:
             logger.error(f'调整窗口大小失败: {e}')
+            return False
+
+    @classmethod
+    def _get_root_window_handle(cls, hwnd: int) -> int:
+        """将任意句柄提升到顶级窗口句柄。"""
+        target_hwnd = int(hwnd or 0)
+        if target_hwnd <= 0:
+            return 0
+        try:
+            root_hwnd = int(ctypes.windll.user32.GetAncestor(target_hwnd, int(cls._GA_ROOT)) or 0)
+        except Exception:
+            root_hwnd = 0
+        return root_hwnd if root_hwnd > 0 else target_hwnd
+
+    @staticmethod
+    def list_virtual_desktops() -> list[int]:
+        """返回当前系统可用虚拟桌面序号列表（从 1 开始）。"""
+        try:
+            from pyvda import get_virtual_desktops
+        except Exception:
+            return []
+        try:
+            desktops = list(get_virtual_desktops())
+        except Exception:
+            return []
+        return [idx + 1 for idx in range(len(desktops))]
+
+    def get_current_virtual_desktop_index(self, hwnd: int) -> int:
+        """读取窗口所在虚拟桌面序号（从 1 开始），失败返回 0。"""
+        target_hwnd = self._get_root_window_handle(hwnd)
+        if target_hwnd <= 0:
+            return 0
+        try:
+            from pyvda import AppView
+        except Exception:
+            return 0
+        try:
+            app = AppView(hwnd=int(target_hwnd))
+            desktop = getattr(app, 'desktop', None)
+            value = int(getattr(desktop, 'number', 0) or 0)
+            return max(0, value)
+        except Exception as exc:
+            logger.debug(f'读取窗口虚拟桌面失败: hwnd=0x{target_hwnd:X}, {type(exc).__name__}: {exc}')
+            return 0
+
+    def move_window_to_virtual_desktop(self, hwnd: int, target_desktop_index: int) -> bool:
+        """将窗口移动到指定虚拟桌面（从 1 开始）。"""
+        target_index = int(target_desktop_index or 0)
+        if target_index <= 0:
+            return True
+
+        target_hwnd = self._get_root_window_handle(hwnd)
+        if target_hwnd <= 0:
+            logger.warning(f'移动虚拟桌面失败: 无效窗口句柄 hwnd={hwnd}')
+            return False
+
+        try:
+            from pyvda import AppView, get_virtual_desktops
+        except Exception:
+            logger.warning('移动虚拟桌面失败: 缺少 pyvda 依赖')
+            return False
+
+        try:
+            desktops = list(get_virtual_desktops())
+        except Exception as exc:
+            logger.warning(f'读取虚拟桌面列表失败: {type(exc).__name__}: {exc}')
+            return False
+
+        if target_index > len(desktops):
+            logger.warning(f'目标虚拟桌面不存在: target={target_index}, total={len(desktops)}')
+            return False
+
+        current_index = self.get_current_virtual_desktop_index(target_hwnd)
+        if current_index == target_index:
+            return True
+
+        try:
+            app = AppView(hwnd=int(target_hwnd))
+            app.move(desktops[target_index - 1])
+            verify_index = self.get_current_virtual_desktop_index(target_hwnd)
+            if verify_index > 0 and verify_index != target_index:
+                logger.warning(
+                    f'移动虚拟桌面校验失败: hwnd=0x{target_hwnd:X}, actual={verify_index}, target={target_index}'
+                )
+                return False
+            logger.info(
+                f'窗口已移动到虚拟桌面: hwnd=0x{target_hwnd:X}, from={current_index or "unknown"}, to={target_index}'
+            )
+            return True
+        except Exception as exc:
+            logger.warning(f'移动虚拟桌面失败: hwnd=0x{target_hwnd:X}, {type(exc).__name__}: {exc}')
             return False
 
     def is_window_visible(self) -> bool:

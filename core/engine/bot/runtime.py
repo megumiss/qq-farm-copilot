@@ -67,6 +67,18 @@ class BotRuntimeMixin:
         _ = emit_hint
         return resolve_effective_run_mode(self.config.safety.run_mode, self.config.planting.window_platform)
 
+    def _move_window_to_configured_virtual_desktop(self, hwnd: int | None) -> None:
+        """按配置将窗口移动到指定虚拟桌面。"""
+        target_hwnd = int(hwnd or 0)
+        if target_hwnd <= 0:
+            return
+        target_desktop_index = int(getattr(self.config.planting, 'virtual_desktop_index', 0) or 0)
+        if target_desktop_index <= 0:
+            return
+        moved = self.window_manager.move_window_to_virtual_desktop(target_hwnd, target_desktop_index)
+        if not moved:
+            logger.warning(f'窗口虚拟桌面移动失败: hwnd=0x{target_hwnd:X}, target={target_desktop_index}')
+
     def update_config(self, config: AppConfig):
         """更新配置并将变更同步到执行器。"""
         self.config = config
@@ -425,6 +437,7 @@ class BotRuntimeMixin:
         screen_index = int(self.config.planting.window_screen_index)
         platform_value = self.config.planting.window_platform.value
         self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
+        self._move_window_to_configured_virtual_desktop(window.hwnd)
         self._wait_window_capture_stable(timeout=0.5, interval=0.04)
 
         refreshed = self.window_manager.refresh_cached_window_info() or self._find_window_silent()
@@ -611,6 +624,7 @@ class BotRuntimeMixin:
             if current_hwnd > 0 and current_hwnd != last_window_hwnd:
                 logger.info(f'启动窗口句柄变化: 0x{last_window_hwnd:X} -> 0x{current_hwnd:X}，重新校准窗口尺寸')
                 self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
+                self._move_window_to_configured_virtual_desktop(current_hwnd)
                 self._wait_window_capture_stable(timeout=0.5, interval=0.04)
                 refreshed = self.window_manager.refresh_cached_window_info() or self._find_window_silent()
                 if refreshed is not None:
@@ -712,6 +726,7 @@ class BotRuntimeMixin:
         screen_index = int(self.config.planting.window_screen_index)
         platform_value = self.config.planting.window_platform.value
         self.window_manager.resize_window(pos_value, platform_value, screen_index=screen_index)
+        self._move_window_to_configured_virtual_desktop(window.hwnd)
         self._wait_window_capture_stable(timeout=0.5, interval=0.04)
         # 统一走 _find_window_silent（已包含平台过滤 + index 规则），避免非 auto 分支绕过平台筛选。
         window = self.window_manager.refresh_cached_window_info() or self._find_window_silent()

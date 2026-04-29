@@ -17,6 +17,7 @@ from qfluentwidgets import (
     PushButton,
     ScrollArea,
     SpinBox,
+    ToolButton,
 )
 
 from core.platform.window_manager import DisplayInfo, WindowInfo, WindowManager
@@ -175,15 +176,19 @@ class SettingsPanel(QWidget):
         select_layout.setContentsMargins(0, 0, 0, 0)
         select_layout.setSpacing(8)
         select_layout.addWidget(self.window_select, 1)
-        self.refresh_btn = PushButton('刷新', select_row)
+        self.refresh_btn = ToolButton(select_row)
         self.refresh_btn.setIcon(FluentIcon.SYNC)
-        refresh_btn_width = max(72, self.refresh_btn.sizeHint().width() + 8)
-        self.refresh_btn.setFixedWidth(refresh_btn_width)
+        self.refresh_btn.setToolTip('刷新窗口列表')
+        self.refresh_btn.setFixedSize(32, 32)
         select_layout.addWidget(self.refresh_btn)
         env_form.addRow(self._field_label('选择窗口', env_card), select_row)
 
         self.window_screen = ComboBox(env_card)
         self.window_position = ComboBox(env_card)
+        self.virtual_desktop = ComboBox(env_card)
+        self.refresh_layout_btn = ToolButton(env_card)
+        self.refresh_layout_btn.setIcon(FluentIcon.SYNC)
+        self.refresh_layout_btn.setToolTip('刷新屏幕和桌面')
         self.window_position.addItem('左中', userData=WindowPosition.LEFT_CENTER.value)
         self.window_position.addItem('居中', userData=WindowPosition.CENTER.value)
         self.window_position.addItem('右中', userData=WindowPosition.RIGHT_CENTER.value)
@@ -199,6 +204,10 @@ class SettingsPanel(QWidget):
         window_pos_layout.addWidget(self.window_screen, 1)
         window_pos_layout.addWidget(CaptionLabel('位置', window_pos_row))
         window_pos_layout.addWidget(self.window_position, 1)
+        window_pos_layout.addWidget(CaptionLabel('桌面', window_pos_row))
+        window_pos_layout.addWidget(self.virtual_desktop, 1)
+        self.refresh_layout_btn.setFixedSize(32, 32)
+        window_pos_layout.addWidget(self.refresh_layout_btn)
         env_form.addRow(self._field_label('窗口位置', env_card), window_pos_row)
         window_position_tip = CaptionLabel(
             '小程序窗口限制，只建议主屏幕和目标屏幕缩放相同时指定屏幕。',
@@ -317,6 +326,7 @@ class SettingsPanel(QWidget):
             self.window_select.currentIndexChanged,
             self.window_screen.currentIndexChanged,
             self.window_position.currentIndexChanged,
+            self.virtual_desktop.currentIndexChanged,
             self.delay_min.valueChanged,
             self.delay_max.valueChanged,
             self.offset.valueChanged,
@@ -333,6 +343,7 @@ class SettingsPanel(QWidget):
         self.shortcut_browse_btn.clicked.connect(self._choose_shortcut_path)
         self.keyword.editingFinished.connect(self._on_keyword_committed)
         self.refresh_btn.clicked.connect(self._refresh_windows)
+        self.refresh_layout_btn.clicked.connect(self._refresh_window_layout_targets)
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:
@@ -463,6 +474,30 @@ class SettingsPanel(QWidget):
             self.window_screen.setCurrentIndex(0)
         self.window_screen.blockSignals(False)
 
+    def _refresh_virtual_desktops(self) -> None:
+        current = int(self.virtual_desktop.currentData() or self.config.planting.virtual_desktop_index or 0)
+        self.virtual_desktop.blockSignals(True)
+        self.virtual_desktop.clear()
+        self.virtual_desktop.addItem('不移动', userData=0)
+        desktop_indexes = self._wm.list_virtual_desktops()
+        for desktop_index in desktop_indexes:
+            idx = int(desktop_index or 0)
+            if idx <= 0:
+                continue
+            self.virtual_desktop.addItem(f'桌面 {idx}', userData=idx)
+        self._set_combo_data(self.virtual_desktop, current)
+        if self.virtual_desktop.currentIndex() < 0:
+            self.virtual_desktop.setCurrentIndex(0)
+        self.virtual_desktop.blockSignals(False)
+
+    def _refresh_window_layout_targets(self) -> None:
+        current_screen = int(self.window_screen.currentData() or self.config.planting.window_screen_index or 0)
+        current_desktop = int(self.virtual_desktop.currentData() or self.config.planting.virtual_desktop_index or 0)
+        self._refresh_displays()
+        self._refresh_virtual_desktops()
+        self._set_combo_data(self.window_screen, current_screen)
+        self._set_combo_data(self.virtual_desktop, current_desktop)
+
     @staticmethod
     def _format_window_option_label(index: int, info: WindowInfo) -> str:
         title = str(info.title).replace('\n', ' ').strip()
@@ -544,8 +579,10 @@ class SettingsPanel(QWidget):
         self.window_restart_delay.setValue(int(c.window_restart_delay_seconds))
         self.keyword.setText(str(c.window_title_keyword or ''))
         self._refresh_displays()
+        self._refresh_virtual_desktops()
         self._set_combo_data(self.window_screen, int(c.planting.window_screen_index))
         self._set_combo_data(self.window_position, c.planting.window_position.value)
+        self._set_combo_data(self.virtual_desktop, int(c.planting.virtual_desktop_index))
         self.delay_min.setValue(float(c.safety.random_delay_min))
         self.delay_max.setValue(float(c.safety.random_delay_max))
         self.offset.setValue(int(c.safety.click_offset_range))
@@ -582,6 +619,7 @@ class SettingsPanel(QWidget):
         c.planting.window_position = WindowPosition(
             str(self.window_position.currentData() or WindowPosition.LEFT_CENTER.value)
         )
+        c.planting.virtual_desktop_index = int(self.virtual_desktop.currentData() or 0)
         d_min, d_max = float(self.delay_min.value()), float(self.delay_max.value())
         c.safety.random_delay_min = min(d_min, d_max)
         c.safety.random_delay_max = max(d_min, d_max)

@@ -122,7 +122,7 @@ python main.py
 1. `window_title_keyword` 与实际窗口标题一致（默认 `QQ经典农场`）。
 2. 可在设置里选择小程序“添加到桌面”后生成的快捷方式（`window_shortcut_path`，`.lnk`）。
 3. 多窗口场景可在设置里指定“选择窗口”（保存匹配顺序，不保存句柄）。
-4. 多屏场景可在“窗口位置”中指定目标屏幕（仅保存序号）与该屏幕内位置。
+4. 多屏场景可在“窗口位置”中指定目标屏幕（仅保存序号）与该屏幕内位置；也可指定目标虚拟桌面序号（`0` 表示不移动）。
 5. `planting.window_platform` 与当前平台一致（QQ / 微信）。
 6. 游戏窗口已打开且未最小化。
 
@@ -151,7 +151,7 @@ python main.py
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
-- `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
+- `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
 - `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
 - `executor.task_order`：任务固定顺序配置（示例：`main>friend>land_scan>share>reward>gift>sell>restart`）

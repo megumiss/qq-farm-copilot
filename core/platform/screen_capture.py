@@ -275,10 +275,8 @@ class ScreenCapture:
 
     @DecoratorConfig.when(RUN_MODE=RunMode.BACKGROUND)
     def _capture_by_mode(self, rect: tuple[int, int, int, int], hwnd: int) -> Image.Image | None:
-        image = self.capture_window_print(hwnd)
-        if image is not None:
-            return image
-        return self.capture_region(rect)
+        _ = rect
+        return self.capture_window_print(hwnd)
 
     @DecoratorConfig.when(RUN_MODE=RunMode.FOREGROUND)
     def _capture_by_mode(self, rect: tuple[int, int, int, int], hwnd: int) -> Image.Image | None:

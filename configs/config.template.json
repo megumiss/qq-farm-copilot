@@ -145,6 +145,7 @@
     "window_platform": "qq",
     "window_screen_index": 0,
     "window_position": "left_center",
+    "virtual_desktop_index": 0,
     "planting_stable_seconds": 0.5,
     "planting_stable_timeout_seconds": 3.0
   },
