@@ -37,6 +37,7 @@ class TaskScheduler(QObject):
             'water': 0,
             'weed': 0,
             'bug': 0,
+            'fertilize': 0,
             'steal': 0,
             'sell': 0,
             'total_actions': 0,

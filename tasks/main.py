@@ -288,11 +288,6 @@ class TaskMain(
             self._sync_player_level_before_plant()
             self._run_feature_plant()
 
-        # TODO 自动施肥
-        if features.auto_fertilize:
-            self._run_feature_fertilize()
-
-        # TODO 自动升级
         if features.auto_upgrade:
             self._run_feature_upgrade()
 

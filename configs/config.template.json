@@ -31,8 +31,21 @@
         "auto_water": true,
         "auto_bug": true,
         "auto_expand": true,
-        "auto_upgrade": true,
-        "auto_fertilize": false
+        "auto_upgrade": true
+      }
+    },
+    "fertilize": {
+      "enabled": false,
+      "trigger": "interval",
+      "interval_seconds": 900,
+      "enabled_time_range": "00:00:00-23:59:59",
+      "daily_time": "00:01",
+      "next_run": "2026-01-01 00:00",
+      "failure_interval_seconds": 300,
+      "features": {
+        "maturity_threshold_seconds": 3600,
+        "auto_buy_fertilizer": false,
+        "fertilizer_purchase_threshold_seconds": 108000
       }
     },
     "friend": {
@@ -125,7 +138,7 @@
   },
   "executor": {
     "min_task_interval_seconds": 5,
-    "task_order": "land_scan>main>friend>sell>reward>gift>share>restart",
+    "task_order": "land_scan>main>fertilize>friend>sell>reward>gift>share>restart",
     "default_success_interval": 5,
     "default_failure_interval": 5
   },
