@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
 from PyQt6.QtCore import QSignalBlocker, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -70,6 +71,7 @@ LAND_STATE_RANK: dict[str, int] = {
     'gold': 4,
 }
 LAND_COUNTDOWN_PATTERN = re.compile(r'^(\d{2}):(\d{2}):(\d{2})$')
+LAND_COUNTDOWN_SYNC_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 class LandCell(QWidget):
@@ -280,7 +282,7 @@ class LandCell(QWidget):
             return ''
         return self._seconds_to_countdown(self._countdown_seconds)
 
-    def set_data(self, data: dict[str, object]) -> None:
+    def set_data(self, data: dict[str, object], *, prefer_lower_countdown: bool = False) -> None:
         state = self._normalize_state(data.get('level', 'unbuilt'))
         countdown_raw = data.get('maturity_countdown', self._current_countdown_text())
         countdown = self._normalize_countdown_text(countdown_raw)
@@ -288,14 +290,17 @@ class LandCell(QWidget):
         self._need_upgrade = self._normalize_need_upgrade(need_upgrade_raw)
         need_planting_raw = data.get('need_planting', self._need_planting)
         self._need_planting = self._normalize_need_planting(need_planting_raw)
-        self._countdown_seconds = self._countdown_to_seconds(countdown)
+        next_countdown_seconds = self._countdown_to_seconds(countdown)
+        if prefer_lower_countdown and self._countdown_seconds > 0 and next_countdown_seconds > self._countdown_seconds:
+            next_countdown_seconds = int(self._countdown_seconds)
+        self._countdown_seconds = max(0, int(next_countdown_seconds))
         state_index = self._state_combo.findData(state)
         if state_index < 0:
             state_index = 0
         with QSignalBlocker(self._state_combo):
             self._state_combo.setCurrentIndex(state_index)
         self._state_view.setText(LAND_STATE_META.get(state, LAND_STATE_META['unbuilt']).label)
-        self._countdown_view.setText(countdown or '--:--:--')
+        self._countdown_view.setText(self._current_countdown_text() or '--:--:--')
         self._need_upgrade_badge.setVisible(self._need_upgrade)
         self._need_planting_badge.setVisible(self._need_planting)
         self._apply_state_style(state)
@@ -339,6 +344,7 @@ class LandDetailPanel(QWidget):
         self._cells: dict[str, LandCell] = {}
         self._profile_value_labels: dict[str, StrongBodyLabel] = {}
         self._editing = False
+        self._last_applied_countdown_sync_time = ''
         self._countdown_timer = QTimer(self)
         self._countdown_timer.setInterval(1000)
         self._countdown_timer.timeout.connect(self._on_countdown_tick)
@@ -644,9 +650,34 @@ class LandDetailPanel(QWidget):
         parent_window = self.window()
         return parent_window if isinstance(parent_window, QWidget) else self
 
+    @staticmethod
+    def _normalize_countdown_sync_time(raw: object) -> str:
+        text = str(raw or '').strip().replace('T', ' ')
+        if not text:
+            return ''
+        try:
+            dt = datetime.strptime(text, LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+        except Exception:
+            return ''
+        return dt.strftime(LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+
+    @classmethod
+    def _elapsed_since_sync_time(cls, sync_time: str) -> int:
+        normalized = cls._normalize_countdown_sync_time(sync_time)
+        if not normalized:
+            return 0
+        try:
+            dt = datetime.strptime(normalized, LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+        except Exception:
+            return 0
+        return max(0, int((datetime.now() - dt).total_seconds()))
+
     def _save_to_config(self) -> bool:
         try:
             self.config.land.plots = self.get_land_data()
+            self.config.land.countdown_sync_time = (
+                datetime.now().replace(microsecond=0).strftime(LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+            )
             self.config.save()
         except Exception as exc:
             self._show_save_error(f'写入配置失败：{exc}')
@@ -676,7 +707,20 @@ class LandDetailPanel(QWidget):
         items = self.config.land.plots
         if not isinstance(items, list):
             items = []
-        self.set_land_data(items)
+        countdown_sync_time = self._normalize_countdown_sync_time(self.config.land.countdown_sync_time)
+        if not countdown_sync_time:
+            has_countdown = any(
+                isinstance(item, dict) and bool(LandCell._normalize_countdown_text(item.get('maturity_countdown', '')))
+                for item in items
+            )
+            if has_countdown:
+                countdown_sync_time = datetime.now().replace(microsecond=0).strftime(LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+                self.config.land.countdown_sync_time = countdown_sync_time
+                try:
+                    self.config.save()
+                except Exception:
+                    pass
+        self.set_land_data(items, countdown_sync_time=countdown_sync_time)
 
     def _on_toggle_edit(self) -> None:
         if self._editing:
@@ -688,8 +732,13 @@ class LandDetailPanel(QWidget):
                 return
         self._set_edit_mode(not self._editing)
 
-    def set_land_data(self, items: list[dict[str, object]]) -> None:
+    def set_land_data(self, items: list[dict[str, object]], *, countdown_sync_time: str = '') -> None:
         """按 `plot_id` 批量设置地块数据。"""
+        normalized_sync_time = self._normalize_countdown_sync_time(countdown_sync_time)
+        elapsed_seconds = self._elapsed_since_sync_time(normalized_sync_time)
+        prefer_lower_countdown = bool(normalized_sync_time) and (
+            normalized_sync_time == self._last_applied_countdown_sync_time
+        )
         for item in items:
             if not isinstance(item, dict):
                 continue
@@ -697,7 +746,15 @@ class LandDetailPanel(QWidget):
             cell = self._cells.get(plot_id)
             if cell is None:
                 continue
-            cell.set_data(item)
+            apply_item = dict(item)
+            countdown_text = LandCell._normalize_countdown_text(apply_item.get('maturity_countdown', ''))
+            if countdown_text and elapsed_seconds > 0:
+                left_seconds = max(0, LandCell._countdown_to_seconds(countdown_text) - elapsed_seconds)
+                apply_item['maturity_countdown'] = (
+                    LandCell._seconds_to_countdown(left_seconds) if left_seconds > 0 else ''
+                )
+            cell.set_data(apply_item, prefer_lower_countdown=prefer_lower_countdown)
+        self._last_applied_countdown_sync_time = normalized_sync_time
 
     def get_land_data(self) -> list[dict[str, object]]:
         """读取当前全部地块数据。"""

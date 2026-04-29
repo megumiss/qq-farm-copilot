@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from loguru import logger
 
@@ -94,6 +95,8 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         super().__init__(engine, ui)
         self.ocr_tool = ocr_tool
         self._ocr_disabled_logged = False
+        self._countdown_sync_time = ''
+        self._countdown_sync_time_persisted = False
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """
@@ -111,6 +114,8 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         """
         _ = rect
         logger.info('地块巡查: 开始')
+        self._countdown_sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        self._countdown_sync_time_persisted = False
         self.ui.ui_ensure(page_main)
         # self.ui.device.click_button(GOTO_MAIN)
 
@@ -154,6 +159,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             self.align_view_by_background_tree(log_prefix='地块巡查')
             self.ui.ui_ensure(page_main)
 
+        self._persist_countdown_sync_time_if_needed()
         self._trigger_main_task_if_needed()
         logger.info('地块巡查: 结束')
         return self.ok()
@@ -706,6 +712,11 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         need_planting: bool | None = None,
     ) -> None:
         """单地块统一字段更新后立即落盘。"""
+        if countdown is not None:
+            sync_time = str(self._countdown_sync_time or '').strip()
+            if not sync_time:
+                sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+            self.config.land.countdown_sync_time = sync_time
         try:
             self.config.save()
         except Exception as exc:
@@ -719,6 +730,8 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 exc,
             )
             return
+        if countdown is not None:
+            self._countdown_sync_time_persisted = True
         self._emit_config_snapshot()
         logger.info(
             '地块巡查: 地块信息已更新 | 序号={} 等级={} 成熟倒计时={} 需要升级={} 需要播种={}',
@@ -737,3 +750,19 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 emitter()
             except Exception:
                 return
+
+    def _persist_countdown_sync_time_if_needed(self) -> None:
+        """本轮扫描结束时确保倒计时基准时间至少落盘一次。"""
+        if self._countdown_sync_time_persisted:
+            return
+        sync_time = str(self._countdown_sync_time or '').strip()
+        if not sync_time:
+            sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        self.config.land.countdown_sync_time = sync_time
+        try:
+            self.config.save()
+        except Exception as exc:
+            logger.warning('地块巡查: 倒计时基准时间写入失败 | time={} error={}', sync_time, exc)
+            return
+        self._countdown_sync_time_persisted = True
+        self._emit_config_snapshot()

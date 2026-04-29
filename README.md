@@ -155,7 +155,7 @@ python main.py
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
 - `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
 - `executor.task_order`：任务固定顺序配置（示例：`main>friend>land_scan>share>reward>gift>sell>restart`）
-- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
+- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.countdown_sync_time` 为倒计时快照基准时间（`YYYY-MM-DD HH:MM:SS`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
 - `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）

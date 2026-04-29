@@ -402,6 +402,7 @@ LAND_STATE_ALIASES: dict[str, str] = {
 }
 LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold'}
 LAND_MATURITY_COUNTDOWN_PATTERN = re.compile(r'^(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})$')
+LAND_COUNTDOWN_SYNC_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 def build_default_land_plot_ids() -> list[str]:
@@ -490,6 +491,18 @@ def normalize_land_need_planting(value: Any) -> bool:
     return normalize_land_bool_flag(value)
 
 
+def normalize_land_countdown_sync_time(value: Any) -> str:
+    """规范化地块倒计时基准时间（YYYY-MM-DD HH:MM:SS）。"""
+    text = str(value or '').strip().replace('T', ' ')
+    if not text:
+        return ''
+    try:
+        dt = datetime.strptime(text, LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+    except Exception:
+        return ''
+    return dt.strftime(LAND_COUNTDOWN_SYNC_TIME_FORMAT)
+
+
 class LandDetailConfig(ConfigModel):
     """定义农场地块详情配置结构。"""
 
@@ -518,7 +531,14 @@ class LandDetailConfig(ConfigModel):
             return str(value or '').strip()
 
     plots: list[dict[str, Any]] = Field(default_factory=build_default_land_plots)
+    countdown_sync_time: str = ''
     profile: ProfileConfig = Field(default_factory=ProfileConfig)
+
+    @field_validator('countdown_sync_time', mode='before')
+    @classmethod
+    def _normalize_countdown_sync_time(cls, value):
+        """规范化倒计时基准时间。"""
+        return normalize_land_countdown_sync_time(value)
 
     @field_validator('plots', mode='before')
     @classmethod

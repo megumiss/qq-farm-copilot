@@ -150,6 +150,7 @@
     "planting_stable_timeout_seconds": 3.0
   },
   "land": {
+    "countdown_sync_time": "",
     "plots": [],
     "profile": {
       "level": 0,
