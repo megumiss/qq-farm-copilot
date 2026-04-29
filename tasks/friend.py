@@ -17,6 +17,7 @@ from core.ui.assets import (
     BTN_FRIEND_APPLY,
     BTN_FRIEND_RIGHT_FRAME,
     BTN_HOME,
+    BTN_MATURE,
     BTN_STEAL,
     BTN_STEAL_TOTAL,
     BTN_VISIT_FIRST,
@@ -332,7 +333,7 @@ class TaskFriend(TaskBase):
         self.ui.device.screenshot()
         buttons: list[Button] = []
         if enable_steal:
-            buttons.append(BTN_STEAL)
+            buttons.extend([BTN_STEAL, BTN_MATURE])
         if enable_help:
             buttons.extend([BTN_WATER, BTN_WEED, BTN_BUG])
         if not buttons:
@@ -634,10 +635,17 @@ class TaskFriend(TaskBase):
 
     def _run_feature_steal(self, *, enable_steal_stats: bool) -> bool:
         """好友偷菜。"""
-        if self._run_help_single_action(BTN_STEAL, ActionType.STEAL, '偷好友果实'):
+        button = self._run_click_loop(
+            [
+                (BTN_STEAL, ActionType.STEAL),
+                (BTN_MATURE, ActionType.STEAL),
+            ]
+        )
+        if button is not None:
             self.engine._record_friend_daily_stat('steal')
-            if enable_steal_stats:
+            if enable_steal_stats and button is BTN_STEAL:
                 self._ocr_and_record_steal()
+            logger.info('好友巡查: 完成动作 | 偷好友果实')
             return True
         return False
 
@@ -847,42 +855,47 @@ class TaskFriend(TaskBase):
         return self._run_help_maintain_actions()
 
     def _run_help_maintain_actions(self) -> bool:
-        """统一执行帮好友浇水/除草/除虫，共用确认计时器。"""
-        action_specs = [
-            (BTN_WATER, ActionType.WATER),
-            (BTN_WEED, ActionType.WEED),
-            (BTN_BUG, ActionType.BUG),
-        ]
+        """好友帮忙。"""
+        button = self._run_click_loop(
+            [
+                (BTN_WATER, ActionType.WATER),
+                (BTN_WEED, ActionType.WEED),
+                (BTN_BUG, ActionType.BUG),
+            ]
+        )
+        if button is not None:
+            self.engine._record_friend_daily_stat('help')
+            logger.info('好友巡查: 完成动作 | 帮好友维护')
+            return True
+        return False
+
+    def _run_click_loop(self, action_specs: list[tuple[Button, str]]) -> Button | None:
+        """通用确认循环：逐按钮 appear_then_click，全部消失后确认退出。返回被点击的按钮。"""
         action_buttons = [button for button, _ in action_specs]
 
         self.ui.device.screenshot()
         if not self.ui.appear_any(action_buttons, offset=30, static=False):
-            return False
+            return None
 
+        clicked: Button | None = None
         confirm_timer = Timer(0.5, count=2)
         while 1:
             self.ui.device.screenshot()
 
-            clicked_action: str | None = None
             for button, stat_action in action_specs:
-                if self.ui.appear(button, offset=30, static=False):
-                    clicked_action = stat_action
+                if self.ui.appear_then_click(button, offset=30, interval=0.3, static=False):
+                    self.engine._record_stat(stat_action)
+                    clicked = button
+                    confirm_timer.clear()
                     break
-            if self.ui.appear_then_click_any(action_buttons, offset=30, interval=1, static=False):
-                if clicked_action is not None:
-                    self.engine._record_stat(clicked_action)
-                    self.engine._record_friend_daily_stat('help')
-                confirm_timer.clear()
-                continue
-
-            if not self.ui.appear_any(action_buttons, offset=30, static=False):
-                if not confirm_timer.started():
-                    confirm_timer.start()
-                if confirm_timer.reached():
-                    logger.info('好友巡查: 完成动作 | 帮好友维护')
-                    return True
             else:
-                confirm_timer.clear()
+                if not self.ui.appear_any(action_buttons, offset=30, static=False):
+                    if not confirm_timer.started():
+                        confirm_timer.start()
+                    if confirm_timer.reached():
+                        return clicked
+                else:
+                    confirm_timer.clear()
 
     def _run_help_single_action(self, button, stat_action: str, done_text: str) -> bool:
         self.ui.device.screenshot()
@@ -893,7 +906,7 @@ class TaskFriend(TaskBase):
         while 1:
             self.ui.device.screenshot()
 
-            if self.ui.appear_then_click(button, offset=30, interval=1, static=False):
+            if self.ui.appear_then_click(button, offset=30, interval=0.3, static=False):
                 self.engine._record_stat(stat_action)
                 continue
             if not self.ui.appear(button, offset=30, static=False):
