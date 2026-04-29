@@ -80,6 +80,7 @@ class BotVisionMixin:
             ActionType.WATER: 'water',
             ActionType.WEED: 'weed',
             ActionType.BUG: 'bug',
+            ActionType.FERTILIZE: 'fertilize',
             ActionType.STEAL: 'steal',
             ActionType.SELL: 'sell',
         }

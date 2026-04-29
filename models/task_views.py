@@ -41,7 +41,13 @@ class MainFeatures:
     auto_bug: bool = True
     auto_expand: bool = True
     auto_upgrade: bool = True
-    auto_fertilize: bool = False
+
+
+@dataclass(slots=True)
+class FertilizeFeatures:
+    maturity_threshold_seconds: int = 3600
+    auto_buy_fertilizer: bool = False
+    fertilizer_purchase_threshold_seconds: int = 108000
 
 
 @dataclass(slots=True)
@@ -73,6 +79,11 @@ class GiftFeatures:
 @dataclass(slots=True)
 class MainTaskView(TaskViewBase):
     feature: MainFeatures = field(default_factory=MainFeatures)
+
+
+@dataclass(slots=True)
+class FertilizeTaskView(TaskViewBase):
+    feature: FertilizeFeatures = field(default_factory=FertilizeFeatures)
 
 
 @dataclass(slots=True)
@@ -112,6 +123,7 @@ class RestartTaskView(TaskViewBase):
 
 TASK_FEATURE_CLASS_MAP = {
     'main': MainFeatures,
+    'fertilize': FertilizeFeatures,
     'friend': FriendFeatures,
     'share': EmptyFeatures,
     'reward': RewardFeatures,
@@ -123,6 +135,7 @@ TASK_FEATURE_CLASS_MAP = {
 
 TASK_VIEW_CLASS_MAP = {
     'main': MainTaskView,
+    'fertilize': FertilizeTaskView,
     'friend': FriendTaskView,
     'share': ShareTaskView,
     'reward': RewardTaskView,

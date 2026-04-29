@@ -2,6 +2,7 @@
   "feature_panel": {
     "task_titles": {
       "main": "农场巡查",
+      "fertilize": "自动施肥",
       "friend": "好友巡查",
       "share": "分享",
       "reward": "奖励领取",
@@ -27,7 +28,9 @@
       "help_limit_count": "次数限制",
       "auto_accept_request": "同意好友请求",
       "blacklist": "好友黑名单",
-      "auto_fertilize": "施肥",
+      "maturity_threshold_seconds": "成熟时间阈值",
+      "auto_buy_fertilizer": "自动购买肥料",
+      "fertilizer_purchase_threshold_seconds": "肥料购买阈值",
       "claim_daily_task": "每日任务",
       "claim_growth_task": "成长任务",
       "auto_svip_gift": "SVIP礼包领取",
@@ -38,7 +41,8 @@
       "reward.claim_growth_task": "QQ平台会直接领取",
       "friend.steal_stats": "开启后偷取会变慢",
       "main.auto_upgrade": "需要开启土地巡查任务",
-      "main.auto_fertilize": "需要开启土地巡查任务"
+      "fertilize.maturity_threshold_seconds": "仅处理成熟倒计时小于该阈值的地块",
+      "fertilize.fertilizer_purchase_threshold_seconds": "当前肥料库存低于该阈值时自动购买（单位小时）"
     },
     "enabled": "启用",
     "detail_text": "详情",
@@ -64,6 +68,7 @@
   "task_panel": {
     "task_titles": {
       "main": "农场巡查",
+      "fertilize": "自动施肥",
       "friend": "好友巡查",
       "share": "分享",
       "reward": "奖励领取",
@@ -113,6 +118,7 @@
       "water": "浇水",
       "weed": "除草",
       "bug": "除虫",
+      "fertilize": "施肥",
       "sell": "出售"
     },
     "state_text": {

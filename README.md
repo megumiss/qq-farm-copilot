@@ -18,7 +18,7 @@
 - [x] 一键收获 / 除草 / 除虫 / 浇水
 - [x] 自动购买种子
 - [x] 自动播种
-- [ ] 自动施肥
+- [x] 自动施肥
 - [x] 自动扩建土地
 - [x] 自动升级土地
 - [x] 仓库批量出售
@@ -55,6 +55,7 @@
 当前内置任务（通过 `_run_task_*` 自动发现）：
 
 - `main`：农场主流程（收获维护、播种、扩建、升级）
+- `fertilize`：自动施肥任务（默认关闭；每 15 分钟；按地块倒计时阈值筛选并支持自动补货）
 - `friend`：独立好友任务（支持 `features.blacklist`、`features.steal_stats`，以及偷菜/帮忙各自的 `enabled_time_range` 与 `limit_count`；主界面仅显示黑名单条目数，详情弹窗可维护名单）
 - `share`：独立分享任务（仅支持微信平台，通常配合每日触发）
 - `reward`：独立任务奖励领取（默认每 6 小时执行一次）
@@ -154,7 +155,7 @@ python main.py
 - `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
 - `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
-- `executor.task_order`：任务固定顺序配置（示例：`main>friend>land_scan>share>reward>gift>sell>restart`）
+- `executor.task_order`：任务固定顺序配置（示例：`land_scan>main>fertilize>friend>sell>reward>gift>share>restart`）
 - `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
@@ -181,8 +182,21 @@ python main.py
       "auto_harvest": true,
       "auto_plant": false,
       "auto_expand": false,
-      "auto_upgrade": false,
-      "auto_fertilize": false
+      "auto_upgrade": false
+    }
+  },
+  "fertilize": {
+    "enabled": false,
+    "trigger": "interval",
+    "daily_time": "04:00",
+    "next_run": "2026-01-01 00:00",
+    "interval_seconds": 900,
+    "enabled_time_range": "00:00:00-23:59:59",
+    "failure_interval_seconds": 300,
+    "features": {
+      "maturity_threshold_seconds": 3600,
+      "auto_buy_fertilizer": false,
+      "fertilizer_purchase_threshold_seconds": 108000
     }
   },
   "friend": {
@@ -266,10 +280,6 @@ python main.py
   }
 }
 ```
-
-固定禁用项（运行时强制关闭）：
-
-- `main.auto_fertilize`
 
 `tasks.<task>.features` 字段说明：
 

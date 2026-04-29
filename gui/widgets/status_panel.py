@@ -33,6 +33,7 @@ class StatusPanel(QWidget):
             'water',
             'weed',
             'bug',
+            'fertilize',
             'sell',
         }
         self._build_ui()
@@ -65,6 +66,7 @@ class StatusPanel(QWidget):
         self._add_cell(stats_grid, 1, 0, '除草', 'weed', '0')
         self._add_cell(stats_grid, 1, 1, '除虫', 'bug', '0')
         self._add_cell(stats_grid, 1, 2, '出售', 'sell', '0')
+        self._add_cell(stats_grid, 2, 0, '施肥', 'fertilize', '0')
         root.addWidget(stats_card)
 
     def _build_card(self, title: str, icon: FluentIcon) -> tuple[StableElevatedCardWidget, QGridLayout]:
@@ -263,7 +265,7 @@ class StatusPanel(QWidget):
         self._set_value('next_task', stats.get('next_task', '--'))
         next_run_text, next_run_tooltip = self._format_next_run(stats.get('next_run', '--'))
         self._set_value('next_run', next_run_text, tooltip=next_run_tooltip)
-        for key in ('harvest', 'plant', 'water', 'weed', 'bug', 'sell'):
+        for key in ('harvest', 'plant', 'water', 'weed', 'bug', 'fertilize', 'sell'):
             value = self._safe_int(stats.get(key, 0))
             self._set_value(key, value)
             self._set_counter_color(key, value, '#0F766E', '#2DD4BF')
