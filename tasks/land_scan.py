@@ -117,6 +117,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         self._countdown_sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
         self._countdown_sync_time_persisted = False
         self.ui.ui_ensure(page_main)
+        self.align_view_by_background_tree(log_prefix='地块巡查')
         # self.ui.device.click_button(GOTO_MAIN)
 
         try:
