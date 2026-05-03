@@ -96,6 +96,7 @@ class ShopItemOCR:
         t = ShopItemOCR._clean_text(text)
         t = t.replace('（', '(').replace('）', ')')
         t = t.replace('詹菇', '蘑菇')
+        t = t.replace('弥猴桃', '猕猴桃')
         return t
 
     @staticmethod
