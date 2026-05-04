@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from utils.app_paths import load_config_json_array
 
-EXCLUDED_CROP_NAMES = {'新春红包', '哈哈南瓜'}
+
+def _parse_int(value: object, default: int = 0) -> int:
+    """Safely parse int from mixed json values."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _parse_grow_phases_seconds(grow_phases: str) -> list[int]:
@@ -45,47 +55,97 @@ def _calc_grow_time_seconds(grow_phases: str, seasons: int) -> int:
     return total
 
 
-def _load_crops_from_plant_json() -> list[tuple]:
-    """Build CROPS tuple list from `configs/plants.json`.
+def _extract_unlock_level_from_goods_conds(conds: object) -> int:
+    """从 goods.conds 中提取等级限制（type=1 的 param）。"""
+    if not isinstance(conds, Iterable):
+        return 0
+    levels: list[int] = []
+    for cond in conds:
+        if not isinstance(cond, dict):
+            continue
+        if _parse_int(cond.get('type'), 0) != 1:
+            continue
+        level = _parse_int(cond.get('param'), 0)
+        if level > 0:
+            levels.append(level)
+    if not levels:
+        return 0
+    return max(levels)
+
+
+def _load_goods_seed_meta() -> dict[int, tuple[int, int]]:
+    """读取 `goods.json`，返回 `{seed_id: (unlock_level, price)}`。"""
+    data = load_config_json_array('goods.json', prefer_user=False)
+    meta: dict[int, tuple[int, int]] = {}
+    for item in data:
+        seed_id = _parse_int(item.get('item_id'), 0)
+        if seed_id <= 0:
+            continue
+        unlock_level = _extract_unlock_level_from_goods_conds(item.get('conds'))
+        if unlock_level <= 0:
+            continue
+        price = _parse_int(item.get('price'), 0)
+        existed = meta.get(seed_id)
+        if existed is None or unlock_level < existed[0]:
+            meta[seed_id] = (unlock_level, price)
+    return meta
+
+
+def _load_crops_from_sources() -> tuple[list[tuple], list[tuple]]:
+    """从 `plants.json + goods.json` 构建作物列表并按用途分组。
 
     Tuple format:
-      (name, seed_id, land_level_need, grow_time_seconds, exp, fruit_count)
+      (name, seed_id, unlock_level, grow_time_seconds, exp, fruit_count, price)
     """
-    data = load_config_json_array('plants.json', prefer_user=False)
+    plant_data = load_config_json_array('plants.json', prefer_user=False)
+    goods_seed_meta = _load_goods_seed_meta()
 
-    crops: list[tuple] = []
-    for item in data:
+    strategy_crops: list[tuple] = []
+    extra_crops: list[tuple] = []
+    for item in plant_data:
         name = str(item.get('name', '')).strip()
         if not name:
             continue
-        if name in EXCLUDED_CROP_NAMES:
+
+        # `plants.json` includes event/collection crops without seed_id.
+        # Only seed-able crops should be loaded into CROPS.
+        seed_id = _parse_int(item.get('seed_id'), 0)
+        if seed_id <= 0:
             continue
 
-        seed_id = int(item.get('seed_id', 0))
-        land_level_need = int(item.get('land_level_need', 0))
-        seasons = int(item.get('seasons', 1))
+        goods_meta = goods_seed_meta.get(seed_id)
+        unlock_level = goods_meta[0] if goods_meta else _parse_int(item.get('land_level_need'), 0)
+        price = goods_meta[1] if goods_meta else 0
+        seasons = _parse_int(item.get('seasons'), 1)
         grow_phases = str(item.get('grow_phases', ''))
         grow_time = _calc_grow_time_seconds(grow_phases, seasons)
 
-        exp = int(item.get('exp', 0))
+        exp = _parse_int(item.get('exp'), 0)
         if seasons == 2:
             exp *= 2
 
         fruit = item.get('fruit', {}) or {}
-        fruit_count = int(fruit.get('count', 0))
+        fruit_count = _parse_int(fruit.get('count'), 0)
 
-        crops.append((name, seed_id, land_level_need, grow_time, exp, fruit_count))
+        row = (name, seed_id, unlock_level, grow_time, exp, fruit_count, price)
+        if goods_meta:
+            strategy_crops.append(row)
+        else:
+            extra_crops.append(row)
 
-    crops.sort(key=lambda c: (c[2], c[1], c[0]))
-    return crops
+    strategy_crops.sort(key=lambda c: (c[2], c[1], c[0]))
+    extra_crops.sort(key=lambda c: (c[2], c[1], c[0]))
+    return strategy_crops, extra_crops
 
 
-# 作物数据表：(名称, 种子ID, 解锁等级, 总生长时间秒, 经验, 果实数量)
-CROPS = _load_crops_from_plant_json()
+# 策略可用作物（存在于 goods.json）：(名称, 种子ID, 解锁等级, 总生长时间秒, 经验, 果实数量, 售价)
+STRATEGY_CROPS, EXTRA_CROPS = _load_crops_from_sources()
+# 兼容旧调用，默认指向策略可用作物。
+CROPS = STRATEGY_CROPS
 
 
 def get_crop_names() -> list[str]:
-    """获取所有作物名称列表"""
+    """获取策略可用作物名称列表。"""
     return [c[0] for c in CROPS]
 
 
@@ -151,7 +211,16 @@ def format_grow_time(seconds: int) -> str:
 def get_crop_display_info() -> list[str]:
     """获取作物显示信息列表，用于下拉框"""
     items = []
-    for name, _, level, grow_time, exp, _ in CROPS:
+    for name, _, level, grow_time, exp, _, price in CROPS:
         time_str = format_grow_time(grow_time)
-        items.append(f'{name} (Lv{level}, {time_str}, {exp}经验)')
+        items.append(f'{name} (Lv{level}, {time_str}, {exp}经验, 种子价格{price})')
+    return items
+
+
+def get_crop_picker_items() -> list[tuple[str, str]]:
+    """获取作物下拉框展示项：显示文案 + 作物名。"""
+    items: list[tuple[str, str]] = []
+    for index, (name, _, level, _, _, _, price) in enumerate(CROPS, start=1):
+        label = f'{name} (等级Lv{level}, 品级{index}品, 种子价格{price})'
+        items.append((label, name))
     return items

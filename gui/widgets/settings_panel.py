@@ -23,7 +23,7 @@ from qfluentwidgets import (
 from core.platform.window_manager import DisplayInfo, WindowInfo, WindowManager
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
-from models.game_data import get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
+from models.game_data import get_best_crop_for_level, get_crop_picker_items, get_latest_crop_for_level
 from utils.app_paths import user_app_dir
 
 
@@ -36,7 +36,7 @@ class SettingsPanel(QWidget):
         super().__init__(parent)
         self.config = config
         self._wm = WindowManager()
-        self._crop_names = get_crop_names()
+        self._crop_items = get_crop_picker_items()
         self._loading = True
         self._build_ui()
         self._load()
@@ -85,8 +85,8 @@ class SettingsPanel(QWidget):
         plant_form.addRow(self._field_label('播种策略', plant_card), self.strategy)
 
         self.crop = ComboBox(plant_card)
-        for crop in self._crop_names:
-            self.crop.addItem(str(crop), userData=str(crop))
+        for label, crop_name in self._crop_items:
+            self.crop.addItem(str(label), userData=str(crop_name))
         plant_form.addRow(self._field_label('选择作物', plant_card), self.crop)
 
         self.warehouse_first = CheckBox('仓库优先', plant_card)
