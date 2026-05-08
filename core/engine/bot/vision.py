@@ -110,7 +110,10 @@ class BotVisionMixin:
         """处理种子选择场景：命中目标种子后执行点击播种。"""
         crop_name = self._resolve_crop_name()
         crop = get_crop_by_name(crop_name)
-        template_name = f'seed_{crop[1]}' if crop else f'seed_{crop_name}'
+        if not crop:
+            return None
+        seed_id = int(crop[1])
+        template_name = f'seed_{seed_id}'
         seed = next((d for d in detections if d.name == template_name), None)
         if not seed:
             return None

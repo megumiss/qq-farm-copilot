@@ -30,6 +30,7 @@ class UI(Handler):
         page_mall,
         page_pet,
         page_task,
+        page_warehouse_seed,
         page_warehouse,
         page_wiki,
         page_mail,

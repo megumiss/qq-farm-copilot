@@ -1,9 +1,7 @@
-"""从开源项目导入种子图片作为模板"""
+"""从开源项目导入种子图片作为 seed_id 模板。"""
 
-import json
 import os
 import re
-import shutil
 from pathlib import Path
 
 from PIL import Image
@@ -24,23 +22,6 @@ SRC_DIR = os.path.join(
 DST_DIR = ROOT / 'templates' / 'qq' / 'seed'
 
 
-def _load_seed_id_by_crop_no() -> dict[str, str]:
-    plants_path = ROOT / 'configs' / 'plants.json'
-    data = json.loads(plants_path.read_text(encoding='utf-8'))
-    out: dict[str, str] = {}
-    for item in data:
-        seed_id = item.get('seed_id')
-        if seed_id is None:
-            continue
-        try:
-            crop_no = int(item.get('id')) % 10000
-            seed_id_int = int(seed_id)
-        except (TypeError, ValueError):
-            continue
-        out[str(crop_no)] = str(seed_id_int)
-    return out
-
-
 def main():
     """程序主入口。"""
     if not os.path.exists(SRC_DIR):
@@ -48,7 +29,6 @@ def main():
         return
 
     os.makedirs(DST_DIR, exist_ok=True)
-    seed_id_by_crop_no = _load_seed_id_by_crop_no()
 
     count = 0
     for filename in sorted(os.listdir(SRC_DIR)):
@@ -59,22 +39,13 @@ def main():
         if 'Mutant' in filename or 'dog_food' in filename:
             continue
 
-        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png → seed_20002.png
-        # 或: Crop_101_Seed.png → seed_20101.png
+        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png -> seed_20002.png。
         match = re.match(r'(\d+)_(.+?)_Crop_\d+_Seed', filename)
         if match:
             seed_id = match.group(1)
             dst_name = f'seed_{seed_id}.png'
         else:
-            match2 = re.match(r'Crop_(\d+)_Seed', filename)
-            if match2:
-                crop_id = match2.group(1)
-                seed_id = seed_id_by_crop_no.get(crop_id)
-                if seed_id is None:
-                    continue
-                dst_name = f'seed_{seed_id}.png'
-            else:
-                continue
+            continue
 
         src_path = os.path.join(SRC_DIR, filename)
         dst_path = os.path.join(DST_DIR, dst_name)

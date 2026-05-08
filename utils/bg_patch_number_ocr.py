@@ -88,21 +88,103 @@ class BgPatchNumberOCR:
         )
         return mask
 
-    def _find_candidate_boxes(self, mask: np.ndarray) -> list[tuple[int, int, int, int]]:
+    @staticmethod
+    def _find_contour_boxes(mask: np.ndarray) -> list[tuple[int, int, int, int]]:
+        """返回数字底色 mask 的全部外接框。"""
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        boxes: list[tuple[int, int, int, int]] = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            area = w * h
-            if not (self.min_width <= w <= self.max_width):
-                continue
-            if not (self.min_height <= h <= self.max_height):
-                continue
-            if not (self.min_area <= area <= self.max_area):
-                continue
-            boxes.append((x, y, w, h))
+        boxes = [cv2.boundingRect(contour) for contour in contours]
         boxes.sort(key=lambda item: (item[1], item[0]))
-        return boxes
+        return [(int(x), int(y), int(w), int(h)) for x, y, w, h in boxes]
+
+    def _is_strict_candidate_box(self, box: tuple[int, int, int, int]) -> bool:
+        """判断外接框是否符合标准数字气泡尺寸。"""
+        _, _, w, h = box
+        area = w * h
+        if not (self.min_width <= w <= self.max_width):
+            return False
+        if not (self.min_height <= h <= self.max_height):
+            return False
+        return self.min_area <= area <= self.max_area
+
+    def _is_tall_candidate_box(self, box: tuple[int, int, int, int], *, row_y: float) -> bool:
+        """判断外接框是否为和下方种子图标粘连的数字气泡。"""
+        _, y, w, h = box
+        if not (self.min_width <= w <= self.max_width):
+            return False
+        if h <= self.max_height:
+            return False
+        if h > self.max_height * 2:
+            return False
+        return abs(float(y) - float(row_y)) <= 6.0
+
+    def _complete_boxes_by_horizontal_slots(
+        self,
+        boxes: list[tuple[int, int, int, int]],
+        contour_boxes: list[tuple[int, int, int, int]],
+    ) -> list[tuple[int, int, int, int]]:
+        """根据同一行数字气泡的横向间距，补上被下方图标粘连的缺失框。"""
+        if len(boxes) < 2:
+            return boxes
+
+        row_y = float(np.median([box[1] for box in boxes]))
+        row_boxes = [box for box in boxes if abs(float(box[1]) - row_y) <= 6.0]
+        if len(row_boxes) < 2:
+            return boxes
+
+        row_boxes.sort(key=lambda item: item[0])
+        centers = [float(box[0]) + float(box[2]) / 2.0 for box in row_boxes]
+        diffs = [right - left for left, right in zip(centers, centers[1:]) if right > left]
+        normal_diffs = [diff for diff in diffs if 55.0 <= diff <= 115.0]
+        if normal_diffs:
+            slot_step = float(np.median(normal_diffs))
+        else:
+            slot_step = min(diffs) if diffs else 0.0
+        if slot_step <= 0:
+            return boxes
+
+        median_h = int(round(float(np.median([box[3] for box in row_boxes]))))
+        patch_h = max(self.min_height, min(self.max_height, median_h))
+        tall_boxes = [
+            box
+            for box in contour_boxes
+            if self._is_tall_candidate_box(box, row_y=row_y) and not any(self._boxes_overlap(box, old) for old in boxes)
+        ]
+        if not tall_boxes:
+            return boxes
+
+        completed = list(boxes)
+        existing_centers = [float(box[0]) + float(box[2]) / 2.0 for box in completed]
+        for left, right in zip(centers, centers[1:]):
+            gap = right - left
+            if gap < slot_step * 1.5:
+                continue
+            missing_count = int(round(gap / slot_step)) - 1
+            if missing_count <= 0:
+                continue
+            for offset in range(1, missing_count + 1):
+                target_cx = left + slot_step * offset
+                if any(abs(target_cx - cx) <= slot_step * 0.35 for cx in existing_centers):
+                    continue
+                nearest = min(
+                    tall_boxes,
+                    key=lambda box: abs((float(box[0]) + float(box[2]) / 2.0) - target_cx),
+                )
+                nearest_cx = float(nearest[0]) + float(nearest[2]) / 2.0
+                if abs(nearest_cx - target_cx) > slot_step * 0.35:
+                    continue
+                new_box = (nearest[0], nearest[1], nearest[2], patch_h)
+                completed.append(new_box)
+                existing_centers.append(nearest_cx)
+
+        completed.sort(key=lambda item: (item[1], item[0]))
+        return completed
+
+    @staticmethod
+    def _boxes_overlap(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
+        """判断两个 xywh 外接框是否有交叠。"""
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        return min(ax + aw, bx + bw) > max(ax, bx) and min(ay + ah, by + bh) > max(ay, by)
 
     def _recognize_patch(self, patch_bgr: np.ndarray) -> tuple[str, str, float]:
         if patch_bgr is None or patch_bgr.size == 0:
@@ -172,7 +254,9 @@ class BgPatchNumberOCR:
 
         work = img_bgr[y1:y2, x1:x2]
         mask = self._build_mask(work)
-        boxes = self._find_candidate_boxes(mask)
+        contour_boxes = self._find_contour_boxes(mask)
+        boxes = [box for box in contour_boxes if self._is_strict_candidate_box(box)]
+        boxes = self._complete_boxes_by_horizontal_slots(boxes, contour_boxes)
 
         out: list[BgPatchNumberItem] = []
         for bx, by, bw, bh in boxes:
