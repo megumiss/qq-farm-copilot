@@ -118,15 +118,13 @@ def _load_seed_name_map() -> dict[str, str]:
             seed_id_int = int(seed_id)
         except (TypeError, ValueError):
             continue
-        out[f'seed_crop{seed_id_int % 1000}'] = name
+        out[f'seed_{seed_id_int}'] = name
     return out
 
 
 def _display_name(template_name: str, seed_name_map: dict[str, str]) -> str:
-    if template_name.startswith('seed_crop'):
-        return seed_name_map.get(template_name, template_name)
     if template_name.startswith('seed_'):
-        return template_name[5:]
+        return seed_name_map.get(template_name, template_name)
     return template_name
 
 

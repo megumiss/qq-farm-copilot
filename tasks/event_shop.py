@@ -49,7 +49,7 @@ class TaskEventShop(TaskBase):
         while 1:
             self.ui.device.screenshot()
             self._mask_clicked_haha_shop_items(area_click_count)
-            
+
             if self.ui.appear_then_click(BTN_CLICK_TO_CLOSE, offset=30, interval=1):
                 idle_timer.clear()
                 continue

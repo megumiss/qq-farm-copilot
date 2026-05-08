@@ -9,6 +9,7 @@ import numpy as np
 from loguru import logger
 from PIL import Image
 
+from utils.app_paths import load_config_json_array
 from utils.template_paths import (
     normalize_template_platform,
     template_scan_roots,
@@ -63,6 +64,7 @@ class CVDetector:
         self._templates_by_name: dict[str, dict] = {}
         self._loaded = False
         self._seed_templates_by_name: dict[str, dict] = {}
+        self._seed_template_by_crop_name: dict[str, str] = {}
         self._seed_loaded = False
         # 详细模板探测日志默认关闭；需要时可设置环境变量 QFARM_TEMPLATE_PROBE_LOG=1
         # self._probe_log_enabled = os.environ.get("QFARM_TEMPLATE_PROBE_LOG", "0") == "1"
@@ -88,6 +90,7 @@ class CVDetector:
             seed_root.mkdir(parents=True, exist_ok=True)
             logger.warning(f'seed 模板目录 {seed_root} 为空，请先采集 seed 模板')
             self._seed_templates_by_name = {}
+            self._seed_template_by_crop_name = {}
             self._seed_loaded = True
             return
 
@@ -122,8 +125,27 @@ class CVDetector:
             }
             count += 1
         self._seed_templates_by_name = out
+        self._seed_template_by_crop_name = self._build_seed_template_name_aliases(out)
         self._seed_loaded = True
         logger.info(f'已加载 {count} 个 seed 模板（固定目录，不按平台切换）')
+
+    def _build_seed_template_name_aliases(self, templates: dict[str, dict]) -> dict[str, str]:
+        """构建 `{作物名: seed_<seed_id>}` 映射，保持播种流程可继续传入作物名。"""
+        aliases: dict[str, str] = {}
+        for item in load_config_json_array('plants.json', prefer_user=False):
+            crop_name = str(item.get('name') or '').strip()
+            if not crop_name:
+                continue
+            try:
+                seed_id = int(item.get('seed_id') or 0)
+            except (TypeError, ValueError):
+                continue
+            if seed_id <= 0:
+                continue
+            template_name = f'seed_{seed_id}'
+            if template_name in templates:
+                aliases[crop_name] = template_name
+        return aliases
 
     def _iter_template_files(self, root: Path):
         """遍历模板文件（忽略 `__pycache__` 目录）。"""
@@ -379,11 +401,14 @@ class CVDetector:
         if not self._seed_loaded:
             self.load_seed_templates()
 
-        # 支持传入“作物名”或“完整模板名（seed_xxx）”两种形式。
+        # 支持传入“作物名 / seed_id / 完整模板名（seed_xxx）”。
+        crop_name_or_template = str(crop_name_or_template or '').strip()
         if crop_name_or_template.startswith('seed_'):
             template_name = crop_name_or_template
-        else:
+        elif crop_name_or_template.isdigit():
             template_name = f'seed_{crop_name_or_template}'
+        else:
+            template_name = self._seed_template_by_crop_name.get(crop_name_or_template, f'seed_{crop_name_or_template}')
 
         tpl = self._seed_templates_by_name.get(template_name)
 

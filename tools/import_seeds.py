@@ -1,10 +1,14 @@
 """从开源项目导入种子图片作为模板"""
 
+import json
 import os
 import re
 import shutil
+from pathlib import Path
 
 from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
 
 # 源目录
 SRC_DIR = os.path.join(
@@ -17,7 +21,24 @@ SRC_DIR = os.path.join(
 )
 
 # 目标目录
-DST_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'seed')
+DST_DIR = ROOT / 'templates' / 'qq' / 'seed'
+
+
+def _load_seed_id_by_crop_no() -> dict[str, str]:
+    plants_path = ROOT / 'configs' / 'plants.json'
+    data = json.loads(plants_path.read_text(encoding='utf-8'))
+    out: dict[str, str] = {}
+    for item in data:
+        seed_id = item.get('seed_id')
+        if seed_id is None:
+            continue
+        try:
+            crop_no = int(item.get('id')) % 10000
+            seed_id_int = int(seed_id)
+        except (TypeError, ValueError):
+            continue
+        out[str(crop_no)] = str(seed_id_int)
+    return out
 
 
 def main():
@@ -27,6 +48,7 @@ def main():
         return
 
     os.makedirs(DST_DIR, exist_ok=True)
+    seed_id_by_crop_no = _load_seed_id_by_crop_no()
 
     count = 0
     for filename in sorted(os.listdir(SRC_DIR)):
@@ -37,18 +59,20 @@ def main():
         if 'Mutant' in filename or 'dog_food' in filename:
             continue
 
-        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png → seed_白萝卜
-        # 或: Crop_101_Seed.png → seed_crop101
+        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png → seed_20002.png
+        # 或: Crop_101_Seed.png → seed_20101.png
         match = re.match(r'(\d+)_(.+?)_Crop_\d+_Seed', filename)
         if match:
             seed_id = match.group(1)
-            name = match.group(2)
-            dst_name = f'seed_{name}.png'
+            dst_name = f'seed_{seed_id}.png'
         else:
             match2 = re.match(r'Crop_(\d+)_Seed', filename)
             if match2:
                 crop_id = match2.group(1)
-                dst_name = f'seed_crop{crop_id}.png'
+                seed_id = seed_id_by_crop_no.get(crop_id)
+                if seed_id is None:
+                    continue
+                dst_name = f'seed_{seed_id}.png'
             else:
                 continue
 
