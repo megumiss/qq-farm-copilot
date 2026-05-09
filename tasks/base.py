@@ -10,6 +10,7 @@ from loguru import logger
 from core.engine.task.registry import TaskResult
 from models.config import AppConfig
 from models.task_views import (
+    EventShopTaskView,
     FertilizeTaskView,
     FriendTaskView,
     GiftTaskView,
@@ -61,6 +62,10 @@ class TaskViews:
     @property
     def gift(self) -> GiftTaskView:
         return self.owner.engine.build_task_view('gift')  # type: ignore[return-value]
+
+    @property
+    def event_shop(self) -> EventShopTaskView:
+        return self.owner.engine.build_task_view('event_shop')  # type: ignore[return-value]
 
     @property
     def reward(self) -> RewardTaskView:

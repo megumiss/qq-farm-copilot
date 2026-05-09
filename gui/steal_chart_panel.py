@@ -8,7 +8,7 @@ from typing import Callable
 from PyQt6.QtCore import QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QWheelEvent
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QSizePolicy, QToolTip, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, CardWidget, ScrollArea, SegmentedWidget, isDarkTheme
+from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, ScrollArea, SegmentedWidget, ToolButton, isDarkTheme
 
 from utils.daily_action_stats import load_daily_actions
 from utils.steal_stats import load_stats
@@ -321,17 +321,23 @@ class StealChartPanel(QWidget):
         self._seg.currentItemChanged.connect(lambda _: self._refresh())
         ctrl.addWidget(self._seg)
         ctrl.addStretch()
+        self._refresh_btn = ToolButton()
+        self._refresh_btn.setIcon(FluentIcon.SYNC)
+        self._refresh_btn.setToolTip('刷新统计数据')
+        self._refresh_btn.setFixedSize(32, 32)
+        self._refresh_btn.clicked.connect(self._refresh)
+        ctrl.addWidget(self._refresh_btn)
         layout.addLayout(ctrl)
 
         card = CardWidget()
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(12, 12, 12, 12)
 
-        coin_title = BodyLabel('金币')
+        coin_title = BodyLabel('偷取金币')
         coin_title.setStyleSheet('font-weight: 700;')
         self._coin_chart = _BarChart(self._adjust_window, bar_color='#f59e0b')
 
-        bean_title = BodyLabel('金豆')
+        bean_title = BodyLabel('偷取金豆')
         bean_title.setStyleSheet('font-weight: 700;')
         self._bean_chart = _BarChart(self._adjust_window, bar_color='#22c55e')
 

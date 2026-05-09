@@ -64,6 +64,7 @@ page_mall = Page('page_mall', MALL_CHECK, cn_name='商城')
 page_pet = Page('page_pet', PET_CHECK, cn_name='宠物')
 page_task = Page('page_task', TASK_CHECK, cn_name='任务')
 page_warehouse = Page('page_warehouse', WAREHOUSE_CHECK, cn_name='仓库')
+page_warehouse_seed = Page('page_warehouse_seed', WAREHOUSE_SEED_CHECK, cn_name='仓库种子')
 page_wiki = Page('page_wiki', WIKI_CHECK, cn_name='图鉴')
 
 page_main.link(button=MAIN_GOTO_FRIEND, destination=page_friend_list)
@@ -85,6 +86,9 @@ page_task.link(button=BTN_CLOSE, destination=page_main)
 
 page_main.link(button=MAIN_GOTO_WAREHOUSE, destination=page_warehouse)
 page_warehouse.link(button=BTN_CLOSE, destination=page_main)
+
+page_warehouse.link(button=WAREHOUSE_GOTO_SEED, destination=page_warehouse_seed)
+page_warehouse_seed.link(button=BTN_CLOSE, destination=page_main)
 
 page_main.link(button=MAIN_GOTO_WIKI, destination=page_wiki)
 page_wiki.link(button=BTN_CLOSE, destination=page_main)

@@ -26,6 +26,11 @@ BTN_EXPAND_DIRECT_CONFIRM = Button(area={'qq': (245, 570, 295, 595), 'wechat': (
 BTN_FRIEND_AGREED = Button(area={'qq': (316, 687, 416, 713), 'wechat': (316, 687, 416, 713)}, color={'qq': (190, 200, 110), 'wechat': (190, 200, 110)}, button={'qq': (316, 687, 416, 713), 'wechat': (316, 687, 416, 713)}, file={'qq': 'templates/qq/btn/btn_friend_agreed.png', 'wechat': 'templates/qq/btn/btn_friend_agreed.png'}, name='btn_friend_agreed')
 BTN_FRIEND_APPLY = Button(area={'qq': (220, 196, 318, 221), 'wechat': (220, 196, 318, 221)}, color={'qq': (226, 190, 167), 'wechat': (226, 190, 167)}, button={'qq': (220, 196, 318, 221), 'wechat': (220, 196, 318, 221)}, file={'qq': 'templates/qq/btn/btn_friend_apply.png', 'wechat': 'templates/qq/btn/btn_friend_apply.png'}, name='btn_friend_apply')
 BTN_FRIEND_RIGHT_FRAME = Button(area={'qq': (141, 846, 153, 913), 'wechat': (141, 846, 153, 913)}, color={'qq': (198, 229, 133), 'wechat': (198, 229, 133)}, button={'qq': (141, 846, 153, 913), 'wechat': (141, 846, 153, 913)}, file={'qq': 'templates/qq/btn/btn_friend_right_frame.png', 'wechat': 'templates/qq/btn/btn_friend_right_frame.png'}, name='btn_friend_right_frame')
+BTN_HAHA_SHOP = Button(area={'qq': (454, 266, 538, 282), 'wechat': (454, 266, 538, 282)}, color={'qq': (188, 159, 134), 'wechat': (188, 159, 134)}, button={'qq': (454, 266, 538, 282), 'wechat': (454, 266, 538, 282)}, file={'qq': 'templates/qq/event/btn_haha_shop.png', 'wechat': 'templates/qq/event/btn_haha_shop.png'}, name='btn_haha_shop')
+BTN_HAHA_SHOP_CHECK = Button(area={'qq': (135, 155, 246, 200), 'wechat': (135, 155, 246, 200)}, color={'qq': (183, 216, 161), 'wechat': (183, 216, 161)}, button={'qq': (135, 155, 246, 200), 'wechat': (135, 155, 246, 200)}, file={'qq': 'templates/qq/event/btn_haha_shop_check.png', 'wechat': 'templates/qq/event/btn_haha_shop_check.png'}, name='btn_haha_shop_check')
+BTN_HAHA_SHOP_CLOSE = Button(area={'qq': (471, 154, 501, 182), 'wechat': (471, 154, 501, 182)}, color={'qq': (186, 135, 86), 'wechat': (186, 135, 86)}, button={'qq': (471, 154, 501, 182), 'wechat': (471, 154, 501, 182)}, file={'qq': 'templates/qq/event/btn_haha_shop_close.png', 'wechat': 'templates/qq/event/btn_haha_shop_close.png'}, name='btn_haha_shop_close')
+BTN_HAHA_SHOP_FREE_REFRESH = Button(area={'qq': (219, 829, 305, 850), 'wechat': (219, 829, 305, 850)}, color={'qq': (189, 155, 99), 'wechat': (189, 155, 99)}, button={'qq': (219, 829, 305, 850), 'wechat': (219, 829, 305, 850)}, file={'qq': 'templates/qq/event/btn_haha_shop_free_refresh.png', 'wechat': 'templates/qq/event/btn_haha_shop_free_refresh.png'}, name='btn_haha_shop_free_refresh')
+BTN_HAHA_SHOP_ITEM = Button(area={'qq': (231, 538, 238, 546), 'wechat': (231, 538, 238, 546)}, color={'qq': (180, 160, 142), 'wechat': (180, 160, 142)}, button={'qq': (231, 538, 238, 546), 'wechat': (231, 538, 238, 546)}, file={'qq': 'templates/qq/event/btn_haha_shop_item.png', 'wechat': 'templates/qq/event/btn_haha_shop_item.png'}, name='btn_haha_shop_item')
 BTN_HARVEST = Button(area={'qq': (246, 688, 287, 720), 'wechat': (246, 688, 287, 720)}, color={'qq': (221, 169, 139), 'wechat': (221, 169, 139)}, button={'qq': (246, 688, 287, 720), 'wechat': (246, 688, 287, 720)}, file={'qq': 'templates/qq/btn/btn_harvest.png', 'wechat': 'templates/qq/btn/btn_harvest.png'}, name='btn_harvest')  # 一键收获
 BTN_HOME = Button(area={'qq': (465, 697, 510, 729), 'wechat': (465, 697, 510, 729)}, color={'qq': (181, 126, 76), 'wechat': (181, 126, 76)}, button={'qq': (465, 697, 510, 729), 'wechat': (465, 697, 510, 729)}, file={'qq': 'templates/qq/btn/btn_home.png', 'wechat': 'templates/qq/btn/btn_home.png'}, name='btn_home')  # 回家
 BTN_LAND_LEFT = Button(area={'qq': (152, 593, 167, 613), 'wechat': (152, 593, 167, 613)}, color={'qq': (191, 199, 88), 'wechat': (191, 199, 88)}, button={'qq': (152, 593, 167, 613), 'wechat': (152, 593, 167, 613)}, file={'qq': 'templates/qq/btn/btn_land_left.png', 'wechat': 'templates/qq/btn/btn_land_left.png'}, name='btn_land_left')
@@ -51,11 +56,13 @@ BTN_SHOP_BUY_CONFIRM = Button(area={'qq': (246, 622, 295, 648), 'wechat': (246, 
 BTN_STEAL = Button(area={'qq': (248, 692, 284, 720), 'wechat': (248, 692, 284, 720)}, color={'qq': (187, 147, 123), 'wechat': (187, 147, 123)}, button={'qq': (248, 692, 284, 720), 'wechat': (248, 692, 284, 720)}, file={'qq': 'templates/qq/btn/btn_steal.png', 'wechat': 'templates/qq/btn/btn_steal.png'}, name='btn_steal')
 BTN_STEAL_SINGLE = Button(area={'qq': (178, 500, 190, 522), 'wechat': (178, 500, 190, 522)}, color={'qq': (205, 182, 77), 'wechat': (205, 182, 77)}, button={'qq': (178, 500, 190, 522), 'wechat': (178, 500, 190, 522)}, file={'qq': 'templates/qq/btn/btn_steal_single.png', 'wechat': 'templates/qq/btn/btn_steal_single.png'}, name='btn_steal_single')
 BTN_VISIT_FIRST = Button(area={'qq': (443, 295, 480, 314), 'wechat': (443, 295, 480, 314)}, color={'qq': (183, 195, 99), 'wechat': (183, 195, 99)}, button={'qq': (443, 295, 480, 314), 'wechat': (443, 295, 480, 314)}, file={'qq': 'templates/qq/btn/btn_visit_first.png', 'wechat': 'templates/qq/btn/btn_visit_first.png'}, name='btn_visit_first')
+BTN_WAREHOUSE_SEED_20_EMPTY = Button(area={'qq': (424, 522, 508, 615), 'wechat': (424, 522, 508, 615)}, color={'qq': (239, 214, 169), 'wechat': (239, 214, 169)}, button={'qq': (424, 522, 508, 615), 'wechat': (424, 522, 508, 615)}, file={'qq': 'templates/qq/btn/btn_warehouse_seed_20_empty.png', 'wechat': 'templates/qq/btn/btn_warehouse_seed_20_empty.png'}, name='btn_warehouse_seed_20_empty')
 BTN_WATER = Button(area={'qq': (160, 683, 200, 717), 'wechat': (160, 683, 200, 717)}, color={'qq': (167, 157, 156), 'wechat': (167, 157, 156)}, button={'qq': (160, 683, 200, 717), 'wechat': (160, 683, 200, 717)}, file={'qq': 'templates/qq/btn/btn_water.png', 'wechat': 'templates/qq/btn/btn_water.png'}, name='btn_water')  # 一键浇水
 BTN_WEED = Button(area={'qq': (246, 683, 286, 717), 'wechat': (246, 683, 286, 717)}, color={'qq': (161, 158, 110), 'wechat': (161, 158, 110)}, button={'qq': (246, 683, 286, 717), 'wechat': (246, 683, 286, 717)}, file={'qq': 'templates/qq/btn/btn_weed.png', 'wechat': 'templates/qq/btn/btn_weed.png'}, name='btn_weed')  # 一键除草
 FRIEND_CHECK = Button(area={'qq': (241, 69, 299, 98), 'wechat': (241, 69, 299, 98)}, color={'qq': (225, 186, 159), 'wechat': (225, 186, 159)}, button={'qq': (241, 69, 299, 98), 'wechat': (241, 69, 299, 98)}, file={'qq': 'templates/qq/ui/friend_check.png', 'wechat': 'templates/qq/ui/friend_check.png'}, name='friend_check')
 ICON_BUG_IN_FRIEND_DETAIL = Button(area={'qq': (0, 0, 12, 15), 'wechat': (0, 0, 12, 15)}, color={'qq': (176, 189, 133), 'wechat': (176, 189, 133)}, button={'qq': (0, 0, 12, 15), 'wechat': (0, 0, 12, 15)}, file={'qq': 'templates/qq/icon/icon_bug_in_friend_detail.png', 'wechat': 'templates/qq/icon/icon_bug_in_friend_detail.png'}, name='icon_bug_in_friend_detail')
 ICON_BUG_IN_FRIEND_LIST = Button(area={'qq': (0, 0, 24, 24), 'wechat': (0, 0, 24, 24)}, color={'qq': (167, 156, 153), 'wechat': (167, 156, 153)}, button={'qq': (0, 0, 24, 24), 'wechat': (0, 0, 24, 24)}, file={'qq': 'templates/qq/icon/icon_bug_in_friend_list.png', 'wechat': 'templates/qq/icon/icon_bug_in_friend_list.png'}, name='icon_bug_in_friend_list')
+ICON_LAND_AMETHYST = Button(area={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, color={'qq': (209, 168, 232), 'wechat': (209, 168, 232)}, button={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, file={'qq': 'templates/qq/land/icon_land_amethyst.png', 'wechat': 'templates/qq/land/icon_land_amethyst.png'}, name='icon_land_amethyst')
 ICON_LAND_BLACK = Button(area={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, color={'qq': (92, 67, 42), 'wechat': (92, 67, 42)}, button={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, file={'qq': 'templates/qq/land/icon_land_black.png', 'wechat': 'templates/qq/land/icon_land_black.png'}, name='icon_land_black')
 ICON_LAND_GOLD = Button(area={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, color={'qq': (249, 203, 50), 'wechat': (249, 203, 50)}, button={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, file={'qq': 'templates/qq/land/icon_land_gold.png', 'wechat': 'templates/qq/land/icon_land_gold.png'}, name='icon_land_gold')
 ICON_LAND_GOLD_2 = Button(area={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, color={'qq': (249, 204, 51), 'wechat': (249, 204, 51)}, button={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, file={'qq': 'templates/qq/land/icon_land_gold_2.png', 'wechat': 'templates/qq/land/icon_land_gold_2.png'}, name='icon_land_gold_2')
@@ -103,6 +110,8 @@ SHARE_CHECK = Button(area={'qq': (64, 142, 130, 175), 'wechat': (64, 142, 130, 1
 SHOP_CHECK = Button(area={'qq': (241, 85, 298, 113), 'wechat': (241, 85, 298, 113)}, color={'qq': (225, 191, 168), 'wechat': (225, 191, 168)}, button={'qq': (241, 85, 298, 113), 'wechat': (241, 85, 298, 113)}, file={'qq': 'templates/qq/ui/shop_check.png', 'wechat': 'templates/qq/ui/shop_check.png'}, name='shop_check')
 TASK_CHECK = Button(area={'qq': (242, 87, 298, 115), 'wechat': (242, 87, 298, 115)}, color={'qq': (224, 188, 165), 'wechat': (224, 188, 165)}, button={'qq': (242, 87, 298, 115), 'wechat': (242, 87, 298, 115)}, file={'qq': 'templates/qq/ui/task_check.png', 'wechat': 'templates/qq/ui/task_check.png'}, name='task_check')
 WAREHOUSE_CHECK = Button(area={'qq': (242, 70, 298, 98), 'wechat': (242, 70, 298, 98)}, color={'qq': (226, 188, 168), 'wechat': (226, 188, 168)}, button={'qq': (242, 70, 298, 98), 'wechat': (242, 70, 298, 98)}, file={'qq': 'templates/qq/ui/warehouse_check.png', 'wechat': 'templates/qq/ui/warehouse_check.png'}, name='warehouse_check')
+WAREHOUSE_GOTO_SEED = Button(area={'qq': (306, 128, 360, 154), 'wechat': (306, 128, 360, 154)}, color={'qq': (204, 147, 112), 'wechat': (204, 147, 112)}, button={'qq': (306, 128, 360, 154), 'wechat': (306, 128, 360, 154)}, file={'qq': 'templates/qq/ui/warehouse_goto_seed.png', 'wechat': 'templates/qq/ui/warehouse_goto_seed.png'}, name='warehouse_goto_seed')
+WAREHOUSE_SEED_CHECK = Button(area={'qq': (302, 126, 363, 156), 'wechat': (302, 126, 363, 156)}, color={'qq': (226, 171, 107), 'wechat': (226, 171, 107)}, button={'qq': (302, 126, 363, 156), 'wechat': (302, 126, 363, 156)}, file={'qq': 'templates/qq/ui/warehouse_seed_check.png', 'wechat': 'templates/qq/ui/warehouse_seed_check.png'}, name='warehouse_seed_check')
 WIKI_CHECK = Button(area={'qq': (244, 72, 298, 98), 'wechat': (244, 72, 298, 98)}, color={'qq': (233, 206, 186), 'wechat': (233, 206, 186)}, button={'qq': (244, 72, 298, 98), 'wechat': (244, 72, 298, 98)}, file={'qq': 'templates/qq/ui/wiki_check.png', 'wechat': 'templates/qq/ui/wiki_check.png'}, name='wiki_check')
 
 ASSET_NAME_TO_CONST = {
@@ -127,6 +136,11 @@ ASSET_NAME_TO_CONST = {
     'btn_friend_agreed': BTN_FRIEND_AGREED,
     'btn_friend_apply': BTN_FRIEND_APPLY,
     'btn_friend_right_frame': BTN_FRIEND_RIGHT_FRAME,
+    'btn_haha_shop': BTN_HAHA_SHOP,
+    'btn_haha_shop_check': BTN_HAHA_SHOP_CHECK,
+    'btn_haha_shop_close': BTN_HAHA_SHOP_CLOSE,
+    'btn_haha_shop_free_refresh': BTN_HAHA_SHOP_FREE_REFRESH,
+    'btn_haha_shop_item': BTN_HAHA_SHOP_ITEM,
     'btn_harvest': BTN_HARVEST,
     'btn_home': BTN_HOME,
     'btn_land_left': BTN_LAND_LEFT,
@@ -154,11 +168,13 @@ ASSET_NAME_TO_CONST = {
     'btn_steal_single': BTN_STEAL_SINGLE,
     'BTN_STEAL_TOTAL': BTN_STEAL_TOTAL,
     'btn_visit_first': BTN_VISIT_FIRST,
+    'btn_warehouse_seed_20_empty': BTN_WAREHOUSE_SEED_20_EMPTY,
     'btn_water': BTN_WATER,
     'btn_weed': BTN_WEED,
     'friend_check': FRIEND_CHECK,
     'icon_bug_in_friend_detail': ICON_BUG_IN_FRIEND_DETAIL,
     'icon_bug_in_friend_list': ICON_BUG_IN_FRIEND_LIST,
+    'icon_land_amethyst': ICON_LAND_AMETHYST,
     'icon_land_black': ICON_LAND_BLACK,
     'icon_land_gold': ICON_LAND_GOLD,
     'icon_land_gold_2': ICON_LAND_GOLD_2,
@@ -206,5 +222,7 @@ ASSET_NAME_TO_CONST = {
     'shop_check': SHOP_CHECK,
     'task_check': TASK_CHECK,
     'warehouse_check': WAREHOUSE_CHECK,
+    'warehouse_goto_seed': WAREHOUSE_GOTO_SEED,
+    'warehouse_seed_check': WAREHOUSE_SEED_CHECK,
     'wiki_check': WIKI_CHECK,
 }

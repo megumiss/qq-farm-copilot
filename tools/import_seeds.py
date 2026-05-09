@@ -1,10 +1,12 @@
-"""从开源项目导入种子图片作为模板"""
+"""从开源项目导入种子图片作为 seed_id 模板。"""
 
 import os
 import re
-import shutil
+from pathlib import Path
 
 from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
 
 # 源目录
 SRC_DIR = os.path.join(
@@ -17,7 +19,7 @@ SRC_DIR = os.path.join(
 )
 
 # 目标目录
-DST_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates', 'seed')
+DST_DIR = ROOT / 'templates' / 'qq' / 'seed'
 
 
 def main():
@@ -37,20 +39,13 @@ def main():
         if 'Mutant' in filename or 'dog_food' in filename:
             continue
 
-        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png → seed_白萝卜
-        # 或: Crop_101_Seed.png → seed_crop101
+        # 解析文件名: 20002_白萝卜_Crop_2_Seed.png -> seed_20002.png。
         match = re.match(r'(\d+)_(.+?)_Crop_\d+_Seed', filename)
         if match:
             seed_id = match.group(1)
-            name = match.group(2)
-            dst_name = f'seed_{name}.png'
+            dst_name = f'seed_{seed_id}.png'
         else:
-            match2 = re.match(r'Crop_(\d+)_Seed', filename)
-            if match2:
-                crop_id = match2.group(1)
-                dst_name = f'seed_crop{crop_id}.png'
-            else:
-                continue
+            continue
 
         src_path = os.path.join(SRC_DIR, filename)
         dst_path = os.path.join(DST_DIR, dst_name)

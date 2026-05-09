@@ -23,7 +23,7 @@ from qfluentwidgets import (
 from core.platform.window_manager import DisplayInfo, WindowInfo, WindowManager
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
 from models.config import AppConfig, PlantMode, RunMode, WindowPlatform, WindowPosition
-from models.game_data import get_best_crop_for_level, get_crop_names, get_latest_crop_for_level
+from models.game_data import get_best_crop_for_level, get_crop_picker_items, get_latest_crop_for_level
 from utils.app_paths import user_app_dir
 
 
@@ -36,7 +36,7 @@ class SettingsPanel(QWidget):
         super().__init__(parent)
         self.config = config
         self._wm = WindowManager()
-        self._crop_names = get_crop_names()
+        self._crop_items = get_crop_picker_items()
         self._loading = True
         self._build_ui()
         self._load()
@@ -67,7 +67,7 @@ class SettingsPanel(QWidget):
         layout.addWidget(plant_card)
 
         self.level = SpinBox(plant_card)
-        self.level.setRange(1, 100)
+        self.level.setRange(1, 999)
         self.level_ocr = CheckBox('自动同步', plant_card)
         level_row = QWidget(plant_card)
         level_layout = QHBoxLayout(level_row)
@@ -85,19 +85,19 @@ class SettingsPanel(QWidget):
         plant_form.addRow(self._field_label('播种策略', plant_card), self.strategy)
 
         self.crop = ComboBox(plant_card)
-        for crop in self._crop_names:
-            self.crop.addItem(str(crop), userData=str(crop))
+        for label, crop_name in self._crop_items:
+            self.crop.addItem(str(label), userData=str(crop_name))
         plant_form.addRow(self._field_label('选择作物', plant_card), self.crop)
 
         self.warehouse_first = CheckBox('仓库优先', plant_card)
         plant_form.addRow(self._field_label('播种', plant_card), self.warehouse_first)
-        warehouse_tip = CaptionLabel('建议开启，关闭后可能会因种子模板识别出错导致重复购买。', plant_card)
+        warehouse_tip = CaptionLabel('直接按照仓库中的种子顺序种植，不包括四格作物。', plant_card)
         warehouse_tip.setWordWrap(True)
         warehouse_tip.setStyleSheet('color: #d97706;')
         plant_form.addRow(self._field_label('', plant_card), warehouse_tip)
         self.skip_event_crops = CheckBox('排除活动作物', plant_card)
         plant_form.addRow(self._field_label('其他设置', plant_card), self.skip_event_crops)
-        event_tip = CaptionLabel('四格作物固定排除；此选项仅控制是否额外排除其他活动作物（当前仅艾草）。', plant_card)
+        event_tip = CaptionLabel('废弃参数。若与仓库优先同时开启，将按关闭仓库优先处理。', plant_card)
         event_tip.setWordWrap(True)
         event_tip.setStyleSheet('color: #d97706;')
         plant_form.addRow(self._field_label('', plant_card), event_tip)
@@ -141,7 +141,7 @@ class SettingsPanel(QWidget):
         env_form.addRow(self._field_label('', env_card), shortcut_tip)
 
         self.shortcut_launch_delay = SpinBox(env_card)
-        self.shortcut_launch_delay.setRange(0, 30)
+        self.shortcut_launch_delay.setRange(0, 300)
         self.shortcut_launch_delay.setSingleStep(1)
         self.shortcut_launch_delay.setSuffix(' 秒')
         env_form.addRow(self._field_label('启动延迟', env_card), self.shortcut_launch_delay)
@@ -165,6 +165,32 @@ class SettingsPanel(QWidget):
         window_restart_delay_tip.setWordWrap(True)
         window_restart_delay_tip.setStyleSheet('color: #d97706;')
         env_form.addRow(self._field_label('', env_card), window_restart_delay_tip)
+
+        self.window_launch_wait_timeout = DoubleSpinBox(env_card)
+        self.window_launch_wait_timeout.setRange(1.0, 300.0)
+        self.window_launch_wait_timeout.setDecimals(1)
+        self.window_launch_wait_timeout.setSingleStep(0.5)
+        self.window_launch_wait_timeout.setSuffix(' 秒')
+        env_form.addRow(self._field_label('拉起等待超时', env_card), self.window_launch_wait_timeout)
+        window_launch_wait_timeout_hint = CaptionLabel(
+            '每轮等待窗口出现的超时上限，影响启动和重启恢复时的单轮等待时长。',
+            env_card,
+        )
+        window_launch_wait_timeout_hint.setStyleSheet('color: #d97706;')
+        env_form.addRow('', window_launch_wait_timeout_hint)
+
+        self.startup_stabilize_timeout = DoubleSpinBox(env_card)
+        self.startup_stabilize_timeout.setRange(5.0, 600.0)
+        self.startup_stabilize_timeout.setDecimals(1)
+        self.startup_stabilize_timeout.setSingleStep(1.0)
+        self.startup_stabilize_timeout.setSuffix(' 秒')
+        env_form.addRow(self._field_label('启动收敛超时', env_card), self.startup_stabilize_timeout)
+        startup_stabilize_timeout_hint = CaptionLabel(
+            '启动后等待回到主页面的总超时上限。',
+            env_card,
+        )
+        startup_stabilize_timeout_hint.setStyleSheet('color: #d97706;')
+        env_form.addRow('', startup_stabilize_timeout_hint)
 
         self.keyword = LineEdit(env_card)
         self.keyword.setPlaceholderText('窗口标题关键字')
@@ -302,6 +328,36 @@ class SettingsPanel(QWidget):
         )
         planting_stable_timeout_hint.setStyleSheet('color: #d97706;')
         advanced_form.addRow('', planting_stable_timeout_hint)
+        land_swipe_row = QWidget(advanced_card)
+        land_swipe_layout = QHBoxLayout(land_swipe_row)
+        land_swipe_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_layout.setSpacing(8)
+        self.land_swipe_right_times = SpinBox(land_swipe_row)
+        self.land_swipe_right_times.setRange(0, 20)
+        self.land_swipe_left_times = SpinBox(land_swipe_row)
+        self.land_swipe_left_times.setRange(0, 20)
+        land_swipe_right = QWidget(land_swipe_row)
+        land_swipe_right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_right_layout = QHBoxLayout(land_swipe_right)
+        land_swipe_right_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_right_layout.setSpacing(6)
+        land_swipe_right_layout.addWidget(CaptionLabel('右滑', land_swipe_right))
+        self.land_swipe_right_times.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_right_layout.addWidget(self.land_swipe_right_times, 1)
+        land_swipe_left = QWidget(land_swipe_row)
+        land_swipe_left.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_left_layout = QHBoxLayout(land_swipe_left)
+        land_swipe_left_layout.setContentsMargins(0, 0, 0, 0)
+        land_swipe_left_layout.setSpacing(6)
+        land_swipe_left_layout.addWidget(CaptionLabel('左滑', land_swipe_left))
+        self.land_swipe_left_times.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        land_swipe_left_layout.addWidget(self.land_swipe_left_times, 1)
+        land_swipe_layout.addWidget(land_swipe_right, 1)
+        land_swipe_layout.addWidget(land_swipe_left, 1)
+        advanced_form.addRow(self._field_label('边界滑动次数', advanced_card), land_swipe_row)
+        land_swipe_hint = CaptionLabel('将画面滑动到左右边界的次数，土地巡查和升级共用。', advanced_card)
+        land_swipe_hint.setStyleSheet('color: #d97706;')
+        advanced_form.addRow('', land_swipe_hint)
 
         self.debug = CheckBox('启用 Debug 日志', advanced_card)
         advanced_form.addRow(self._field_label('调试日志', advanced_card), self.debug)
@@ -332,8 +388,12 @@ class SettingsPanel(QWidget):
             self.offset.valueChanged,
             self.max_actions.valueChanged,
             self.capture_interval.valueChanged,
+            self.window_launch_wait_timeout.valueChanged,
+            self.startup_stabilize_timeout.valueChanged,
             self.planting_stable.valueChanged,
             self.planting_stable_timeout.valueChanged,
+            self.land_swipe_right_times.valueChanged,
+            self.land_swipe_left_times.valueChanged,
             self.debug.toggled,
         ):
             sig.connect(self._save)
@@ -588,8 +648,12 @@ class SettingsPanel(QWidget):
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
         self.capture_interval.setValue(float(c.screenshot.capture_interval_seconds))
+        self.window_launch_wait_timeout.setValue(float(c.recovery.window_launch_wait_timeout_seconds))
+        self.startup_stabilize_timeout.setValue(float(c.recovery.startup_stabilize_timeout_seconds))
         self.planting_stable.setValue(float(c.planting.planting_stable_seconds))
         self.planting_stable_timeout.setValue(float(c.planting.planting_stable_timeout_seconds))
+        self.land_swipe_right_times.setValue(int(c.planting.land_swipe_right_times))
+        self.land_swipe_left_times.setValue(int(c.planting.land_swipe_left_times))
         self.debug.setChecked(bool(c.safety.debug_log_enabled))
         self.logs_path_label.setText(self._resolve_logs_path_text())
         self._refresh_windows()
@@ -626,8 +690,12 @@ class SettingsPanel(QWidget):
         c.safety.click_offset_range = int(self.offset.value())
         c.safety.max_actions_per_round = int(self.max_actions.value())
         c.screenshot.capture_interval_seconds = float(self.capture_interval.value())
+        c.recovery.window_launch_wait_timeout_seconds = float(self.window_launch_wait_timeout.value())
+        c.recovery.startup_stabilize_timeout_seconds = float(self.startup_stabilize_timeout.value())
         c.planting.planting_stable_seconds = float(self.planting_stable.value())
         c.planting.planting_stable_timeout_seconds = float(self.planting_stable_timeout.value())
+        c.planting.land_swipe_right_times = int(self.land_swipe_right_times.value())
+        c.planting.land_swipe_left_times = int(self.land_swipe_left_times.value())
         c.safety.debug_log_enabled = bool(self.debug.isChecked())
         c.save()
         self.config_changed.emit(c)

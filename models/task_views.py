@@ -23,7 +23,7 @@ class TaskViewBase:
     trigger: TaskTriggerType | str
     interval_seconds: int
     failure_interval_seconds: int
-    daily_time: str
+    daily_times: list[str]
     enabled_time_range: str
     next_run: str
     _task_call: TaskCall = field(repr=False, compare=False)
@@ -55,12 +55,12 @@ class FriendFeatures:
     auto_steal: bool = False
     steal_enabled_time_range: str = '00:00:00-23:59:59'
     steal_limit_count: int = 0
-    steal_stats: bool = False
     auto_help: bool = True
     help_enabled_time_range: str = '00:00:00-23:59:59'
     help_limit_count: int = 0
     auto_accept_request: bool = True
     blacklist: list[str] = field(default_factory=list)
+    steal_stats: bool = False
 
 
 @dataclass(slots=True)
@@ -107,6 +107,11 @@ class GiftTaskView(TaskViewBase):
 
 
 @dataclass(slots=True)
+class EventShopTaskView(TaskViewBase):
+    feature: EmptyFeatures = field(default_factory=EmptyFeatures)
+
+
+@dataclass(slots=True)
 class SellTaskView(TaskViewBase):
     feature: EmptyFeatures = field(default_factory=EmptyFeatures)
 
@@ -128,6 +133,7 @@ TASK_FEATURE_CLASS_MAP = {
     'share': EmptyFeatures,
     'reward': RewardFeatures,
     'gift': GiftFeatures,
+    'event_shop': EmptyFeatures,
     'sell': EmptyFeatures,
     'land_scan': EmptyFeatures,
     'restart': EmptyFeatures,
@@ -140,6 +146,7 @@ TASK_VIEW_CLASS_MAP = {
     'share': ShareTaskView,
     'reward': RewardTaskView,
     'gift': GiftTaskView,
+    'event_shop': EventShopTaskView,
     'sell': SellTaskView,
     'land_scan': LandScanTaskView,
     'restart': RestartTaskView,

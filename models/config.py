@@ -119,7 +119,7 @@ class TaskTriggerType(str, Enum):
 DEFAULT_MIN_TASK_INTERVAL_SECONDS = 5
 DEFAULT_TASK_NEXT_RUN = '2026-01-01 00:00'
 DEFAULT_TASK_ENABLED_TIME_RANGE = '00:00:00-23:59:59'
-DEFAULT_EXECUTOR_TASK_ORDER = 'land_scan>main>fertilize>friend>sell>reward>gift>share>restart'
+DEFAULT_EXECUTOR_TASK_ORDER = 'land_scan>main>fertilize>friend>sell>reward>gift>event_shop>share>restart'
 
 
 def _normalize_hh_mm_text(text: str, fallback: str) -> str:
@@ -160,6 +160,32 @@ def normalize_task_enabled_time_range(value: Any) -> str:
     return DEFAULT_TASK_ENABLED_TIME_RANGE
 
 
+def normalize_task_daily_times(value: Any, *, fallback: str | None = None) -> list[str]:
+    """规范化每日触发时间列表，输出 `list[HH:MM]`。"""
+    raw_items: list[Any] = []
+    if isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    elif isinstance(value, str):
+        raw = value.strip()
+        if raw:
+            raw_items = [part for part in re.split(r'[,\s;|，；/]+', raw) if str(part).strip()]
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        text = _normalize_hh_mm_text(str(item or '').strip(), '')
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+
+    if out:
+        return out
+    if fallback is None:
+        return []
+    return [_normalize_hh_mm_text(str(fallback or '00:01').strip(), '00:01')]
+
+
 def normalize_executor_task_order(value: Any) -> str:
     """规范化任务顺序配置为 `task_a>task_b>task_c`。"""
     raw = str(value or DEFAULT_EXECUTOR_TASK_ORDER).strip()
@@ -191,7 +217,7 @@ class TaskScheduleItemConfig(ConfigModel):
     trigger: TaskTriggerType = TaskTriggerType.INTERVAL
     interval_seconds: int = 1800
     enabled_time_range: str = DEFAULT_TASK_ENABLED_TIME_RANGE
-    daily_time: str = '00:01'
+    daily_times: list[str] = Field(default_factory=lambda: ['00:01'])
     next_run: str = DEFAULT_TASK_NEXT_RUN
     failure_interval_seconds: int = 60
     features: dict[str, Any] = Field(default_factory=dict)
@@ -208,12 +234,11 @@ class TaskScheduleItemConfig(ConfigModel):
         """规范化 `failure_interval` 输入值。"""
         return max(1, int(value))
 
-    @field_validator('daily_time', mode='before')
+    @field_validator('daily_times', mode='before')
     @classmethod
-    def _normalize_daily_time(cls, value):
-        """规范化 `daily_time` 输入值。"""
-        text = str(value or '00:01').strip()
-        return _normalize_hh_mm_text(text, '00:01')
+    def _normalize_daily_times(cls, value):
+        """规范化 `daily_times` 输入值。"""
+        return normalize_task_daily_times(value, fallback='00:01')
 
     @field_validator('enabled_time_range', mode='before')
     @classmethod
@@ -304,6 +329,7 @@ class RecoveryConfig(ConfigModel):
 
     task_restart_attempts: int = 3
     task_retry_delay_seconds: int = 1
+    window_launch_wait_timeout_seconds: float = 15.0
     startup_retry_step_sleep_seconds: float = 0.5
     startup_stabilize_timeout_seconds: float = 90.0
 
@@ -328,6 +354,16 @@ class RecoveryConfig(ConfigModel):
         except Exception:
             seconds = 0.5
         return max(0.1, seconds)
+
+    @field_validator('window_launch_wait_timeout_seconds', mode='before')
+    @classmethod
+    def _normalize_window_launch_wait_timeout_seconds(cls, value):
+        """规范化窗口拉起等待超时（秒）。"""
+        try:
+            seconds = float(value)
+        except Exception:
+            seconds = 15.0
+        return max(1.0, seconds)
 
     @field_validator('startup_stabilize_timeout_seconds', mode='before')
     @classmethod
@@ -355,6 +391,8 @@ class PlantingConfig(ConfigModel):
     virtual_desktop_index: int = 0
     planting_stable_seconds: float = 0.5
     planting_stable_timeout_seconds: float = 3.0
+    land_swipe_right_times: int = 4
+    land_swipe_left_times: int = 6
 
     @field_validator('player_level', mode='before')
     @classmethod
@@ -390,6 +428,16 @@ class PlantingConfig(ConfigModel):
             index = 0
         return max(0, index)
 
+    @field_validator('land_swipe_right_times', 'land_swipe_left_times', mode='before')
+    @classmethod
+    def _normalize_land_swipe_times(cls, value):
+        """规范化土地左右滑动次数。"""
+        try:
+            times = int(value)
+        except Exception:
+            times = 0
+        return max(0, min(20, times))
+
 
 LAND_COL_COUNT = 6
 LAND_ROW_COUNT = 4
@@ -399,8 +447,9 @@ LAND_STATE_ALIASES: dict[str, str] = {
     '红': 'red',
     '黑': 'black',
     '金': 'gold',
+    '紫晶': 'amethyst',
 }
-LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold'}
+LAND_STATE_VALUES: set[str] = {'unbuilt', 'normal', 'red', 'black', 'gold', 'amethyst'}
 LAND_MATURITY_COUNTDOWN_PATTERN = re.compile(r'^(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})$')
 LAND_COUNTDOWN_SYNC_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 

@@ -1,3 +1,4 @@
+from tasks.event_shop import TaskEventShop
 from tasks.fertilize import TaskFertilize
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
@@ -14,6 +15,7 @@ __all__ = [
     'TaskFriend',
     'TaskShare',
     'TaskGift',
+    'TaskEventShop',
     'TaskLandScan',
     'TaskFertilize',
 ]

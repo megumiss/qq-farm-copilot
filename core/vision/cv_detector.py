@@ -13,6 +13,12 @@ from utils.template_paths import (
     normalize_template_platform,
     template_scan_roots,
 )
+from utils.warehouse_seed_vision import (
+    WAREHOUSE_SEED_GRID_ROI as DEFAULT_WAREHOUSE_SEED_GRID_ROI,
+)
+from utils.warehouse_seed_vision import (
+    detect_warehouse_seed_slot_boxes,
+)
 
 
 @dataclass
@@ -39,6 +45,17 @@ class DetectResult:
         return (self.x - self.w // 2, self.y - self.h // 2, self.x + self.w // 2, self.y + self.h // 2)
 
 
+@dataclass
+class SeedWarehouseSlot:
+    """仓库种子格识别结果。"""
+
+    index: int
+    bbox: tuple[int, int, int, int]
+    center: tuple[int, int]
+    template_name: str
+    confidence: float
+
+
 # 模板类别定义
 TEMPLATE_CATEGORIES = {
     'btn': 'button',
@@ -53,7 +70,10 @@ TEMPLATE_CATEGORIES = {
 class CVDetector:
     """基于OpenCV模板匹配的游戏UI检测器"""
 
-    SEED_DETECT_ROI: tuple[int, int, int, int] = (40, 500, 490, 920)
+    # 仓库种子页当前可见 5x4 种子格区域，供默认种子格分割使用。
+    WAREHOUSE_SEED_GRID_ROI: tuple[int, int, int, int] = DEFAULT_WAREHOUSE_SEED_GRID_ROI
+    # 仓库种子格底色，按 RGB 记录；OpenCV 合成模板时会转换为 BGR。
+    WAREHOUSE_SEED_SLOT_BG_RGB: tuple[int, int, int] = (255, 245, 223)
 
     def __init__(self, templates_dir: str = 'templates', template_platform: str = 'qq'):
         """初始化对象并准备运行所需状态。"""
@@ -86,7 +106,7 @@ class CVDetector:
         seed_root = base_root / 'qq' / 'seed'
         if not seed_root.exists():
             seed_root.mkdir(parents=True, exist_ok=True)
-            logger.warning(f'seed 模板目录 {seed_root} 为空，请先采集 seed 模板')
+            logger.warning(f'种子模板目录 {seed_root} 为空，请先采集种子模板')
             self._seed_templates_by_name = {}
             self._seed_loaded = True
             return
@@ -100,7 +120,7 @@ class CVDetector:
                 continue
             template = cv2.imdecode(np.fromfile(str(filepath), dtype=np.uint8), cv2.IMREAD_UNCHANGED)
             if template is None:
-                logger.warning(f'无法读取 seed 模板: {filepath}')
+                logger.warning(f'无法读取种子模板: {filepath}')
                 continue
 
             name = filepath.stem
@@ -123,7 +143,147 @@ class CVDetector:
             count += 1
         self._seed_templates_by_name = out
         self._seed_loaded = True
-        logger.info(f'已加载 {count} 个 seed 模板（固定目录，不按平台切换）')
+        logger.info(f'已加载 {count} 个种子模板（固定目录，不按平台切换）')
+
+    @staticmethod
+    def _alpha_bbox(mask: np.ndarray | None) -> tuple[int, int, int, int] | None:
+        """返回 alpha 非透明区域包围盒。"""
+        if mask is None:
+            return None
+        ys, xs = np.where(mask > 8)
+        if xs.size == 0 or ys.size == 0:
+            return None
+        return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+    @classmethod
+    def _warehouse_seed_background_bgr(cls) -> np.ndarray:
+        """返回仓库种子格固定背景色，格式为 OpenCV BGR。"""
+        red, green, blue = cls.WAREHOUSE_SEED_SLOT_BG_RGB
+        return np.array((blue, green, red), dtype=np.float32)
+
+    def _make_crop_composite_seed_template(
+        self,
+        tpl: dict,
+        *,
+        scale: float,
+        bg: np.ndarray,
+    ) -> tuple[np.ndarray, int, int] | None:
+        """裁剪透明边缘、缩放并按格子背景合成种子模板。"""
+        image = tpl['image']
+        mask = tpl['mask']
+        bbox = self._alpha_bbox(mask)
+        if bbox is not None:
+            x1, y1, x2, y2 = bbox
+            image = image[y1:y2, x1:x2]
+            mask = mask[y1:y2, x1:x2]
+
+        h, w = image.shape[:2]
+        new_w = int(w * float(scale))
+        new_h = int(h * float(scale))
+        if new_w < 10 or new_h < 10:
+            return None
+
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        resized_mask = cv2.resize(mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST) if mask is not None else None
+        if resized_mask is not None:
+            alpha = (resized_mask.astype(np.float32) / 255.0)[:, :, None]
+            resized = (resized.astype(np.float32) * alpha + bg.reshape(1, 1, 3) * (1.0 - alpha)).astype(np.uint8)
+        return resized, new_w, new_h
+
+    def _match_warehouse_seed_slot(
+        self,
+        slot: np.ndarray,
+        slot_origin: tuple[int, int],
+        *,
+        scale: float,
+        template_name: str | None = None,
+    ) -> tuple[float, str, int, int] | None:
+        """匹配单个仓库种子格，返回最高分模板。"""
+        if slot is None or slot.size == 0:
+            return None
+        templates = (
+            [self._seed_templates_by_name[template_name]]
+            if template_name and template_name in self._seed_templates_by_name
+            else list(self._seed_templates_by_name.values())
+        )
+        if not templates:
+            return None
+
+        bg = self._warehouse_seed_background_bgr()
+        origin_x, origin_y = slot_origin
+        slot_h, slot_w = slot.shape[:2]
+        best: tuple[float, str, int, int] | None = None
+
+        for tpl in templates:
+            made = self._make_crop_composite_seed_template(tpl, scale=float(scale), bg=bg)
+            if made is None:
+                continue
+            template_image, template_w, template_h = made
+            if template_w >= slot_w or template_h >= slot_h:
+                continue
+
+            result = cv2.matchTemplate(slot, template_image, cv2.TM_CCOEFF_NORMED)
+            result = np.where(np.isfinite(result), result, -1.0)
+            h, w = result.shape[:2]
+            yy, xx = np.indices((h, w))
+            center_x = xx + template_w / 2.0
+            center_y = yy + template_h / 2.0
+            valid = (center_x >= 25) & (center_x <= 70) & (center_y >= 25) & (center_y <= 80)
+            result = np.where(valid, result, -1.0)
+
+            _, max_score, _, max_loc = cv2.minMaxLoc(result)
+            x = origin_x + int(max_loc[0]) + template_w // 2
+            y = origin_y + int(max_loc[1]) + template_h // 2
+            current = (float(max_score), str(tpl['name']), int(x), int(y))
+            if best is None or current[0] > best[0]:
+                best = current
+
+        return best
+
+    def detect_seed_template_in_warehouse(
+        self,
+        screenshot: np.ndarray,
+        seed_id: int,
+        *,
+        threshold: float,
+        scale: float,
+        boxes: list[tuple[int, int, int, int]] | None = None,
+    ) -> list[SeedWarehouseSlot]:
+        """在仓库种子格中按 seed_id 识别目标种子，按分数倒序返回。"""
+        if not self._seed_loaded:
+            self.load_seed_templates()
+
+        template_name = f'seed_{int(seed_id)}'
+        if template_name not in self._seed_templates_by_name:
+            logger.warning('仓库种子匹配: 模板不存在 | 模板={}', template_name)
+            return []
+
+        seed_boxes = boxes if boxes is not None else detect_warehouse_seed_slot_boxes(screenshot)[:20]
+        results: list[SeedWarehouseSlot] = []
+        for idx, (x1, y1, x2, y2) in enumerate(seed_boxes, 1):
+            slot = screenshot[y1:y2, x1:x2]
+            matched = self._match_warehouse_seed_slot(
+                slot,
+                (x1, y1),
+                scale=float(scale),
+                template_name=template_name,
+            )
+            if matched is None:
+                continue
+            score, name, cx, cy = matched
+            if score < float(threshold):
+                continue
+            results.append(
+                SeedWarehouseSlot(
+                    index=int(idx),
+                    bbox=(int(x1), int(y1), int(x2), int(y2)),
+                    center=(int(cx), int(cy)),
+                    template_name=str(name),
+                    confidence=float(score),
+                )
+            )
+        results.sort(key=lambda item: item.confidence, reverse=True)
+        return results
 
     def _iter_template_files(self, root: Path):
         """遍历模板文件（忽略 `__pycache__` 目录）。"""
@@ -379,11 +539,14 @@ class CVDetector:
         if not self._seed_loaded:
             self.load_seed_templates()
 
-        # 支持传入“作物名”或“完整模板名（seed_xxx）”两种形式。
+        # 支持传入“作物名 / seed_id / 完整模板名（seed_xxx）”。
+        crop_name_or_template = str(crop_name_or_template or '').strip()
         if crop_name_or_template.startswith('seed_'):
             template_name = crop_name_or_template
-        else:
+        elif crop_name_or_template.isdigit():
             template_name = f'seed_{crop_name_or_template}'
+        else:
+            template_name = self._seed_template_by_crop_name.get(crop_name_or_template, f'seed_{crop_name_or_template}')
 
         tpl = self._seed_templates_by_name.get(template_name)
 
@@ -542,7 +705,6 @@ class CVDetector:
             if new_w >= sw or new_h >= sh or new_w < min_tpl_side or new_h < min_tpl_side:
                 continue
 
-            resized_tpl = cv2.resize(tpl_img, (new_w, new_h))
             resized_mask = None
             if tpl_mask is not None:
                 resized_mask = cv2.resize(tpl_mask, (new_w, new_h))

@@ -49,16 +49,18 @@ class TaskMainLandMixin:
 
     def _swipe_to_upgrade_group(self, group_name: str) -> None:
         """根据分组执行升级前画面滑动。"""
-        # 参考土地巡查任务手势：LAND_SCAN_SWIPE_H_P1=(350,190), LAND_SCAN_SWIPE_H_P2=(200,190)
-        left_p1 = (350, 190)
+        # 参考土地巡查任务手势：LAND_SCAN_SWIPE_H_P1=(250,190), LAND_SCAN_SWIPE_H_P2=(200,190)
+        left_p1 = (250, 190)
         left_p2 = (200, 190)
+        right_swipe_times = int(self.config.planting.land_swipe_right_times)
+        left_swipe_times = int(self.config.planting.land_swipe_left_times)
         if group_name == '12345':
-            for _ in range(2):
+            for _ in range(right_swipe_times):
                 self.ui.device.swipe(left_p1, left_p2, speed=30)
                 self.ui.device.sleep(0.5)
             return
         if group_name == '6789':
-            for _ in range(2):
+            for _ in range(left_swipe_times):
                 self.ui.device.swipe(left_p2, left_p1, speed=30)
                 self.ui.device.sleep(0.5)
 

@@ -11,6 +11,7 @@ from PIL import Image as PILImage
 from core.vision.cv_detector import DetectResult
 from models.config import AppConfig, RunMode, resolve_effective_run_mode
 from models.farm_state import Action, ActionType
+from models.game_data import get_crop_by_name
 from utils.daily_action_stats import record_daily_action
 
 
@@ -109,7 +110,12 @@ class BotVisionMixin:
     def _handle_seed_select_scene(self, detections: list[DetectResult]) -> str | None:
         """处理种子选择场景：命中目标种子后执行点击播种。"""
         crop_name = self._resolve_crop_name()
-        seed = next((d for d in detections if d.name == f'seed_{crop_name}'), None)
+        crop = get_crop_by_name(crop_name)
+        if not crop:
+            return None
+        seed_id = int(crop[1])
+        template_name = f'seed_{seed_id}'
+        seed = next((d for d in detections if d.name == template_name), None)
         if not seed:
             return None
         if not self.action_executor:

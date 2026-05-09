@@ -125,7 +125,7 @@ class TaskViewBase:
     trigger: TaskTriggerType | str
     interval_seconds: int
     failure_interval_seconds: int
-    daily_time: str
+    daily_times: list[str]
     enabled_time_range: str
     next_run: str
     _task_call: TaskCall = field(repr=False, compare=False)

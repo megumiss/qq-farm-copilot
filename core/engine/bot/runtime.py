@@ -279,6 +279,20 @@ class BotRuntimeMixin:
             seconds = 3
         return max(0, seconds)
 
+    def _resolve_window_launch_wait_timeout_seconds(self) -> float:
+        """读取窗口拉起等待超时（秒）。"""
+        try:
+            value = self.config.recovery.window_launch_wait_timeout_seconds
+        except Exception:
+            value = self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS
+        if isinstance(value, bool):
+            return float(self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS)
+        try:
+            seconds = float(value)
+        except Exception:
+            seconds = float(self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS)
+        return max(1.0, seconds)
+
     def _try_launch_window_by_shortcut(
         self,
         *,
@@ -469,9 +483,10 @@ class BotRuntimeMixin:
             `True` 表示恢复成功并回到主页面；否则返回 `False`。
         """
         logger.info(f'[{task_name}] 检测到重新登录，开始等待加载并恢复主页面...')
+        launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
         window, _launched = self._resolve_target_window(
             allow_shortcut_launch=True,
-            wait_timeout=self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS,
+            wait_timeout=launch_wait_timeout,
             poll_interval=self._WINDOW_LAUNCH_POLL_INTERVAL_SECONDS,
             emit_hint=False,
         )
@@ -522,8 +537,9 @@ class BotRuntimeMixin:
             logger.info(f'[{task_name}] 重启流程: 关闭窗口后等待 {delay_seconds:.1f}s')
             time.sleep(delay_seconds)
 
+        launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
         window, launched = self._try_launch_window_by_shortcut(
-            wait_timeout=self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS,
+            wait_timeout=launch_wait_timeout,
             poll_interval=self._WINDOW_LAUNCH_POLL_INTERVAL_SECONDS,
             emit_hint=False,
             force_launch=True,
@@ -608,7 +624,8 @@ class BotRuntimeMixin:
             if loop_count == 1 or (now_perf - last_progress_log_at) >= 3.0:
                 logger.info(f'启动检查中: remain={remain:.1f}s, last_error={last_error}')
                 last_progress_log_at = now_perf
-            wait_timeout = min(float(self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS), max(1.0, remain))
+            launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
+            wait_timeout = min(float(launch_wait_timeout), max(1.0, remain))
             window, _launched = self._resolve_target_window(
                 allow_shortcut_launch=True,
                 wait_timeout=wait_timeout,
@@ -698,9 +715,10 @@ class BotRuntimeMixin:
             logger.error('未找到 assets 按钮模板，请先运行 button_extract 工具')
             return False
 
+        launch_wait_timeout = self._resolve_window_launch_wait_timeout_seconds()
         window, launched_by_shortcut = self._resolve_target_window(
             allow_shortcut_launch=True,
-            wait_timeout=self._WINDOW_LAUNCH_WAIT_TIMEOUT_SECONDS,
+            wait_timeout=launch_wait_timeout,
             poll_interval=self._WINDOW_LAUNCH_POLL_INTERVAL_SECONDS,
             emit_hint=True,
         )

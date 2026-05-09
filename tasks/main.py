@@ -22,11 +22,6 @@ if TYPE_CHECKING:
     from core.ui.ui import UI
     from models.config import AppConfig
 
-# 商店列表上滑的起点坐标（用于翻页查找种子）。
-SHOP_LIST_SWIPE_START = (270, 300)
-# 商店列表上滑的终点坐标（与起点配合形成上滑手势）。
-SHOP_LIST_SWIPE_END = (270, 860)
-
 # 可播种空地模板集合（用于匹配可操作地块）。
 LAND_LIST = [ICON_LAND_STAND, ICON_LAND_BLACK, ICON_LAND_RED, ICON_LAND_GOLD, ICON_LAND_GOLD_2]
 # 空地模板命中的中心点 y 轴过滤区间，避免匹配到顶部 UI/底部无关区域。
@@ -43,8 +38,6 @@ SEED_POPUP_NUMBER_REGION_Y_OFFSET_BOTTOM = 80
 LEVEL_OCR_TOP_BAND_HEIGHT = 140
 # 固定排除作物模板（始终生效）。
 ALWAYS_SKIP_SEED_BUTTONS = [SEED_BTN_HEART_FRUIT, SEED_BTN_HAHA_PUMPKIN]
-# 可选排除作物模板（受配置开关控制）。
-OPTIONAL_SKIP_SEED_BUTTONS = [SEED_BTN_MUGWORT]
 
 
 class TaskMainLevelMixin:
@@ -242,7 +235,7 @@ class TaskMainLevelMixin:
 
 
 # 这里延后导入，确保常量已定义，供 main_planting 直接引用。
-from tasks.main_planting import TaskMainPlantingMixin
+from tasks.main_planting import TaskMainPlantingMixin  # noqa: E402
 
 
 class TaskMain(

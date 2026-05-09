@@ -60,8 +60,9 @@
 - `share`：独立分享任务（仅支持微信平台，通常配合每日触发）
 - `reward`：独立任务奖励领取（默认每 6 小时执行一次）
 - `gift`：物品领取任务（QQSVIP礼包、商城礼包、可选邮件领取；支持分项开关）
+- `event_shop`：活动商店任务（默认开启；每日 `10:01`、`20:01` 执行；领取商城免费物品）
 - `sell`：独立出售任务（仓库批量出售）
-- `land_scan`：地块巡查任务（默认关闭；每 30 分钟；按左右滑动分段点击地块并 OCR 采集）
+- `land_scan`：地块巡查任务（默认关闭；每 30 分钟；按实例配置的左右滑动次数分段点击地块并 OCR 采集）
 - `restart`：定时重启任务（默认关闭；每 4 小时；重启窗口并收敛回主页面）
 
 ## 后台/多开说明
@@ -152,14 +153,15 @@ python main.py
 - `window_select_rule`：窗口选择规则（`auto` 或 `index:N`，`auto` 会按当前平台优先匹配）
 - `safety`：运行方式、随机延迟、点击抖动、单轮点击上限、`debug_log_enabled`
 - `screenshot`：截图相关配置；`capture_interval_seconds` 控制最小截图间隔（秒，默认 `0.3`，`0` 表示不限制）
-- `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（是否额外跳过艾草 `SEED_BTN_MUGWORT`；爱心果 `SEED_BTN_HEART_FRUIT` 固定跳过）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）
+- `planting`：种植策略、等级、平台、窗口定位（`window_screen_index` 为目标屏幕序号，和显示器查询序号一致；`0` 表示默认主屏；`window_position` 为屏幕内位置；`virtual_desktop_index` 为目标虚拟桌面序号，`0` 表示不移动）、`warehouse_first`（仓库优先选种；按固定底色数字块识别最左种子）、`skip_event_crops`（与仓库优先同时开启时，按关闭仓库优先处理；固定排除作物始终生效）、等级 OCR 开关、`planting_stable_seconds`（播种稳定时间）、`planting_stable_timeout_seconds`（背景树锚点稳定等待超时）、`land_swipe_right_times/land_swipe_left_times`（土地相关流程右滑/左滑次数，地块巡查与土地升级共用，滑动坐标固定）
 - `executor`：调度顺序与默认间隔配置；`min_task_interval_seconds`（任务最小执行间隔）
 - `recovery`：异常恢复策略；`task_restart_attempts`（任务异常重启窗口次数）、`task_retry_delay_seconds`（重启后重试延迟秒数）、`startup_retry_step_sleep_seconds`（启动重试轮询步进）、`startup_stabilize_timeout_seconds`（启动收敛总超时）
-- `executor.task_order`：任务固定顺序配置（示例：`land_scan>main>fertilize>friend>sell>reward>gift>share>restart`）
-- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.countdown_sync_time` 为倒计时快照基准时间（`YYYY-MM-DD HH:MM:SS`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
+- `executor.task_order`：任务固定顺序配置（示例：`land_scan>main>fertilize>friend>land_scan>share>reward>gift>event_shop>sell>restart`）
+- `land`：农场详情配置；`land.plots` 为 24 格地块状态列表（元素：`{ "plot_id": "1-1", "level": "unbuilt|normal|red|black|gold|amethyst", "maturity_countdown": "HH:MM:SS", "need_upgrade": false, "need_planting": false }`）；`land.countdown_sync_time` 为倒计时快照基准时间（`YYYY-MM-DD HH:MM:SS`）；`land.profile` 为个人信息（`level/gold/coupon/exp`，由等级同步 OCR 回写）
 - `tasks`：动态任务字典
 - `tasks.<task>.next_run`：任务下次执行时间（持久化到配置，默认 `2026-01-01 00:00`）
 - `tasks.<task>.enabled_time_range`：任务启用时间段（`HH:MM:SS-HH:MM:SS`，默认 `00:00:00-23:59:59`，仅 `INTERVAL` 生效）
+- `tasks.<task>.daily_times`：每日触发时间点列表（`list[HH:MM]`，仅 `DAILY` 生效）
 
 等级 OCR 相关（`planting`）：
 
@@ -175,7 +177,7 @@ python main.py
     "trigger": "interval",
     "interval_seconds": 60,
     "enabled_time_range": "00:00:00-23:59:59",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "failure_interval_seconds": 30,
     "features": {
@@ -202,7 +204,7 @@ python main.py
   "friend": {
     "enabled": true,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 1800,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -225,7 +227,7 @@ python main.py
   "share": {
     "enabled": true,
     "trigger": "daily",
-    "daily_time": "04:00",
+    "daily_times": ["04:00", "12:00", "20:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 86400,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -235,7 +237,7 @@ python main.py
   "reward": {
     "enabled": true,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 21600,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -248,7 +250,7 @@ python main.py
   "gift": {
     "enabled": true,
     "trigger": "daily",
-    "daily_time": "04:00",
+    "daily_times": ["04:00", "16:00"],
     "enabled_time_range": "00:00:00-23:59:59",
     "interval_seconds": 86400,
     "failure_interval_seconds": 300,
@@ -258,10 +260,19 @@ python main.py
       "auto_mail": true
     }
   },
+  "event_shop": {
+    "enabled": true,
+    "trigger": "daily",
+    "daily_times": ["10:01", "20:01"],
+    "enabled_time_range": "00:00:00-23:59:59",
+    "interval_seconds": 86400,
+    "failure_interval_seconds": 300,
+    "features": {}
+  },
   "land_scan": {
     "enabled": false,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 1800,
     "enabled_time_range": "00:00:00-23:59:59",
@@ -271,7 +282,7 @@ python main.py
   "restart": {
     "enabled": false,
     "trigger": "interval",
-    "daily_time": "04:00",
+    "daily_times": ["04:00"],
     "next_run": "2026-01-01 00:00",
     "interval_seconds": 14400,
     "enabled_time_range": "00:00:00-23:59:59",

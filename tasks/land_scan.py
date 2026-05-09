@@ -25,7 +25,7 @@ from utils.land_grid import LandCell, get_lands_from_land_anchor
 from utils.ocr_utils import OCRItem, OCRTool
 
 # 画面横向回正手势点位 P1。
-LAND_SCAN_SWIPE_H_P1 = (350, 190)
+LAND_SCAN_SWIPE_H_P1 = (250, 190)
 # 画面横向回正手势点位 P2。
 LAND_SCAN_SWIPE_H_P2 = (200, 190)
 # 地块网格行数（逻辑行）。
@@ -54,7 +54,7 @@ LAND_SCAN_TIME_PICK_Y2 = 20
 # 成熟时间文本正则（仅提取 HH:MM:SS）。
 LAND_SCAN_MATURITY_TIME_PATTERN = re.compile(r'(\d{2}:\d{2}:\d{2})')
 # 地块等级文本正则（中文等级关键词）。
-LAND_SCAN_LEVEL_PATTERN = re.compile(r'(未扩建|普通|红|黑|金)')
+LAND_SCAN_LEVEL_PATTERN = re.compile(r'(未扩建|普通|紫晶|红|黑|金)')
 # 地块等级英文值到中文日志文案映射。
 LAND_SCAN_LEVEL_LABELS: dict[str, str] = {
     'unbuilt': '未扩建',
@@ -62,6 +62,7 @@ LAND_SCAN_LEVEL_LABELS: dict[str, str] = {
     'red': '红土地',
     'black': '黑土地',
     'gold': '金土地',
+    'amethyst': '紫晶土地',
 }
 # 空地弹窗地块等级 OCR 区域：相对 BTN_LAND_POP_EMPTY 中心 (dx1, dy1, dx2, dy2)。
 LAND_SCAN_LEVEL_REGION_OFFSET = (-60, -50, 40, 50)
@@ -77,6 +78,7 @@ LAND_SCAN_PLOTTED_LEVEL_COLORS_RGB: dict[str, tuple[int, int, int]] = {
     'red': (223, 87, 55),
     'black': (92, 67, 42),
     'gold': (249, 203, 50),
+    'amethyst': (209, 168, 232),
 }
 # 空地弹窗升级图标 ROI：相对 BTN_LAND_POP_EMPTY 中心 (dx1, dy1, dx2, dy2)。
 LAND_SCAN_UPGRADE_EMPTY_REGION_OFFSET = (-100, -50, 0, -0)
@@ -117,11 +119,14 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         self._countdown_sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
         self._countdown_sync_time_persisted = False
         self.ui.ui_ensure(page_main)
+        self.align_view_by_background_tree(log_prefix='地块巡查')
+        right_swipe_times = int(self.config.planting.land_swipe_right_times)
+        left_swipe_times = int(self.config.planting.land_swipe_left_times)
         # self.ui.device.click_button(GOTO_MAIN)
 
         try:
             # 右滑
-            for _ in range(2):
+            for _ in range(right_swipe_times):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
 
@@ -135,7 +140,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             )
 
             # 左滑
-            for _ in range(3):
+            for _ in range(left_swipe_times):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 
@@ -583,6 +588,8 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             return 'black'
         if token == '金':
             return 'gold'
+        if token == '紫晶':
+            return 'amethyst'
         return ''
 
     @staticmethod

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from PyQt6.QtCore import QDateTime, Qt, QTime, pyqtSignal
+from PyQt6.QtCore import QDateTime, QSize, Qt, QTime, pyqtSignal
 from PyQt6.QtWidgets import (
     QDateTimeEdit,
     QFormLayout,
@@ -21,9 +21,11 @@ from qfluentwidgets import (
     CheckBox,
     ComboBox,
     DateTimeEdit,
+    FluentIcon,
     ScrollArea,
     SpinBox,
     TimeEdit,
+    ToolButton,
 )
 
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
@@ -32,6 +34,7 @@ from models.config import (
     DEFAULT_TASK_NEXT_RUN,
     AppConfig,
     TaskTriggerType,
+    normalize_task_daily_times,
     normalize_task_enabled_time_range,
     parse_executor_task_order,
 )
@@ -165,6 +168,97 @@ class TaskPanel(QWidget):
         )
         layout.addWidget(divider)
 
+    def _append_daily_time_row(self, task_name: str, time_text: str, *, removable: bool) -> None:
+        widgets = self._task_widgets.get(task_name)
+        if not widgets:
+            return
+        container = widgets.get('daily_times_container')
+        rows_layout = widgets.get('daily_times_layout')
+        if not isinstance(container, QWidget) or not isinstance(rows_layout, QVBoxLayout):
+            return
+
+        row = QWidget(container)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+
+        time_edit = TimeEdit(row)
+        time_edit.setDisplayFormat('HH:mm')
+        time_edit.setSymbolVisible(True)
+        time_edit.setMinimumWidth(0)
+        time_edit.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        qt = QTime.fromString(str(time_text), 'HH:mm')
+        if not qt.isValid():
+            qt = QTime(0, 1)
+        time_edit.setTime(qt)
+        time_edit.timeChanged.connect(self._auto_save)
+        row_layout.addWidget(time_edit, 1)
+
+        action_btn = ToolButton(row)
+        action_btn.setIcon(FluentIcon.REMOVE if removable else FluentIcon.ADD)
+        action_btn.setFixedSize(30, 30)
+        action_btn.setIconSize(QSize(12, 12))
+        if removable:
+            action_btn.clicked.connect(lambda: self._remove_daily_time_row(task_name, row))
+        else:
+            action_btn.clicked.connect(lambda: self._add_daily_time_row(task_name))
+        row_layout.addWidget(action_btn)
+
+        rows_layout.addWidget(row)
+        rows = widgets.setdefault('daily_time_rows', [])
+        if isinstance(rows, list):
+            rows.append({'row': row, 'time_edit': time_edit, 'button': action_btn, 'removable': removable})
+
+    def _set_daily_time_values(self, task_name: str, times: list[str]) -> None:
+        widgets = self._task_widgets.get(task_name)
+        if not widgets:
+            return
+        rows_layout = widgets.get('daily_times_layout')
+        rows = widgets.get('daily_time_rows')
+        if not isinstance(rows_layout, QVBoxLayout) or not isinstance(rows, list):
+            return
+
+        while rows:
+            row_info = rows.pop()
+            row_widget = row_info.get('row') if isinstance(row_info, dict) else None
+            if isinstance(row_widget, QWidget):
+                rows_layout.removeWidget(row_widget)
+                row_widget.deleteLater()
+
+        normalized = normalize_task_daily_times(times, fallback='00:01')
+        for idx, text in enumerate(normalized):
+            self._append_daily_time_row(task_name, text, removable=idx > 0)
+
+    def _add_daily_time_row(self, task_name: str) -> None:
+        widgets = self._task_widgets.get(task_name)
+        if not widgets:
+            return
+        rows = widgets.get('daily_time_rows')
+        if not isinstance(rows, list):
+            return
+        self._append_daily_time_row(task_name, '00:01', removable=True)
+        self._auto_save()
+
+    def _remove_daily_time_row(self, task_name: str, row_widget: QWidget) -> None:
+        widgets = self._task_widgets.get(task_name)
+        if not widgets:
+            return
+        rows_layout = widgets.get('daily_times_layout')
+        rows = widgets.get('daily_time_rows')
+        if not isinstance(rows_layout, QVBoxLayout) or not isinstance(rows, list):
+            return
+        if len(rows) <= 1:
+            return
+        for idx, row_info in enumerate(list(rows)):
+            item_widget = row_info.get('row') if isinstance(row_info, dict) else None
+            if item_widget is not row_widget:
+                continue
+            rows.pop(idx)
+            rows_layout.removeWidget(row_widget)
+            row_widget.deleteLater()
+            self._auto_save()
+            return
+
     def _build_task_card(self, task_name: str, trigger: TaskTriggerType) -> StableElevatedCardWidget:
         card = StableElevatedCardWidget(self)
         self._apply_card_style(card, 'taskConfigCard')
@@ -182,12 +276,16 @@ class TaskPanel(QWidget):
         form.addRow(self._field_label('开关', card), enabled)
         widgets['enabled'] = enabled
 
-        if trigger == TaskTriggerType.DAILY:
-            time_edit = TimeEdit(card)
-            time_edit.setDisplayFormat('HH:mm')
-            time_edit.timeChanged.connect(self._auto_save)
-            form.addRow(self._field_label('每日时间', card), time_edit)
-            widgets['daily_time'] = time_edit
+        is_daily = trigger == TaskTriggerType.DAILY
+        if is_daily:
+            times_box = QWidget(card)
+            times_layout = QVBoxLayout(times_box)
+            times_layout.setContentsMargins(0, 0, 0, 0)
+            times_layout.setSpacing(6)
+            form.addRow(self._field_label('每日时间', card), times_box)
+            widgets['daily_times_container'] = times_box
+            widgets['daily_times_layout'] = times_layout
+            widgets['daily_time_rows'] = []
         else:
             interval_value = SpinBox(card)
             interval_value.setRange(1, 999999)
@@ -242,6 +340,8 @@ class TaskPanel(QWidget):
 
         layout.addLayout(form)
         self._task_widgets[task_name] = widgets
+        if is_daily:
+            self._set_daily_time_values(task_name, ['00:01'])
         return card
 
     @staticmethod
@@ -321,13 +421,11 @@ class TaskPanel(QWidget):
                     start_edit.setTime(start_time)
                     end_edit.setTime(end_time)
             else:
-                time_edit = widgets.get('daily_time')
-                if isinstance(time_edit, TimeEdit):
-                    try:
-                        hh, mm = str(task_cfg.daily_time).split(':')
-                        time_edit.setTime(QTime(int(hh), int(mm)))
-                    except Exception:
-                        time_edit.setTime(QTime(0, 1))
+                daily_times = normalize_task_daily_times(
+                    getattr(task_cfg, 'daily_times', []),
+                    fallback='00:01',
+                )
+                self._set_daily_time_values(task_name, daily_times)
 
             next_run = widgets.get('next_run')
             if isinstance(next_run, QDateTimeEdit):
@@ -364,10 +462,18 @@ class TaskPanel(QWidget):
                     end = end_edit.time().toString('HH:mm:ss')
                 task_cfg.enabled_time_range = normalize_task_enabled_time_range(f'{start}-{end}')
             else:
-                daily_time = widgets.get('daily_time')
-                if isinstance(daily_time, TimeEdit):
+                daily_rows = widgets.get('daily_time_rows')
+                if isinstance(daily_rows, list):
                     task_cfg.trigger = TaskTriggerType.DAILY
-                    task_cfg.daily_time = daily_time.time().toString('HH:mm')
+                    values: list[str] = []
+                    for row_info in daily_rows:
+                        if not isinstance(row_info, dict):
+                            continue
+                        time_edit = row_info.get('time_edit')
+                        if isinstance(time_edit, TimeEdit):
+                            values.append(time_edit.time().toString('HH:mm'))
+                    normalized = normalize_task_daily_times(values, fallback='00:01')
+                    task_cfg.daily_times = normalized
 
             next_run = widgets.get('next_run')
             if isinstance(next_run, QDateTimeEdit):

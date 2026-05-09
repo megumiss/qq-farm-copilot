@@ -46,22 +46,24 @@ class LandStateMeta:
 
 LAND_STATE_META: dict[str, LandStateMeta] = {
     # 颜色参考 templates/qq/land 下模板：
-    # black=(92,67,42) red=(223,87,55) gold=(249,203,50) stand=(178,131,74)
+    # black=(92,67,42) red=(223,87,55) gold=(249,203,50) amethyst=(209,168,232) stand=(178,131,74)
     # 目录无“未扩建”模板，使用 stand 同色系浅化色，并以无背景+虚线框表现。
     'unbuilt': LandStateMeta('unbuilt', '未扩建', '#D9C3A5', '#B2834A', '#5C432A'),
     'normal': LandStateMeta('normal', '普通', '#C39A64', '#7A552D', '#F9F2E7'),
     'red': LandStateMeta('red', '红', '#DF5737', '#9D3E27', '#FFF7F3'),
     'black': LandStateMeta('black', '黑', '#5C432A', '#3B2B1C', '#F8F5EF'),
     'gold': LandStateMeta('gold', '金', '#F9CB32', '#B78918', '#3C2B05'),
+    'amethyst': LandStateMeta('amethyst', '紫晶', '#D1A8E8', '#8B5FBF', '#2E174A'),
 }
 
-LAND_STATE_ORDER: list[str] = ['unbuilt', 'normal', 'red', 'black', 'gold']
+LAND_STATE_ORDER: list[str] = ['unbuilt', 'normal', 'red', 'black', 'gold', 'amethyst']
 LAND_STATE_ALIASES: dict[str, str] = {
     '未扩建': 'unbuilt',
     '普通': 'normal',
     '红': 'red',
     '黑': 'black',
     '金': 'gold',
+    '紫晶': 'amethyst',
 }
 LAND_STATE_RANK: dict[str, int] = {
     'unbuilt': 0,
@@ -69,6 +71,7 @@ LAND_STATE_RANK: dict[str, int] = {
     'red': 2,
     'black': 3,
     'gold': 4,
+    'amethyst': 5,
 }
 LAND_COUNTDOWN_PATTERN = re.compile(r'^(\d{2}):(\d{2}):(\d{2})$')
 LAND_COUNTDOWN_SYNC_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'

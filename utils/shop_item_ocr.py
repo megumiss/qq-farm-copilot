@@ -56,6 +56,7 @@ class ShopItem:
     center_x: int
     center_y: int
     bbox: tuple[int, int, int, int]
+    price: int = 0
 
 
 @dataclass
@@ -95,7 +96,6 @@ class ShopItemOCR:
         """执行 `norm name` 相关处理。"""
         t = ShopItemOCR._clean_text(text)
         t = t.replace('（', '(').replace('）', ')')
-        t = t.replace('詹菇', '蘑菇')
         return t
 
     @staticmethod
@@ -214,6 +214,32 @@ class ShopItemOCR:
         names.sort(key=lambda x: (x[3], x[2], len(x[0])), reverse=True)
         return names[0]
 
+    def _parse_card_price(self, card_items: list[OCRItem]) -> int:
+        """解析单个商品卡片中的价格。"""
+        candidates: list[tuple[int, float, float]] = []
+        for it in card_items:
+            raw = self._clean_text(it.text)
+            if not raw:
+                continue
+            if re.match(r'^\d+品$', raw):
+                continue
+            digits = re.sub(r'\D+', '', raw)
+            if not digits:
+                continue
+            try:
+                value = int(digits)
+            except ValueError:
+                continue
+            if value <= 0:
+                continue
+            _, cy = self._item_center(it)
+            candidates.append((value, float(cy), float(it.score)))
+
+        if not candidates:
+            return 0
+        candidates.sort(key=lambda x: (x[1], x[2], len(str(x[0]))), reverse=True)
+        return int(candidates[0][0])
+
     def detect_items(self, img_bgr: np.ndarray) -> list[ShopItem]:
         """检测 `items` 并输出识别结果。"""
         cards = self.detect_shop_cards(img_bgr)
@@ -241,6 +267,7 @@ class ShopItemOCR:
                         center_x=int(cx),
                         center_y=int(cy),
                         bbox=self._item_bbox(it),
+                        price=0,
                     )
                 )
             return fallback
@@ -262,6 +289,65 @@ class ShopItemOCR:
                     center_x=int(cx),
                     center_y=int(cy),
                     bbox=(card.x, card.y, card.x2, card.y2),
+                    price=self._parse_card_price(card_items),
+                )
+            )
+        return results
+
+    def detect_items_for_price(self, img_bgr: np.ndarray) -> list[ShopItem]:
+        """按价格定位时使用的商品识别结果。"""
+        cards = self.detect_shop_cards(img_bgr)
+        all_items = self.ocr.detect(img_bgr, scale=1.4, alpha=1.15, beta=0.0)
+        if not all_items:
+            return []
+
+        results: list[ShopItem] = []
+        if not cards:
+            for it in all_items:
+                raw = self._clean_text(it.text)
+                digits = re.sub(r'\D+', '', raw)
+                if not digits:
+                    continue
+                try:
+                    value = int(digits)
+                except ValueError:
+                    continue
+                if value <= 0:
+                    continue
+                cx, cy = self._item_center(it)
+                results.append(
+                    ShopItem(
+                        name='',
+                        raw_name=raw,
+                        ocr_score=float(it.score),
+                        name_similarity=0.0,
+                        center_x=int(cx),
+                        center_y=int(cy),
+                        bbox=self._item_bbox(it),
+                        price=value,
+                    )
+                )
+            return results
+
+        for card in cards:
+            card_items = self._pick_card_items(all_items, card)
+            if not card_items:
+                continue
+            price = self._parse_card_price(card_items)
+            if price <= 0:
+                continue
+            name, raw_name, ocr_score, sim = self._parse_card_name(card_items)
+            cx, cy = card.center
+            results.append(
+                ShopItem(
+                    name=name,
+                    raw_name=raw_name or str(price),
+                    ocr_score=ocr_score,
+                    name_similarity=sim,
+                    center_x=int(cx),
+                    center_y=int(cy),
+                    bbox=(card.x, card.y, card.x2, card.y2),
+                    price=price,
                 )
             )
         return results
@@ -315,3 +401,31 @@ class ShopItemOCR:
             )
             return ShopItemMatch(target=best, best=best, best_similarity=best_similarity, parsed_items=parsed)
         return ShopItemMatch(target=None, best=best, best_similarity=best_similarity, parsed_items=parsed)
+
+    def find_item_by_price(self, img_bgr: np.ndarray, target_price: int) -> ShopItemMatch:
+        """按价格识别当前页商品位置。"""
+        parsed = self.detect_items_for_price(img_bgr)
+        if not parsed:
+            return ShopItemMatch(target=None, best=None, best_similarity=0.0, parsed_items=[])
+
+        price_target = int(target_price)
+        if price_target <= 0:
+            return ShopItemMatch(target=None, best=None, best_similarity=0.0, parsed_items=parsed)
+
+        exact = [item for item in parsed if int(item.price) == price_target]
+        if exact:
+            exact.sort(key=lambda x: (x.ocr_score, x.center_y), reverse=True)
+            hit = exact[0]
+            logger.info(
+                "OCR价格匹配成功: price={} | center=({}, {}) name='{}' raw='{}'",
+                price_target,
+                hit.center_x,
+                hit.center_y,
+                hit.name,
+                hit.raw_name,
+            )
+            return ShopItemMatch(target=hit, best=hit, best_similarity=1.0, parsed_items=parsed)
+
+        parsed.sort(key=lambda x: abs(int(x.price) - price_target))
+        best = parsed[0] if parsed else None
+        return ShopItemMatch(target=None, best=best, best_similarity=0.0, parsed_items=parsed)
