@@ -30,7 +30,7 @@
 - 定时重启任务：`config.tasks.restart`（默认关闭；`trigger=interval`，默认 `interval_seconds=14400`；重启等待时间使用实例级 `config.window_restart_delay_seconds`，默认 `5` 秒）
 - 活动商店任务：`config.tasks.event_shop`（默认开启；`trigger=daily`，默认 `daily_times=["10:01","20:01"]`；当前仅执行商城免费物品领取）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
-- 异常恢复配置：`config.recovery`（`task_restart_attempts/task_retry_delay_seconds/startup_retry_step_sleep_seconds/startup_stabilize_timeout_seconds`）
+- 异常恢复配置：`config.recovery`（`task_restart_attempts/task_retry_delay_seconds/window_launch_wait_timeout_seconds/startup_retry_step_sleep_seconds/startup_stabilize_timeout_seconds`）
 - 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
 - 截图频率：`config.screenshot.capture_interval_seconds`（默认 `0.3` 秒；`0` 表示不限制最小截图间隔）
 - 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）

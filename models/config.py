@@ -329,6 +329,7 @@ class RecoveryConfig(ConfigModel):
 
     task_restart_attempts: int = 3
     task_retry_delay_seconds: int = 1
+    window_launch_wait_timeout_seconds: float = 15.0
     startup_retry_step_sleep_seconds: float = 0.5
     startup_stabilize_timeout_seconds: float = 90.0
 
@@ -353,6 +354,16 @@ class RecoveryConfig(ConfigModel):
         except Exception:
             seconds = 0.5
         return max(0.1, seconds)
+
+    @field_validator('window_launch_wait_timeout_seconds', mode='before')
+    @classmethod
+    def _normalize_window_launch_wait_timeout_seconds(cls, value):
+        """规范化窗口拉起等待超时（秒）。"""
+        try:
+            seconds = float(value)
+        except Exception:
+            seconds = 15.0
+        return max(1.0, seconds)
 
     @field_validator('startup_stabilize_timeout_seconds', mode='before')
     @classmethod

@@ -141,7 +141,7 @@ class SettingsPanel(QWidget):
         env_form.addRow(self._field_label('', env_card), shortcut_tip)
 
         self.shortcut_launch_delay = SpinBox(env_card)
-        self.shortcut_launch_delay.setRange(0, 30)
+        self.shortcut_launch_delay.setRange(0, 300)
         self.shortcut_launch_delay.setSingleStep(1)
         self.shortcut_launch_delay.setSuffix(' 秒')
         env_form.addRow(self._field_label('启动延迟', env_card), self.shortcut_launch_delay)
@@ -165,6 +165,32 @@ class SettingsPanel(QWidget):
         window_restart_delay_tip.setWordWrap(True)
         window_restart_delay_tip.setStyleSheet('color: #d97706;')
         env_form.addRow(self._field_label('', env_card), window_restart_delay_tip)
+
+        self.window_launch_wait_timeout = DoubleSpinBox(env_card)
+        self.window_launch_wait_timeout.setRange(1.0, 300.0)
+        self.window_launch_wait_timeout.setDecimals(1)
+        self.window_launch_wait_timeout.setSingleStep(0.5)
+        self.window_launch_wait_timeout.setSuffix(' 秒')
+        env_form.addRow(self._field_label('拉起等待超时', env_card), self.window_launch_wait_timeout)
+        window_launch_wait_timeout_hint = CaptionLabel(
+            '每轮等待窗口出现的超时上限，影响启动和重启恢复时的单轮等待时长。',
+            env_card,
+        )
+        window_launch_wait_timeout_hint.setStyleSheet('color: #d97706;')
+        env_form.addRow('', window_launch_wait_timeout_hint)
+
+        self.startup_stabilize_timeout = DoubleSpinBox(env_card)
+        self.startup_stabilize_timeout.setRange(5.0, 600.0)
+        self.startup_stabilize_timeout.setDecimals(1)
+        self.startup_stabilize_timeout.setSingleStep(1.0)
+        self.startup_stabilize_timeout.setSuffix(' 秒')
+        env_form.addRow(self._field_label('启动收敛超时', env_card), self.startup_stabilize_timeout)
+        startup_stabilize_timeout_hint = CaptionLabel(
+            '启动后等待回到主页面的总超时上限。',
+            env_card,
+        )
+        startup_stabilize_timeout_hint.setStyleSheet('color: #d97706;')
+        env_form.addRow('', startup_stabilize_timeout_hint)
 
         self.keyword = LineEdit(env_card)
         self.keyword.setPlaceholderText('窗口标题关键字')
@@ -362,6 +388,8 @@ class SettingsPanel(QWidget):
             self.offset.valueChanged,
             self.max_actions.valueChanged,
             self.capture_interval.valueChanged,
+            self.window_launch_wait_timeout.valueChanged,
+            self.startup_stabilize_timeout.valueChanged,
             self.planting_stable.valueChanged,
             self.planting_stable_timeout.valueChanged,
             self.land_swipe_right_times.valueChanged,
@@ -620,6 +648,8 @@ class SettingsPanel(QWidget):
         self.offset.setValue(int(c.safety.click_offset_range))
         self.max_actions.setValue(int(c.safety.max_actions_per_round))
         self.capture_interval.setValue(float(c.screenshot.capture_interval_seconds))
+        self.window_launch_wait_timeout.setValue(float(c.recovery.window_launch_wait_timeout_seconds))
+        self.startup_stabilize_timeout.setValue(float(c.recovery.startup_stabilize_timeout_seconds))
         self.planting_stable.setValue(float(c.planting.planting_stable_seconds))
         self.planting_stable_timeout.setValue(float(c.planting.planting_stable_timeout_seconds))
         self.land_swipe_right_times.setValue(int(c.planting.land_swipe_right_times))
@@ -660,6 +690,8 @@ class SettingsPanel(QWidget):
         c.safety.click_offset_range = int(self.offset.value())
         c.safety.max_actions_per_round = int(self.max_actions.value())
         c.screenshot.capture_interval_seconds = float(self.capture_interval.value())
+        c.recovery.window_launch_wait_timeout_seconds = float(self.window_launch_wait_timeout.value())
+        c.recovery.startup_stabilize_timeout_seconds = float(self.startup_stabilize_timeout.value())
         c.planting.planting_stable_seconds = float(self.planting_stable.value())
         c.planting.planting_stable_timeout_seconds = float(self.planting_stable_timeout.value())
         c.planting.land_swipe_right_times = int(self.land_swipe_right_times.value())

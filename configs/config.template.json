@@ -142,6 +142,7 @@
   "recovery": {
     "task_restart_attempts": 3,
     "task_retry_delay_seconds": 1,
+    "window_launch_wait_timeout_seconds": 15.0,
     "startup_retry_step_sleep_seconds": 0.5,
     "startup_stabilize_timeout_seconds": 90.0
   },
