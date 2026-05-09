@@ -14,7 +14,6 @@ from tasks.main import (
     ALWAYS_SKIP_SEED_BUTTONS,
     BACKGROUND_TREE_STABLE_CHECK_INTERVAL_SECONDS,
     LAND_MATCH_Y_RANGE,
-    OPTIONAL_SKIP_SEED_BUTTONS,
     SEED_POPUP_NUMBER_REGION_X_MAX,
     SEED_POPUP_NUMBER_REGION_X_MIN,
     SEED_POPUP_NUMBER_REGION_Y_OFFSET_BOTTOM,
@@ -61,11 +60,9 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         return buttons
 
     @staticmethod
-    def _get_seed_buttons_for_exclusion(*, skip_event_crops: bool) -> list[Button]:
+    def _get_seed_buttons_for_exclusion() -> list[Button]:
         """返回当前应参与排除的作物模板列表。"""
         buttons: list[Button] = [btn for btn in ALWAYS_SKIP_SEED_BUTTONS if btn is not None]
-        if skip_event_crops:
-            buttons.extend(btn for btn in OPTIONAL_SKIP_SEED_BUTTONS if btn is not None)
         buttons.sort(key=lambda btn: str(btn.name))
         return buttons
 
@@ -274,15 +271,14 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         self,
         number_items: list[BgPatchNumberItem],
         *,
-        skip_event_crops: bool,
         threshold: float = 0.80,
         near_distance: float = 50.0,
     ) -> set[int]:
-        """识别活动作物模板并返回需排除的数字块索引集合。"""
+        """识别固定排除模板并返回需排除的数字块索引集合。"""
         if not number_items:
             return set()
 
-        seed_buttons = self._get_seed_buttons_for_exclusion(skip_event_crops=skip_event_crops)
+        seed_buttons = self._get_seed_buttons_for_exclusion()
         if not seed_buttons:
             return set()
 
@@ -306,6 +302,42 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                     excluded_indexes.add(int(idx))
                     break
         return excluded_indexes
+
+    def _select_seed_from_popup_by_exclusion_policy(
+        self,
+        land_click_point: tuple[int, int],
+    ) -> tuple[int, int] | None:
+        """按固定排除规则选择候选框中从左到右的首个可用种子。"""
+        cv_img = self.ui.device.screenshot()
+        number_items = self._detect_seed_number_items(cv_img, land_click_point)
+        if not number_items:
+            logger.warning('自动播种: 候选框未识别到种子数量块，无法按排除规则选种')
+            return None
+
+        excluded_indexes = self._collect_excluded_seed_item_indexes(number_items)
+        ordered_indexes = sorted(
+            range(len(number_items)),
+            key=lambda idx: float(number_items[idx].box[0] + number_items[idx].box[2] / 2.0),
+        )
+        for idx in ordered_indexes:
+            if idx in excluded_indexes:
+                continue
+            box_x, box_y, box_w, box_h = number_items[idx].box
+            point = (int(box_x + box_w / 2), int(box_y + box_h / 2))
+            logger.info(
+                '自动播种: 按排除规则选择种子 | 数量块序号={} 拖拽点={} 排除索引={}',
+                idx + 1,
+                point,
+                sorted(excluded_indexes),
+            )
+            return point
+
+        logger.warning(
+            '自动播种: 候选框内种子均被固定排除，无法播种 | 总数={} 排除索引={}',
+            len(number_items),
+            sorted(excluded_indexes),
+        )
+        return None
 
     def _collect_pending_plant_land_coords(self) -> tuple[list[tuple[int, int]], list[str]]:
         """收集当前需要播种的地块坐标与配置引用。"""
@@ -419,32 +451,24 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
                 self.engine.device.drag_up()
                 logger.info('自动播种: 播种完成')
 
-    def _plant_all(self, crop_name: str) -> list[str]:
-        """执行整块农田播种流程：仓库定位种子序号后按候选框序号播种。"""
-        land_coords, pending_plot_refs = self._collect_pending_plant_land_coords()
-        if not land_coords:
-            logger.info('自动播种: 未发现空土地，跳过播种')
-            return []
-
-        seed_index = self._ensure_seed_index_in_warehouse(crop_name)
-        if seed_index is None:
-            logger.warning('自动播种: 仓库确认种子失败，结束本轮 | 作物={}', crop_name)
-            return []
-
+    def _prepare_lands_and_open_seed_popup(
+        self,
+    ) -> tuple[list[tuple[int, int]], list[str], tuple[int, int]] | None:
+        """回到主界面后收集空地并打开种子候选框。"""
         self.ui.ui_ensure(page_main)
         self.ui.device.click_button(GOTO_MAIN)
         self.align_view_by_background_tree(log_prefix='自动播种')
 
         land_coords, pending_plot_refs = self._collect_pending_plant_land_coords()
         if not land_coords:
-            logger.info('自动播种: 仓库确认后未发现空土地，跳过播种')
-            return []
+            logger.info('自动播种: 未发现空土地，跳过播种')
+            return None
 
         before_labor_anchor = self._get_labor_anchor_location()
         seed_popup_land = self._select_center_land_coord(land_coords) or land_coords[0]
         if not self._open_seed_popup(seed_popup_land):
             logger.warning('自动播种: 打开种子候选框失败')
-            return []
+            return None
 
         after_labor_anchor = self._wait_labor_anchor_stable()
         if before_labor_anchor is not None and after_labor_anchor is not None:
@@ -458,10 +482,87 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
         else:
             logger.warning('自动播种: 背景树锚点识别失败，继续使用原始地块坐标')
 
-        seed_drag_point = self._select_seed_from_popup_by_warehouse_index(seed_index, seed_popup_land)
-        if seed_drag_point is None:
-            logger.warning('自动播种: 候选框中无法按仓库序号选择种子 | 仓库序号={}', seed_index)
+        return land_coords, pending_plot_refs, seed_popup_land
+
+    def _plant_all(self, crop_name: str) -> list[str]:
+        """执行整块农田播种流程。"""
+
+        warehouse_first = bool(self.config.planting.warehouse_first)
+        skip_event_crops = bool(self.config.planting.skip_event_crops)
+        use_warehouse_first = warehouse_first and not skip_event_crops
+        if warehouse_first and skip_event_crops:
+            logger.info('自动播种: 仓库优先与排除活动作物同时开启，按关闭仓库优先处理')
+
+        seed_index: int | None = None
+        if not use_warehouse_first:
+            seed_index = self._ensure_seed_index_in_warehouse(crop_name)
+            if seed_index is None:
+                logger.warning('自动播种: 仓库确认种子失败，结束本轮 | 作物={}', crop_name)
+                return []
+
+        prepared = self._prepare_lands_and_open_seed_popup()
+        if prepared is None:
+            if not use_warehouse_first:
+                logger.info('自动播种: 未发现种子候选框，尝试购买种子并重试 | 作物={}', crop_name)
+                buy_result = self._buy_seeds(crop_name)
+                if not buy_result:
+                    logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
+                    return []
+                return self._plant_all(crop_name)
+            if use_warehouse_first:
+                logger.info('自动播种: 未发现种子候选框，尝试购买种子并重试 | 作物={}', crop_name)
+                buy_result = self._buy_seeds(crop_name)
+                if not buy_result:
+                    logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
+                    return []
+                return self._plant_all(crop_name)
             return []
+
+        land_coords, pending_plot_refs, seed_popup_land = prepared
+        if use_warehouse_first:
+            cv_img = self.ui.device.screenshot()
+            number_items = self._detect_seed_number_items(cv_img, seed_popup_land)
+            if not number_items:
+                self.ui.device.click_button(GOTO_MAIN)
+                self.ui.device.sleep(0.2)
+                logger.info('自动播种: 种子候选框无数字块，尝试购买种子并重试 | 作物={}', crop_name)
+                buy_result = self._buy_seeds(crop_name)
+                if not buy_result:
+                    logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
+                    return []
+                return self._plant_all(crop_name)
+
+            excluded_indexes = self._collect_excluded_seed_item_indexes(number_items)
+            ordered_indexes = sorted(
+                range(len(number_items)),
+                key=lambda idx: float(number_items[idx].box[0] + number_items[idx].box[2] / 2.0),
+            )
+            available_indexes = [idx for idx in ordered_indexes if idx not in excluded_indexes]
+            if not available_indexes:
+                self.ui.device.click_button(GOTO_MAIN)
+                self.ui.device.sleep(0.2)
+                logger.info('自动播种: 候选框种子均被排除，尝试购买种子并重试 | 作物={}', crop_name)
+                buy_result = self._buy_seeds(crop_name)
+                if not buy_result:
+                    logger.warning('自动播种: 购买种子失败或未完成，结束本轮播种 | 作物={}', crop_name)
+                    return []
+                return self._plant_all(crop_name)
+
+            selected_index = int(available_indexes[0])
+            selected_item = number_items[selected_index]
+            box_x, box_y, box_w, box_h = selected_item.box
+            seed_drag_point = (int(box_x + box_w / 2), int(box_y + box_h / 2))
+            logger.info(
+                '自动播种: 仓库优先选中最左可用数字块 | 序号={} 拖拽点={} 排除索引={}',
+                selected_index + 1,
+                seed_drag_point,
+                sorted(excluded_indexes),
+            )
+        else:
+            seed_drag_point = self._select_seed_from_popup_by_warehouse_index(seed_index or 0, seed_popup_land)
+            if seed_drag_point is None:
+                logger.warning('自动播种: 候选框中无法按仓库序号选择种子 | 仓库序号={}', seed_index)
+                return []
 
         self._drag_seed_to_lands(seed_drag_point, land_coords)
         self.backfill_land_flag_false(pending_plot_refs, 'need_planting', log_prefix='自动播种')

@@ -36,7 +36,7 @@
 - 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）
 - 土地滑动次数：`config.planting.land_swipe_right_times`（默认 `4`）与 `config.planting.land_swipe_left_times`（默认 `6`）；地块巡查与土地升级共用，滑动坐标仍使用代码内静态坐标
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `BgPatchNumberOCR` 在区域 `x:[50,480], y:[地块点击y+40, 地块点击y+80]` 识别最左数字块
-- 活动作物跳过：`SEED_BTN_HEART_FRUIT`（爱心果）固定排除；`config.planting.skip_event_crops` 默认关闭，仅控制是否额外排除 `SEED_BTN_MUGWORT`（艾草）
+- 活动作物跳过：`SEED_BTN_HEART_FRUIT`（爱心果）与 `SEED_BTN_HAHA_PUMPKIN`（哈哈南瓜）固定排除；`config.planting.skip_event_crops` 默认关闭，若与 `warehouse_first` 同时开启则按关闭仓库优先处理
 - 等级同步：播种前执行等级 OCR；由 `config.planting.level_ocr_enabled` 控制，识别后回写 `config.planting.player_level`；统一 ROI 使用 `tasks/main.py` 内常量（不区分平台）
 - 小程序快捷方式：`config.window_shortcut_path` 保存桌面快捷方式路径（`.lnk`，在设置面板“窗口关键词”上方选择）；`config.window_shortcut_launch_delay_seconds`（默认 `3` 秒）控制快捷方式拉起后到窗口初始化之间的等待时间
 - 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
