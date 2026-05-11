@@ -18,6 +18,7 @@ from models.task_views import (
     RewardTaskView,
     SellTaskView,
     ShareTaskView,
+    TimedHarvestTaskView,
 )
 
 if TYPE_CHECKING:
@@ -77,6 +78,10 @@ class TaskViews:
     @property
     def land_scan(self) -> LandScanTaskView:
         return self.owner.engine.build_task_view('land_scan')  # type: ignore[return-value]
+
+    @property
+    def timed_harvest(self) -> TimedHarvestTaskView:
+        return self.owner.engine.build_task_view('timed_harvest')  # type: ignore[return-value]
 
 
 class TaskBase:

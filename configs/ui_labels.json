@@ -9,6 +9,7 @@
       "event_shop": "活动商店",
       "sell": "出售",
       "land_scan": "地块巡查",
+      "timed_harvest": "定时收获",
       "restart": "定时重启"
     },
     "feature_labels": {
@@ -33,13 +34,15 @@
       "claim_growth_task": "成长任务",
       "auto_svip_gift": "SVIP礼包领取",
       "auto_mall_gift": "商城礼包领取",
-      "auto_mail": "邮件领取"
+      "auto_mail": "邮件领取",
+      "aggregation_seconds": "聚合时间"
     },
     "feature_hints": {
       "reward.claim_growth_task": "QQ平台会直接领取",
       "friend.steal_stats": "开启后偷取会变慢",
       "main.auto_upgrade": "需要开启土地巡查任务",
-      "main.auto_fertilize": "需要开启土地巡查任务"
+      "main.auto_fertilize": "需要开启土地巡查任务",
+      "timed_harvest.aggregation_seconds": "地块成熟时间落在同一聚合窗口内时，只触发一次收获。"
     },
     "enabled": "启用",
     "detail_text": "详情",
@@ -72,10 +75,12 @@
       "event_shop": "活动商店",
       "sell": "出售",
       "land_scan": "地块巡查",
+      "timed_harvest": "定时收获",
       "restart": "定时重启"
     },
     "task_hints": {
       "share": "仅支持微信平台",
+      "timed_harvest": "依赖地块巡查结果；地块巡查关闭时会跳过执行",
       "restart": "建议先在设置中配置小程序快捷方式（.lnk）"
     },
     "switch_label": "开关:",

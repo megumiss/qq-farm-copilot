@@ -97,8 +97,6 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         super().__init__(engine, ui)
         self.ocr_tool = ocr_tool
         self._ocr_disabled_logged = False
-        self._countdown_sync_time = ''
-        self._countdown_sync_time_persisted = False
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         """
@@ -116,8 +114,6 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         """
         _ = rect
         logger.info('地块巡查: 开始')
-        self._countdown_sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
-        self._countdown_sync_time_persisted = False
         self.ui.ui_ensure(page_main)
         self.align_view_by_background_tree(log_prefix='地块巡查')
         right_swipe_times = int(self.config.planting.land_swipe_right_times)
@@ -164,7 +160,6 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             self.align_view_by_background_tree(log_prefix='地块巡查')
             self.ui.ui_ensure(page_main)
 
-        self._persist_countdown_sync_time_if_needed()
         self._trigger_main_task_if_needed()
         logger.info('地块巡查: 结束')
         return self.ok()
@@ -309,6 +304,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                     plot_id=cell.label,
                     level=update_level,
                     countdown='',
+                    countdown_sync_time='',
                     need_upgrade=need_upgrade,
                     need_planting=need_planting,
                 )
@@ -317,6 +313,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                         plot_id=cell.label,
                         level=update_level,
                         countdown='',
+                        countdown_sync_time='',
                         need_upgrade=need_upgrade,
                         need_planting=need_planting,
                     )
@@ -329,6 +326,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         need_upgrade = self._detect_need_upgrade(anchor=removal_location, empty_plot=False)
         need_planting = False
         countdown: str | None = None
+        countdown_sync_time: str | None = None
 
         if removal_location is None:
             logger.warning('地块巡查: 未识别到成熟时间锚点，跳过 OCR | 序号={}', cell.label)
@@ -337,6 +335,8 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             items = self.ocr_tool.detect(self.ui.device.image, region=roi, scale=1.2, alpha=1.1, beta=0.0)
             text, score, tokens = self._pick_time_tokens_near_suffix(items=items, anchor=removal_location)
             countdown = self._extract_maturity_time(text)
+            observed_at = datetime.now().replace(microsecond=0)
+            countdown_sync_time = observed_at.strftime('%Y-%m-%d %H:%M:%S') if countdown else ''
             display_text = countdown or text
             logger.debug(
                 '地块巡查: OCR筛选 | region={} pick_offset=({}, {}, {}, {}) tokens={} text={}',
@@ -358,6 +358,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             plot_id=cell.label,
             level=level or None,
             countdown=countdown,
+            countdown_sync_time=countdown_sync_time,
             need_upgrade=need_upgrade,
             need_planting=need_planting,
         )
@@ -366,6 +367,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 plot_id=cell.label,
                 level=level or None,
                 countdown=countdown,
+                countdown_sync_time=countdown_sync_time,
                 need_upgrade=need_upgrade,
                 need_planting=need_planting,
             )
@@ -668,6 +670,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         plot_id: str,
         level: str | None = None,
         countdown: str | None = None,
+        countdown_sync_time: str | None = None,
         need_upgrade: bool | None = None,
         need_planting: bool | None = None,
     ) -> bool:
@@ -686,6 +689,9 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         normalized_countdown: str | None = None
         if countdown is not None:
             normalized_countdown = str(countdown or '').strip()
+        normalized_countdown_sync_time: str | None = None
+        if countdown_sync_time is not None:
+            normalized_countdown_sync_time = str(countdown_sync_time or '').strip()
 
         for item in plots:
             if not isinstance(item, dict):
@@ -694,6 +700,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 continue
             old_level = str(item.get('level', '') or '').strip().lower()
             old_countdown = str(item.get('maturity_countdown', '') or '').strip()
+            old_countdown_sync_time = str(item.get('countdown_sync_time', '') or '').strip()
             old_need_upgrade = bool(item.get('need_upgrade', False))
             old_need_planting = bool(item.get('need_planting', False))
             changed = False
@@ -702,6 +709,9 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 changed = True
             if normalized_countdown is not None and old_countdown != normalized_countdown:
                 item['maturity_countdown'] = normalized_countdown
+                changed = True
+            if normalized_countdown_sync_time is not None and old_countdown_sync_time != normalized_countdown_sync_time:
+                item['countdown_sync_time'] = normalized_countdown_sync_time
                 changed = True
             if need_upgrade is not None and old_need_upgrade != bool(need_upgrade):
                 item['need_upgrade'] = bool(need_upgrade)
@@ -718,36 +728,35 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         plot_id: str,
         level: str | None = None,
         countdown: str | None = None,
+        countdown_sync_time: str | None = None,
         need_upgrade: bool | None = None,
         need_planting: bool | None = None,
     ) -> None:
         """单地块统一字段更新后立即落盘。"""
-        if countdown is not None:
-            sync_time = str(self._countdown_sync_time or '').strip()
-            if not sync_time:
-                sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
-            self.config.land.countdown_sync_time = sync_time
         try:
             self.config.save()
         except Exception as exc:
             logger.warning(
-                '地块巡查: 地块信息写入配置失败 | 序号={} 等级={} 成熟倒计时={} 需要升级={} 需要播种={} error={}',
+                (
+                    '地块巡查: 地块信息写入配置失败 | 序号={} 等级={} 成熟倒计时={} '
+                    '倒计时基准={} 需要升级={} 需要播种={} error={}'
+                ),
                 plot_id,
                 self._level_label(level),
                 countdown,
+                countdown_sync_time,
                 need_upgrade,
                 need_planting,
                 exc,
             )
             return
-        if countdown is not None:
-            self._countdown_sync_time_persisted = True
         self._emit_config_snapshot()
         logger.info(
-            '地块巡查: 地块信息已更新 | 序号={} 等级={} 成熟倒计时={} 需要升级={} 需要播种={}',
+            '地块巡查: 地块信息已更新 | 序号={} 等级={} 成熟倒计时={} 倒计时基准={} 需要升级={} 需要播种={}',
             plot_id,
             self._level_label(level),
             countdown,
+            countdown_sync_time,
             need_upgrade,
             need_planting,
         )
@@ -760,19 +769,3 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 emitter()
             except Exception:
                 return
-
-    def _persist_countdown_sync_time_if_needed(self) -> None:
-        """本轮扫描结束时确保倒计时基准时间至少落盘一次。"""
-        if self._countdown_sync_time_persisted:
-            return
-        sync_time = str(self._countdown_sync_time or '').strip()
-        if not sync_time:
-            sync_time = datetime.now().replace(microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
-        self.config.land.countdown_sync_time = sync_time
-        try:
-            self.config.save()
-        except Exception as exc:
-            logger.warning('地块巡查: 倒计时基准时间写入失败 | time={} error={}', sync_time, exc)
-            return
-        self._countdown_sync_time_persisted = True
-        self._emit_config_snapshot()

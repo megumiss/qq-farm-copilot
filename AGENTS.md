@@ -21,7 +21,7 @@
 - 实例纳管操作：`新增 / 删除 / 切换 / 克隆 / 重命名`
 - 调度模式：`TaskExecutor` 单线程串行执行
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典，包含持久化 `next_run`）
-- 农场详情配置：`config.land.plots`（固定 24 格，元素结构：`{plot_id, level, maturity_countdown, need_upgrade, need_planting}`；`level` 支持 `unbuilt|normal|red|black|gold|amethyst`；`maturity_countdown` 为 `HH:MM:SS`，`need_upgrade` 表示地块是否可升级，`need_planting` 表示地块是否需要播种）与 `config.land.countdown_sync_time`（`YYYY-MM-DD HH:MM:SS`，表示倒计时快照基准时间）及 `config.land.profile`（`level/gold/coupon/exp`，来源于等级同步 OCR）
+- 农场详情配置：`config.land.plots`（固定 24 格，元素结构：`{plot_id, level, maturity_countdown, countdown_sync_time, need_upgrade, need_planting}`；`level` 支持 `unbuilt|normal|red|black|gold|amethyst`；`maturity_countdown` 为 `HH:MM:SS`，`countdown_sync_time` 为该地块倒计时采样时间 `YYYY-MM-DD HH:MM:SS`，`need_upgrade` 表示地块是否可升级，`need_planting` 表示地块是否需要播种）及 `config.land.profile`（`level/gold/coupon/exp`，来源于等级同步 OCR）
 - 好友黑名单配置：`config.tasks.friend.features.blacklist`（`list[str]`，在任务设置详情弹窗维护）
 - 数据统计开关：`config.tasks.friend.features.steal_stats`（默认 `false`；开启后仅在偷取动作后执行 OCR 统计，偷取速度会变慢）
 - 好友偷菜限制：`config.tasks.friend.features.steal_enabled_time_range`（默认 `00:00:00-23:59:59`）与 `config.tasks.friend.features.steal_limit_count`（默认 `0`，表示不限）
@@ -29,6 +29,7 @@
 - 数据统计落盘：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/stats/daily_action_stats.csv`（按天累计 `harvest/operation/friend_steal/friend_help`）
 - 定时重启任务：`config.tasks.restart`（默认关闭；`trigger=interval`，默认 `interval_seconds=14400`；重启等待时间使用实例级 `config.window_restart_delay_seconds`，默认 `5` 秒）
 - 活动商店任务：`config.tasks.event_shop`（默认开启；`trigger=daily`，默认 `daily_times=["10:01","20:01"]`；当前仅执行商城免费物品领取）
+- 定时收获任务：`config.tasks.timed_harvest`（默认开启；`trigger=daily`，默认 `daily_times=["00:00"]`；`features.aggregation_seconds` 默认 `60` 秒；依赖地块巡查结果生成后续执行点）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
 - 异常恢复配置：`config.recovery`（`task_restart_attempts/task_retry_delay_seconds/window_launch_wait_timeout_seconds/startup_retry_step_sleep_seconds/startup_stabilize_timeout_seconds`）
 - 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
@@ -63,7 +64,7 @@
 : 通用任务执行器（pending/waiting 队列、按固定任务顺序调度、结果回写 next_run）。
 
 - `tasks/*.py`
-: 业务任务实现（`main/friend/share/reward/gift/event_shop/sell/land_scan` 及子任务；`restart` 入口在 `executor.py`）。
+: 业务任务实现（`main/friend/share/reward/gift/event_shop/sell/land_scan/timed_harvest` 及子任务；`restart` 入口在 `executor.py`）。
 
 - `core/ui/ui.py` + `core/base/module_base.py`
 : 页面识别、导航、弹窗清理、`appear/appear_then_click` 等模板点击能力。
@@ -196,7 +197,10 @@
 : 活动商店任务（默认开启，默认 `trigger=daily`，默认 `daily_times=["10:01","20:01"]`）；当前流程仅领取商城免费物品。
 
 - `land_scan`
-: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；左右滑动次数来自 `config.planting.land_swipe_right_times/land_swipe_left_times`，分段扫描右到左前 5 列与左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`，并标记 `config.land.plots[].need_upgrade` 与 `config.land.plots[].need_planting`（空地为 `true`）。
+: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；左右滑动次数来自 `config.planting.land_swipe_right_times/land_swipe_left_times`，分段扫描右到左前 5 列与左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`，并按该地块实际采样时刻写入 `config.land.plots[].countdown_sync_time`，同时标记 `config.land.plots[].need_upgrade` 与 `config.land.plots[].need_planting`（空地为 `true`）。
+
+- `timed_harvest`
+: 定时收获任务（默认开启，默认 `trigger=daily` + `daily_times=["00:00"]`）；仅在地块巡查启用时生效；地块巡查完成后按每块地 `plots[].countdown_sync_time + plots[].maturity_countdown` 计算成熟时间点，按 `features.aggregation_seconds` 进行聚合切片并更新下次执行时间，任务执行时仅执行一键收获。
 
 - `restart`
 : 定时重启任务（默认关闭，默认 `interval_seconds=14400`）；重启等待使用实例级 `config.window_restart_delay_seconds`（默认 `5` 秒），执行时会校验 `window_shortcut_path` 并重启窗口后收敛回主页面。

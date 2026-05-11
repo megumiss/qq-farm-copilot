@@ -6,6 +6,7 @@ from tasks.main import TaskMain
 from tasks.reward import TaskReward
 from tasks.sell import TaskSell
 from tasks.share import TaskShare
+from tasks.timed_harvest import TaskTimedHarvest
 
 __all__ = [
     'TaskMain',
@@ -16,4 +17,5 @@ __all__ = [
     'TaskGift',
     'TaskEventShop',
     'TaskLandScan',
+    'TaskTimedHarvest',
 ]
