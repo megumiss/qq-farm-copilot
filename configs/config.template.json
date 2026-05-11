@@ -131,7 +131,7 @@
       "next_run": "2026-01-01 00:00",
       "failure_interval_seconds": 300,
       "features": {
-        "aggregation_seconds": 60
+        "aggregation_seconds": 30
       }
     },
     "restart": {

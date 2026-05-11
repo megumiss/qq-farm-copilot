@@ -30,7 +30,7 @@ from qfluentwidgets import (
 )
 
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
-from models.config import AppConfig
+from models.config import AppConfig, normalize_land_maturity_countdown
 
 
 @dataclass(frozen=True)
@@ -250,27 +250,12 @@ class LandCell(QWidget):
         )
 
     @staticmethod
-    def _normalize_countdown_text(raw: object) -> str:
-        text = str(raw or '').strip()
-        match = LAND_COUNTDOWN_PATTERN.match(text)
-        if not match:
-            return ''
-        hour = int(match.group(1))
-        minute = int(match.group(2))
-        second = int(match.group(3))
-        if hour < 0 or hour > 99 or minute < 0 or minute > 59 or second < 0 or second > 59:
-            return ''
-        return f'{hour:02d}:{minute:02d}:{second:02d}'
-
-    @staticmethod
     def _countdown_to_seconds(text: str) -> int:
-        match = LAND_COUNTDOWN_PATTERN.match(str(text or '').strip())
-        if not match:
+        normalized = normalize_land_maturity_countdown(text)
+        if not normalized:
             return 0
-        hour = int(match.group(1))
-        minute = int(match.group(2))
-        second = int(match.group(3))
-        return hour * 3600 + minute * 60 + second
+        hour_str, minute_str, second_str = normalized.split(':')
+        return int(hour_str) * 3600 + int(minute_str) * 60 + int(second_str)
 
     @staticmethod
     def _seconds_to_countdown(seconds: int) -> str:
@@ -289,7 +274,7 @@ class LandCell(QWidget):
     def set_data(self, data: dict[str, object], *, prefer_lower_countdown: bool = False) -> None:
         state = self._normalize_state(data.get('level', 'unbuilt'))
         countdown_raw = data.get('maturity_countdown', self._current_countdown_text())
-        countdown = self._normalize_countdown_text(countdown_raw)
+        countdown = normalize_land_maturity_countdown(countdown_raw)
         countdown_sync_time = LandDetailPanel._normalize_countdown_sync_time(data.get('countdown_sync_time', ''))
         need_upgrade_raw = data.get('need_upgrade', self._need_upgrade)
         self._need_upgrade = self._normalize_need_upgrade(need_upgrade_raw)
@@ -674,7 +659,7 @@ class LandDetailPanel(QWidget):
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                countdown_text = LandCell._normalize_countdown_text(item.get('maturity_countdown', ''))
+                countdown_text = normalize_land_maturity_countdown(item.get('maturity_countdown', ''))
                 item['countdown_sync_time'] = now_text if countdown_text else ''
             self.config.land.plots = items
             self.config.save()
@@ -729,7 +714,7 @@ class LandDetailPanel(QWidget):
             if cell is None:
                 continue
             apply_item = dict(item)
-            countdown_text = LandCell._normalize_countdown_text(apply_item.get('maturity_countdown', ''))
+            countdown_text = normalize_land_maturity_countdown(apply_item.get('maturity_countdown', ''))
             sync_time_text = self._normalize_countdown_sync_time(apply_item.get('countdown_sync_time', ''))
             elapsed_seconds = 0
             if sync_time_text:

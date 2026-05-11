@@ -72,7 +72,7 @@ class GiftFeatures:
 
 @dataclass(slots=True)
 class TimedHarvestFeatures:
-    aggregation_seconds: int = 60
+    aggregation_seconds: int = 30
 
 
 @dataclass(slots=True)

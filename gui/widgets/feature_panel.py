@@ -344,6 +344,24 @@ class FeaturePanel(QWidget):
                 continue
 
             if isinstance(value, int):
+                if task_name == 'timed_harvest' and feature_name == 'aggregation_seconds':
+                    spin = SpinBox(card)
+                    spin.setRange(1, 60)
+                    spin.valueChanged.connect(self._auto_save)
+                    self._int_widgets[(task_name, feature_name)] = spin
+                    field_widget = spin
+                    field = QWidget(card)
+                    field_layout = QVBoxLayout(field)
+                    field_layout.setContentsMargins(0, 0, 0, 0)
+                    field_layout.setSpacing(2)
+                    field_layout.addWidget(field_widget)
+                    if hint_text:
+                        hint = CaptionLabel(hint_text, field)
+                        hint.setWordWrap(True)
+                        hint.setStyleSheet(f'color: {SETTINGS_HINT_COLOR};')
+                        field_layout.addWidget(hint)
+                    form.addRow(self._field_label(label, card), field)
+                    continue
                 if feature_name.endswith('_seconds'):
                     spin = SpinBox(card)
                     spin.setRange(0, 99999)
@@ -387,6 +405,17 @@ class FeaturePanel(QWidget):
         full_key = f'{task_name}.{feature_name}'
         text = self._feature_hint_map.get(full_key, self._feature_hint_map.get(feature_name, ''))
         return str(text or '').strip()
+
+    @staticmethod
+    def _normalize_int_feature_value(task_name: str, feature_name: str, value: Any) -> int:
+        """规范化整数字段值。"""
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = 0
+        if task_name == 'timed_harvest' and feature_name == 'aggregation_seconds':
+            return max(1, min(60, parsed))
+        return max(0, parsed)
 
     @staticmethod
     def _split_interval(seconds: int) -> tuple[int, int]:
@@ -495,7 +524,7 @@ class FeaturePanel(QWidget):
             if task_cfg is None:
                 continue
             feature_map = dict(task_cfg.features or {})
-            feature_map[feature_name] = max(0, int(spin.value()))
+            feature_map[feature_name] = self._normalize_int_feature_value(task_name, feature_name, spin.value())
             task_cfg.features = feature_map
         for (task_name, feature_name), text_edit in self._text_widgets.items():
             task_cfg = self.config.tasks.get(task_name)
@@ -543,11 +572,7 @@ class FeaturePanel(QWidget):
             value = feature_map.get(feature_name, 0)
             if isinstance(value, bool):
                 value = 0
-            try:
-                parsed = int(value)
-            except Exception:
-                parsed = 0
-            spin.setValue(max(0, parsed))
+            spin.setValue(self._normalize_int_feature_value(task_name, feature_name, value))
         for (task_name, feature_name), text_edit in self._text_widgets.items():
             task_cfg = self.config.tasks.get(task_name)
             if task_cfg is None:

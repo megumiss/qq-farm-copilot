@@ -160,9 +160,49 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             self.align_view_by_background_tree(log_prefix='地块巡查')
             self.ui.ui_ensure(page_main)
 
+        self._schedule_timed_harvest_after_scan()
         self._trigger_main_task_if_needed()
         logger.info('地块巡查: 结束')
         return self.ok()
+
+    def _schedule_timed_harvest_after_scan(self) -> None:
+        """地块巡查完成后，按最新倒计时快照重排定时收获。"""
+        if not self.is_task_enabled('timed_harvest'):
+            return
+        timed_view = self.task.timed_harvest
+        aggregation_seconds = timed_view.feature.aggregation_seconds
+
+        from tasks.timed_harvest import TaskTimedHarvest
+
+        schedule_points = TaskTimedHarvest.build_schedule_points(
+            self.config.land.plots,
+            aggregation_seconds=aggregation_seconds,
+        )
+        target_time = TaskTimedHarvest.pick_next_schedule_target(
+            schedule_points,
+            now=datetime.now(),
+            fallback_to_now_when_all_past=True,
+        )
+        task_item = getattr(self.engine, '_executor_tasks', {}).get('timed_harvest')
+        executor = getattr(self.engine, '_task_executor', None)
+        if (
+            target_time is None
+            or task_item is None
+            or executor is None
+            or not executor.task_delay('timed_harvest', target_time=target_time)
+        ):
+            return
+        task_item.next_run = target_time
+        persist = getattr(self.engine, '_persist_task_next_run', None)
+        if callable(persist):
+            persist('timed_harvest')
+        logger.info(
+            '定时收获: 已更新下次执行 | 原因={} 下次执行={} 执行点数量={} 聚合秒数={}',
+            '地块巡查完成',
+            target_time.strftime('%Y-%m-%d %H:%M:%S'),
+            len(schedule_points),
+            aggregation_seconds,
+        )
 
     def _trigger_main_task_if_needed(self) -> None:
         """存在待播种或待升级地块时，拉起农场巡查任务。"""

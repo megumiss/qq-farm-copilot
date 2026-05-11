@@ -59,7 +59,6 @@ class BotExecutorMixin:
 
     _NEXT_RUN_PARSE_FORMATS = ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M')
     _TIMED_HARVEST_TASK = 'timed_harvest'
-    _LAND_SCAN_TASK = 'land_scan'
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -264,129 +263,6 @@ class BotExecutorMixin:
             self._emit_config_now()
         except Exception as exc:
             logger.debug(f'persist next_run failed({task_name}): {exc}')
-
-    @staticmethod
-    def _parse_countdown_seconds(value: str) -> int | None:
-        """将 `HH:MM:SS` 倒计时解析为秒。"""
-        text = str(value or '').strip()
-        parts = text.split(':')
-        if len(parts) != 3:
-            return None
-        try:
-            hour = int(parts[0])
-            minute = int(parts[1])
-            second = int(parts[2])
-        except Exception:
-            return None
-        if hour < 0 or hour > 99 or minute < 0 or minute > 59 or second < 0 or second > 59:
-            return None
-        return hour * 3600 + minute * 60 + second
-
-    def _timed_harvest_aggregation_seconds(self) -> int:
-        """读取定时收获聚合时间（秒）。"""
-        cfg = self._get_task_cfg(self._TIMED_HARVEST_TASK)
-        if cfg is None:
-            return 60
-        features = dict(cfg.features or {})
-        raw = features.get('aggregation_seconds', 60)
-        if isinstance(raw, bool):
-            return 60
-        try:
-            seconds = int(raw)
-        except Exception:
-            seconds = 60
-        return max(1, seconds)
-
-    def _land_scan_task_enabled(self) -> bool:
-        """读取地块巡查任务开关。"""
-        cfg = self._get_task_cfg(self._LAND_SCAN_TASK)
-        return bool(cfg and cfg.enabled)
-
-    def _collect_plot_maturity_points(self) -> list[datetime]:
-        """按地块倒计时快照计算成熟时间点列表。"""
-        plots = self.config.land.plots
-        if not isinstance(plots, list):
-            return []
-
-        points: list[datetime] = []
-        for item in plots:
-            if not isinstance(item, dict):
-                continue
-            sync_time_text = str(item.get('countdown_sync_time') or '').strip().replace('T', ' ')
-            if not sync_time_text:
-                continue
-            try:
-                sync_time = datetime.strptime(sync_time_text, '%Y-%m-%d %H:%M:%S')
-            except Exception:
-                continue
-            countdown = str(item.get('maturity_countdown') or '').strip()
-            if not countdown:
-                continue
-            seconds = self._parse_countdown_seconds(countdown)
-            if seconds is None:
-                continue
-            points.append(sync_time + timedelta(seconds=seconds))
-        points.sort()
-        return points
-
-    def _build_timed_harvest_schedule_points(self) -> list[datetime]:
-        """基于成熟时间与聚合时间生成定时收获执行点。"""
-        if not self._land_scan_task_enabled():
-            return []
-        maturity_points = self._collect_plot_maturity_points()
-        if not maturity_points:
-            return []
-
-        aggregation_seconds = self._timed_harvest_aggregation_seconds()
-        window = timedelta(seconds=aggregation_seconds)
-        schedule_points: list[datetime] = []
-        window_end: datetime | None = None
-        for point in maturity_points:
-            if window_end is None or point > window_end:
-                schedule_points.append(point)
-                window_end = point + window
-                continue
-        return schedule_points
-
-    def _schedule_timed_harvest_next_run(self, *, reason: str, fallback_to_daily: bool) -> bool:
-        """更新定时收获任务下次执行时间。"""
-        task_name = self._TIMED_HARVEST_TASK
-        item = self._executor_tasks.get(task_name)
-        executor = self._task_executor
-        cfg = self._get_task_cfg(task_name)
-        if item is None or executor is None or cfg is None:
-            return False
-
-        now = datetime.now()
-        schedule_points = self._build_timed_harvest_schedule_points()
-        target_time: datetime | None = None
-        if schedule_points:
-            for point in schedule_points:
-                if point >= now:
-                    target_time = point
-                    break
-            if target_time is None and not fallback_to_daily:
-                target_time = now
-        if target_time is None and fallback_to_daily:
-            target_time = self._next_daily_target_time(cfg.daily_times, now)
-
-        if target_time is None:
-            logger.info('定时收获: 未生成后续执行时间，保持现有排程 | reason={}', reason)
-            return False
-
-        applied = bool(executor.task_delay(task_name, target_time=target_time))
-        if not applied:
-            return False
-        item.next_run = target_time
-        self._persist_task_next_run(task_name)
-        logger.info(
-            '定时收获: 已更新下次执行 | reason={} next_run={} schedule_count={} aggregation_seconds={}',
-            reason,
-            target_time.strftime('%Y-%m-%d %H:%M:%S'),
-            len(schedule_points),
-            self._timed_harvest_aggregation_seconds(),
-        )
-        return True
 
     def _collect_task_runners(self) -> dict[str, Callable[[TaskContext], TaskResult]]:
         """自动发现 `_run_task_*` 任务入口方法并构建 runner 映射。"""
@@ -1219,21 +1095,12 @@ class BotExecutorMixin:
         # 对齐 NIKKE：daily 任务的下次执行时间由执行器统一按 daily_times 计算，
         # 任务实现层无需每次显式返回 next_run_seconds。
         cfg = self._get_task_cfg(task_name)
-        timed_harvest_scheduled = False
-        if result.success and task_name == self._LAND_SCAN_TASK:
-            self._schedule_timed_harvest_next_run(reason='地块巡查完成', fallback_to_daily=False)
-        if result.success and task_name == self._TIMED_HARVEST_TASK:
-            timed_harvest_scheduled = self._schedule_timed_harvest_next_run(
-                reason='定时收获完成',
-                fallback_to_daily=True,
-            )
         if (
             result.success
             and result.next_run_seconds is None
             and cfg is not None
             and cfg.trigger == TaskTriggerType.DAILY
             and self._task_executor is not None
-            and not (task_name == self._TIMED_HARVEST_TASK and timed_harvest_scheduled)
         ):
             self._task_executor.task_delay(
                 task_name,

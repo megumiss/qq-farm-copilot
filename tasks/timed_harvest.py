@@ -2,33 +2,102 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
+from typing import Any
 
 from loguru import logger
 
 from core.engine.task.registry import TaskResult
 from core.ui.assets import BTN_HARVEST, BTN_MATURE
 from core.ui.page import page_main
+from models.config import normalize_land_maturity_countdown
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
 # 聚合窗口附加缓冲秒数：覆盖窗口尾部成熟地块。
 TIMED_HARVEST_WINDOW_BUFFER_SECONDS = 3
-# 持续收获循环轮询间隔（秒）。
-TIMED_HARVEST_LOOP_IDLE_SLEEP_SECONDS = 0.25
-TIMED_HARVEST_LOOP_ACTIVE_SLEEP_SECONDS = 0.12
 
 
 class TaskTimedHarvest(TaskBase):
     """按调度在聚合窗口内持续执行一键收获。"""
 
-    def _aggregation_seconds(self) -> int:
-        """读取定时收获聚合时间。"""
-        try:
-            seconds = int(self.task.timed_harvest.feature.aggregation_seconds)
-        except Exception:
-            seconds = 60
-        return max(1, seconds)
+    @classmethod
+    def build_schedule_points(cls, plots: list[dict[str, Any]], *, aggregation_seconds: int) -> list[datetime]:
+        """按地块快照构建聚合后的执行时间点。"""
+        if not isinstance(plots, list) or not plots:
+            return []
+        maturity_points: list[datetime] = []
+        for item in plots:
+            if not isinstance(item, dict):
+                continue
+            sync_time_text = str(item.get('countdown_sync_time') or '').strip().replace('T', ' ')
+            if not sync_time_text:
+                continue
+            try:
+                sync_time = datetime.strptime(sync_time_text, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                continue
+            countdown = normalize_land_maturity_countdown(item.get('maturity_countdown'))
+            if not countdown:
+                continue
+            hour_str, minute_str, second_str = countdown.split(':')
+            seconds = int(hour_str) * 3600 + int(minute_str) * 60 + int(second_str)
+            maturity_points.append(sync_time + timedelta(seconds=seconds))
+        maturity_points.sort()
+        if not maturity_points:
+            return []
+
+        window = timedelta(seconds=aggregation_seconds)
+        schedule_points: list[datetime] = []
+        window_end: datetime | None = None
+        for point in maturity_points:
+            if window_end is None or point > window_end:
+                schedule_points.append(point)
+                window_end = point + window
+        return schedule_points
+
+    @staticmethod
+    def pick_next_schedule_target(
+        schedule_points: list[datetime], *, now: datetime, fallback_to_now_when_all_past: bool
+    ) -> datetime | None:
+        """从执行点列表中选择下一次目标时间。"""
+        if not schedule_points:
+            return None
+        for point in schedule_points:
+            if point >= now:
+                return point
+        if fallback_to_now_when_all_past:
+            return now
+        return None
+
+    def _resolve_next_run_seconds(self) -> int | None:
+        """计算定时收获任务下次执行秒数。"""
+        now = datetime.now()
+        aggregation_seconds = self.task.timed_harvest.feature.aggregation_seconds
+        schedule_points = self.build_schedule_points(
+            self.config.land.plots,
+            aggregation_seconds=aggregation_seconds,
+        )
+        target_time = self.pick_next_schedule_target(
+            schedule_points,
+            now=now,
+            fallback_to_now_when_all_past=False,
+        )
+        if target_time is None:
+            target_time = self.engine._next_daily_target_time(self.task.timed_harvest.daily_times, now)
+        if target_time is None:
+            return None
+        delta_seconds = (target_time - now).total_seconds()
+        next_run_seconds = max(1, int(math.ceil(delta_seconds)))
+        logger.info(
+            '定时收获: 已计算下次执行 | 原因={} 下次执行={} 执行点数量={} 聚合秒数={}',
+            '定时收获完成',
+            target_time.strftime('%Y-%m-%d %H:%M:%S'),
+            len(schedule_points),
+            aggregation_seconds,
+        )
+        return next_run_seconds
 
     def run(self, rect: tuple[int, int, int, int]) -> TaskResult:
         _ = rect
@@ -37,13 +106,13 @@ class TaskTimedHarvest(TaskBase):
             return self.ok()
 
         self.ui.ui_ensure(page_main)
-        aggregation_seconds = self._aggregation_seconds()
-        total_window_seconds = aggregation_seconds + int(TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
+        aggregation_seconds = self.task.timed_harvest.feature.aggregation_seconds
+        total_window_seconds = aggregation_seconds + TIMED_HARVEST_WINDOW_BUFFER_SECONDS
         deadline = datetime.now() + timedelta(seconds=total_window_seconds)
         action_count = 0
 
         logger.info(
-            '定时收获: 开始持续收获 | aggregation_seconds={} buffer_seconds={} window_seconds={}',
+            '定时收获: 开始持续收获 | 聚合秒数={} 缓冲秒数={} 窗口秒数={}',
             aggregation_seconds,
             TIMED_HARVEST_WINDOW_BUFFER_SECONDS,
             total_window_seconds,
@@ -51,29 +120,22 @@ class TaskTimedHarvest(TaskBase):
 
         while datetime.now() <= deadline:
             self.ui.device.screenshot()
-            clicked = False
-            if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=1, static=False):
+            if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=0.5, static=False):
                 self.engine._record_stat(ActionType.HARVEST)
                 action_count += 1
-                clicked = True
-            elif self.ui.appear_then_click(BTN_MATURE, offset=30, interval=1, static=False):
+                self.ui.device.click_record_clear()
+            elif self.ui.appear_then_click(BTN_MATURE, offset=30, interval=0.5, static=False):
                 self.engine._record_stat(ActionType.HARVEST)
                 action_count += 1
-                clicked = True
+                self.ui.device.click_record_clear()
 
             now = datetime.now()
             if now >= deadline:
                 break
-            idle_sleep_seconds = (
-                TIMED_HARVEST_LOOP_ACTIVE_SLEEP_SECONDS if clicked else TIMED_HARVEST_LOOP_IDLE_SLEEP_SECONDS
-            )
-            sleep_seconds = min(float(idle_sleep_seconds), max(0.0, (deadline - now).total_seconds()))
-            if sleep_seconds > 0:
-                self.ui.device.sleep(sleep_seconds)
 
         logger.info(
-            '定时收获: 执行完成 | action_count={} window_seconds={}',
+            '定时收获: 执行完成 | 动作次数={} 窗口秒数={}',
             action_count,
             total_window_seconds,
         )
-        return self.ok()
+        return self.ok(next_run_seconds=self._resolve_next_run_seconds())
