@@ -166,6 +166,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
 
         self._schedule_timed_harvest_after_scan()
         self._trigger_main_task_if_needed()
+        self.align_view_by_background_tree(log_prefix='地块巡查-结束回正')
         logger.info('地块巡查: 结束')
         return self.ok()
 
