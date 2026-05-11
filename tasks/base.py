@@ -24,6 +24,7 @@ from models.task_views import (
 if TYPE_CHECKING:
     from core.engine.bot.local_engine import LocalBotEngine
     from core.ui.ui import UI
+    from utils.land_grid import LandCell
 
 # 背景树回正默认锚点基准坐标。
 DEFAULT_ALIGN_BASELINE_POINT = (188, 314)
@@ -205,14 +206,15 @@ class TaskBase:
             return []
         return [item for item in self.parse_land_detail_plots() if self.parse_truthy(item.get(key, default))]
 
-    def collect_land_targets_by_flag(
-        self, flag: str, *, log_prefix: str = '土地流程'
-    ) -> list[tuple[str, tuple[int, int]]]:
-        """按土地详情标记收集地块坐标。"""
-        pending_entries = self.parse_land_detail_plots_by_flag(flag)
-        if not pending_entries:
-            return []
-
+    def collect_land_cells(
+        self,
+        *,
+        rows: int = 4,
+        cols: int = 6,
+        start_anchor: str = 'right',
+        log_prefix: str = '土地流程',
+    ) -> list['LandCell']:
+        """收集当前画面的地块网格。"""
         from core.ui.assets import BTN_LAND_LEFT, BTN_LAND_RIGHT
         from utils.land_grid import get_lands_from_land_anchor
 
@@ -223,16 +225,44 @@ class TaskBase:
             logger.warning('{}: 未识别到地块锚点，跳过本轮', log_prefix)
             return []
 
-        all_lands = get_lands_from_land_anchor(
+        cells = get_lands_from_land_anchor(
             (int(land_right_anchor[0]), int(land_right_anchor[1])) if land_right_anchor is not None else None,
             (int(land_left_anchor[0]), int(land_left_anchor[1])) if land_left_anchor is not None else None,
+            rows=int(rows),
+            cols=int(cols),
+            start_anchor=str(start_anchor),
         )
-        if not all_lands:
-            logger.warning('{}: 未生成地块网格，跳过本轮', log_prefix)
+        logger.info(
+            '{}: 网格识别 | 右锚点={} 左锚点={} 地块总计={}',
+            log_prefix,
+            land_right_anchor,
+            land_left_anchor,
+            len(cells),
+        )
+        return cells
+
+    def collect_land_centers(self, *, log_prefix: str = '土地流程') -> dict[str, tuple[int, int]]:
+        """收集当前画面的地块中心坐标映射（plot_id -> center）。"""
+        cells = self.collect_land_cells(log_prefix=log_prefix)
+        if not cells:
+            return {}
+        center_by_plot_id = {str(cell.label): (int(cell.center[0]), int(cell.center[1])) for cell in cells}
+        logger.info('{}: 地块坐标采集完成 | 地块总计={}', log_prefix, len(center_by_plot_id))
+        return center_by_plot_id
+
+    def collect_land_targets_by_flag(
+        self, flag: str, *, log_prefix: str = '土地流程'
+    ) -> list[tuple[str, tuple[int, int]]]:
+        """按土地详情标记收集地块坐标。"""
+        pending_entries = self.parse_land_detail_plots_by_flag(flag)
+        if not pending_entries:
             return []
 
-        center_by_plot_id = {str(cell.label): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
-        center_by_order = {int(cell.order): (int(cell.center[0]), int(cell.center[1])) for cell in all_lands}
+        cells = self.collect_land_cells(log_prefix=log_prefix)
+        if not cells:
+            return []
+        center_by_plot_id = {str(cell.label): (int(cell.center[0]), int(cell.center[1])) for cell in cells}
+        center_by_order = {int(cell.order): (int(cell.center[0]), int(cell.center[1])) for cell in cells}
 
         targets: list[tuple[str, tuple[int, int]]] = []
         missing_refs: list[str] = []

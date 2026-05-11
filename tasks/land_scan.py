@@ -21,7 +21,7 @@ from core.ui.assets import (
 from core.ui.page import GOTO_MAIN, page_main
 from tasks.base import TaskBase
 from tasks.main_actions import TaskMainActionsMixin
-from utils.land_grid import LandCell, get_lands_from_land_anchor
+from utils.land_grid import LandCell
 from utils.ocr_utils import OCRItem, OCRTool
 
 # 画面横向回正手势点位 P1。
@@ -126,7 +126,9 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P1, LAND_SCAN_SWIPE_H_P2, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_RIGHT)
 
-            cells_after_left = self._collect_land_cells()
+            cells_after_left = self.collect_land_cells(
+                rows=LAND_SCAN_ROWS, cols=LAND_SCAN_COLS, start_anchor='right', log_prefix='地块巡查'
+            )
             if not cells_after_left:
                 logger.warning('地块巡查: 未识别到地块网格，跳过任务')
                 return self.fail('未识别到地块网格')
@@ -140,7 +142,9 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
                 self.ui.device.swipe(LAND_SCAN_SWIPE_H_P2, LAND_SCAN_SWIPE_H_P1, speed=30)
             self._wait_anchor_position_stable(anchor_button=BTN_LAND_LEFT)
 
-            cells_after_right = self._collect_land_cells()
+            cells_after_right = self.collect_land_cells(
+                rows=LAND_SCAN_ROWS, cols=LAND_SCAN_COLS, start_anchor='right', log_prefix='地块巡查'
+            )
             if not cells_after_right:
                 logger.warning('地块巡查: 未识别到地块网格，跳过任务')
                 return self.fail('未识别到地块网格')
@@ -197,8 +201,7 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
         if callable(persist):
             persist('timed_harvest')
         logger.info(
-            '定时收获: 已更新下次执行 | 原因={} 下次执行={} 执行点数量={} 聚合秒数={}',
-            '地块巡查完成',
+            '定时收获: 已更新下次执行 | 下次执行={} 执行点数量={} 聚合秒数={}',
             target_time.strftime('%Y-%m-%d %H:%M:%S'),
             len(schedule_points),
             aggregation_seconds,
@@ -498,18 +501,6 @@ class TaskLandScan(TaskMainActionsMixin, TaskBase):
             return None
         mean_bgr = patch.reshape(-1, 3).mean(axis=0)
         return int(mean_bgr[0]), int(mean_bgr[1]), int(mean_bgr[2])
-
-    def _collect_land_cells(self) -> list[LandCell]:
-        """识别左右锚点并推算地块网格。"""
-        self.ui.device.screenshot()
-        right_anchor = self.ui.appear_location(BTN_LAND_RIGHT, offset=(-30, -30, 160, 30), threshold=0.9)
-        left_anchor = self.ui.appear_location(BTN_LAND_LEFT, offset=(-160, -30, 30, 30), threshold=0.9)
-
-        cells = get_lands_from_land_anchor(
-            right_anchor, left_anchor, rows=LAND_SCAN_ROWS, cols=LAND_SCAN_COLS, start_anchor='right'
-        )
-        logger.info('地块巡查: 网格识别 | 右锚点={} 左锚点={} 地块总计={}', right_anchor, left_anchor, len(cells))
-        return cells
 
     def _exclude_expand_brand_related_cells(self, cells: list[LandCell]) -> list[LandCell]:
         """按 BTN_EXPAND_BRAND 位置排除不可统计地块。"""

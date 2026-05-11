@@ -8,15 +8,17 @@ from typing import Any
 
 from loguru import logger
 
+from core.base.timer import Timer
 from core.engine.task.registry import TaskResult
-from core.ui.assets import BTN_HARVEST, BTN_MATURE
-from core.ui.page import page_main
+from core.ui.assets import BTN_HARVEST, BTN_HARVEST_POP, BTN_MATURE, BTN_WITHERED
+from core.ui.page import GOTO_MAIN, page_main
 from models.config import normalize_land_maturity_countdown
 from models.farm_state import ActionType
 from tasks.base import TaskBase
 
 # 聚合窗口附加缓冲秒数：覆盖窗口尾部成熟地块。
 TIMED_HARVEST_WINDOW_BUFFER_SECONDS = 3
+TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS = 5.0
 
 
 class TaskTimedHarvest(TaskBase):
@@ -91,8 +93,7 @@ class TaskTimedHarvest(TaskBase):
         delta_seconds = (target_time - now).total_seconds()
         next_run_seconds = max(1, int(math.ceil(delta_seconds)))
         logger.info(
-            '定时收获: 已计算下次执行 | 原因={} 下次执行={} 执行点数量={} 聚合秒数={}',
-            '定时收获完成',
+            '定时收获: 已计算下次执行 | 下次执行={} 执行点数量={} 聚合秒数={}',
             target_time.strftime('%Y-%m-%d %H:%M:%S'),
             len(schedule_points),
             aggregation_seconds,
@@ -110,6 +111,13 @@ class TaskTimedHarvest(TaskBase):
         total_window_seconds = aggregation_seconds + TIMED_HARVEST_WINDOW_BUFFER_SECONDS
         deadline = datetime.now() + timedelta(seconds=total_window_seconds)
         action_count = 0
+        goto_main_click_timer = Timer(TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS, count=0)
+        withered_action_timer = Timer(TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS, count=0)
+        land_cells = self.collect_land_cells(log_prefix='定时收获')
+        land_1_1_center = next(
+            ((int(cell.center[0]), int(cell.center[1])) for cell in land_cells if str(cell.label) == '1-1'),
+            None,
+        )
 
         logger.info(
             '定时收获: 开始持续收获 | 聚合秒数={} 缓冲秒数={} 窗口秒数={}',
@@ -120,14 +128,29 @@ class TaskTimedHarvest(TaskBase):
 
         while datetime.now() <= deadline:
             self.ui.device.screenshot()
+            if self.ui.appear(BTN_HARVEST_POP, offset=100):
+                if not goto_main_click_timer.started() or goto_main_click_timer.reached_and_reset():
+                    self.ui.device.click_button(GOTO_MAIN)
+                    goto_main_click_timer.start()
+                continue
+            if self.ui.appear(BTN_WITHERED, offset=30, threshold=0.9, static=False):
+                if not withered_action_timer.started() or withered_action_timer.reached_and_reset():
+                    self.ui.device.click_point(
+                        int(land_1_1_center[0]), int(land_1_1_center[1]), desc='定时收获-枯萎处理'
+                    )
+                    self.ui.device.click_button(GOTO_MAIN)
+                    withered_action_timer.start()
+                continue
             if self.ui.appear_then_click(BTN_HARVEST, offset=30, interval=0.5, static=False):
                 self.engine._record_stat(ActionType.HARVEST)
                 action_count += 1
                 self.ui.device.click_record_clear()
+                continue
             elif self.ui.appear_then_click(BTN_MATURE, offset=30, interval=0.5, static=False):
                 self.engine._record_stat(ActionType.HARVEST)
                 action_count += 1
                 self.ui.device.click_record_clear()
+                continue
 
             now = datetime.now()
             if now >= deadline:
@@ -138,4 +161,8 @@ class TaskTimedHarvest(TaskBase):
             action_count,
             total_window_seconds,
         )
+        if action_count > 0:
+            queued = bool(self.task.main.call(force_call=False))
+            if queued:
+                logger.info('定时收获: 已成功收获，发起一次主任务')
         return self.ok(next_run_seconds=self._resolve_next_run_seconds())
