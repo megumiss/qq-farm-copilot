@@ -201,6 +201,24 @@ def normalize_executor_task_order(value: Any) -> str:
         out.append(name)
     if not out:
         return DEFAULT_EXECUTOR_TASK_ORDER
+    default_order = [item for item in DEFAULT_EXECUTOR_TASK_ORDER.split('>') if item]
+    for idx, task_name in enumerate(default_order):
+        if task_name in out:
+            continue
+        insert_at: int | None = None
+        for prev in reversed(default_order[:idx]):
+            if prev in out:
+                insert_at = out.index(prev) + 1
+                break
+        if insert_at is None:
+            for nxt in default_order[idx + 1 :]:
+                if nxt in out:
+                    insert_at = out.index(nxt)
+                    break
+        if insert_at is None:
+            out.append(task_name)
+        else:
+            out.insert(insert_at, task_name)
     return '>'.join(out)
 
 
@@ -208,6 +226,30 @@ def parse_executor_task_order(value: Any) -> list[str]:
     """解析任务顺序配置文本。"""
     normalized = normalize_executor_task_order(value)
     return [item for item in normalized.split('>') if item]
+
+
+def resolve_executor_task_order(task_names: list[str], task_order: Any) -> list[str]:
+    """按 `executor.task_order` 解析任务顺序，并补齐未声明任务。"""
+    names = [str(name) for name in task_names]
+    known = set(names)
+    out: list[str] = []
+    seen: set[str] = set()
+
+    for name in parse_executor_task_order(task_order):
+        task_name = str(name)
+        if not task_name or task_name in seen or task_name not in known:
+            continue
+        seen.add(task_name)
+        out.append(task_name)
+
+    for name in names:
+        task_name = str(name)
+        if not task_name or task_name in seen:
+            continue
+        seen.add(task_name)
+        out.append(task_name)
+
+    return out
 
 
 class TaskScheduleItemConfig(ConfigModel):

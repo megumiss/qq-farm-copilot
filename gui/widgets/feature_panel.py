@@ -33,7 +33,7 @@ from qfluentwidgets import (
 )
 
 from gui.widgets.fluent_container import StableElevatedCardWidget, TransparentCardContainer
-from models.config import AppConfig, normalize_task_enabled_time_range
+from models.config import AppConfig, normalize_task_enabled_time_range, resolve_executor_task_order
 from utils.app_paths import load_config_json_object
 from utils.feature_policy import is_feature_forced_off
 
@@ -192,7 +192,10 @@ class FeaturePanel(QWidget):
         col_heights = [0, 0]
 
         index = 0
-        for task_name, task_cfg in self.config.tasks.items():
+        for task_name in self._resolve_task_order():
+            task_cfg = self.config.tasks.get(task_name)
+            if task_cfg is None:
+                continue
             feature_map = task_cfg.features or {}
             if not isinstance(feature_map, dict) or not feature_map:
                 continue
@@ -209,6 +212,10 @@ class FeaturePanel(QWidget):
                 col.addStretch()
             content_layout.addLayout(waterfall)
         content_layout.addStretch()
+
+    def _resolve_task_order(self) -> list[str]:
+        task_names = [str(name) for name in self.config.tasks.keys()]
+        return resolve_executor_task_order(task_names, self.config.executor.task_order)
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:

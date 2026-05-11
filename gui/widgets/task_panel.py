@@ -36,7 +36,7 @@ from models.config import (
     TaskTriggerType,
     normalize_task_daily_times,
     normalize_task_enabled_time_range,
-    parse_executor_task_order,
+    resolve_executor_task_order,
 )
 from utils.app_paths import load_config_json_object
 
@@ -106,23 +106,7 @@ class TaskPanel(QWidget):
 
     def _resolve_task_order(self) -> list[str]:
         task_names = [str(name) for name in self.config.tasks.keys()]
-
-        known = set(task_names)
-        out: list[str] = []
-        seen: set[str] = set()
-        for name in parse_executor_task_order(self.config.executor.task_order):
-            task_name = str(name)
-            if not task_name or task_name in seen or task_name not in known:
-                continue
-            seen.add(task_name)
-            out.append(task_name)
-        for name in task_names:
-            task_name = str(name)
-            if not task_name or task_name in seen:
-                continue
-            seen.add(task_name)
-            out.append(task_name)
-        return out
+        return resolve_executor_task_order(task_names, self.config.executor.task_order)
 
     @staticmethod
     def _apply_card_style(card: StableElevatedCardWidget, object_name: str) -> None:

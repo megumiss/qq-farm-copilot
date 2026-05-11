@@ -42,7 +42,7 @@
       "friend.steal_stats": "开启后偷取会变慢",
       "main.auto_upgrade": "需要开启土地巡查任务",
       "main.auto_fertilize": "需要开启土地巡查任务",
-      "timed_harvest.aggregation_seconds": "地块成熟时间落在同一聚合时间段内时，统一处理收获操作。"
+      "timed_harvest.aggregation_seconds": "地块成熟时间落在同一聚合时间段内时，统一处理收获操作，单位秒。"
     },
     "enabled": "启用",
     "detail_text": "详情",
