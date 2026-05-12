@@ -50,6 +50,7 @@ class FriendFeatures:
     steal_enabled_time_range: str = '00:00:00-23:59:59'
     steal_limit_count: int = 0
     auto_help: bool = True
+    help_only_guard_dog: bool = False
     help_enabled_time_range: str = '00:00:00-23:59:59'
     help_limit_count: int = 0
     auto_accept_request: bool = True

@@ -48,6 +48,7 @@
         "steal_enabled_time_range": "00:00:00-23:59:59",
         "steal_limit_count": 0,
         "auto_help": true,
+        "help_only_guard_dog": false,
         "help_enabled_time_range": "00:00:00-23:59:59",
         "help_limit_count": 0,
         "auto_accept_request": true,

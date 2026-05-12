@@ -26,6 +26,7 @@
 - 数据统计开关：`config.tasks.friend.features.steal_stats`（默认 `false`；开启后仅在偷取动作后执行 OCR 统计，偷取速度会变慢）
 - 好友偷菜限制：`config.tasks.friend.features.steal_enabled_time_range`（默认 `00:00:00-23:59:59`）与 `config.tasks.friend.features.steal_limit_count`（默认 `0`，表示不限）
 - 好友帮忙限制：`config.tasks.friend.features.help_enabled_time_range`（默认 `00:00:00-23:59:59`）与 `config.tasks.friend.features.help_limit_count`（默认 `0`，表示不限）
+- 护主犬帮忙过滤：`config.tasks.friend.features.help_only_guard_dog`（默认 `false`；开启后仅在好友详情匹配到 `icon_xxxx.gif` 时执行帮忙）
 - 数据统计落盘：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/stats/daily_action_stats.csv`（按天累计 `harvest/operation/friend_steal/friend_help`）
 - 定时重启任务：`config.tasks.restart`（默认关闭；`trigger=interval`，默认 `interval_seconds=14400`；重启等待时间使用实例级 `config.window_restart_delay_seconds`，默认 `5` 秒）
 - 活动商店任务：`config.tasks.event_shop`（默认开启；`trigger=daily`，默认 `daily_times=["10:01","20:01"]`；当前仅执行商城免费物品领取）
@@ -181,7 +182,7 @@
 8. `upgrade`
 
 - `friend`
-: 独立好友任务，复用 `TaskFriend`；支持 `features.blacklist: list[str]`、`features.steal_stats: bool`，以及 `steal/help` 各自的 `enabled_time_range` 与 `limit_count` 配置（功能时段与次数限制在任务调度时段内生效）。
+: 独立好友任务，复用 `TaskFriend`；支持 `features.blacklist: list[str]`、`features.steal_stats: bool`、`features.help_only_guard_dog: bool`，以及 `steal/help` 各自的 `enabled_time_range` 与 `limit_count` 配置（功能时段与次数限制在任务调度时段内生效）。
 
 - `share`
 : 独立分享任务，仅执行分享领奖流程（仅支持微信平台；无 `features` 分项开关）。

@@ -90,6 +90,7 @@ class TaskFriend(TaskBase):
         self._friend_blacklist: list[str] = []
         self.friend_name_ocr = FriendNameOCR(ocr_tool=ocr_tool)
         self._task_enabled_time_range = '00:00:00-23:59:59'
+        self._help_only_guard_dog = False
 
     @staticmethod
     def _parse_limit_count(value: int) -> int:
@@ -150,6 +151,7 @@ class TaskFriend(TaskBase):
         _ = rect
         enable_steal = self.task.friend.feature.auto_steal
         enable_help = self.task.friend.feature.auto_help
+        help_only_guard_dog = self.task.friend.feature.help_only_guard_dog
         enable_accept_request = self.task.friend.feature.auto_accept_request
         enable_steal_stats = self.task.friend.feature.steal_stats
         steal_time_range = normalize_task_enabled_time_range(self.task.friend.feature.steal_enabled_time_range)
@@ -158,10 +160,11 @@ class TaskFriend(TaskBase):
         help_limit_count = self._parse_limit_count(self.task.friend.feature.help_limit_count)
         self._task_enabled_time_range = normalize_task_enabled_time_range(self.task.friend.enabled_time_range)
         self._friend_blacklist = self._read_blacklist(self.task.friend.feature.blacklist)
+        self._help_only_guard_dog = bool(help_only_guard_dog)
         logger.info(
             (
                 '好友巡查: 开始 | 偷菜={} 帮忙={} 同意请求={} 偷取统计={} '
-                '调度时段={} 偷菜时段={} 帮忙时段={} 偷菜上限={} 帮忙上限={}'
+                '调度时段={} 偷菜时段={} 帮忙时段={} 偷菜上限={} 帮忙上限={} 只帮护主犬={}'
             ),
             enable_steal,
             enable_help,
@@ -172,6 +175,7 @@ class TaskFriend(TaskBase):
             help_time_range,
             steal_limit_count,
             help_limit_count,
+            self._help_only_guard_dog,
         )
         if self._friend_blacklist:
             logger.info('好友巡查: 黑名单已加载 | 数量={}', len(self._friend_blacklist))
@@ -287,7 +291,29 @@ class TaskFriend(TaskBase):
             )
             return
 
-        has_action = self._has_current_friend_actions(enable_help=help_available, enable_steal=steal_available)
+        help_allowed_current = help_available
+        if help_allowed_current and self._help_only_guard_dog:
+            help_allowed_current = self._is_current_friend_guard_dog()
+
+        if help_available and self._help_only_guard_dog and not help_allowed_current and not steal_available:
+            if not self._goto_next_friend():
+                logger.info('好友巡查: 切换下一位好友失败，结束好友任务')
+                return
+            self._run_friend_recursive(
+                enable_help=enable_help,
+                enable_steal=enable_steal,
+                enable_steal_stats=enable_steal_stats,
+                steal_time_range=steal_time_range,
+                help_time_range=help_time_range,
+                steal_limit_count=steal_limit_count,
+                help_limit_count=help_limit_count,
+                steal_done_count=steal_done_count,
+                help_done_count=help_done_count,
+                no_action=no_action,
+            )
+            return
+
+        has_action = self._has_current_friend_actions(enable_help=help_allowed_current, enable_steal=steal_available)
         if not has_action:
             no_action += 1
             logger.info('好友巡查: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
@@ -303,7 +329,7 @@ class TaskFriend(TaskBase):
                     steal_done_count,
                     steal_limit_count if steal_limit_count > 0 else '∞',
                 )
-            if help_available and self._run_feature_help():
+            if help_allowed_current and self._run_feature_help():
                 help_done_count += 1
                 logger.info(
                     '好友巡查: 帮忙进度={}/{}',
@@ -327,6 +353,16 @@ class TaskFriend(TaskBase):
             help_done_count=help_done_count,
             no_action=no_action,
         )
+
+    def _is_current_friend_guard_dog(self) -> bool:
+        """仅在匹配到护主犬标识时允许执行帮忙。"""
+        self.ui.device.screenshot()
+        matched = self.ui.match_gif_multi(BTN_GUARD_DOG, threshold=0.8) # type: ignore
+        if matched:
+            logger.info('好友巡查: 找到护主犬，继续帮忙')
+            return True
+        logger.info('好友巡查: 未找到护主犬，跳过当前好友')
+        return False
 
     def _has_current_friend_actions(self, *, enable_help: bool, enable_steal: bool) -> bool:
         """判断当前好友界面是否有可执行操作按钮（使用 BTN 模板）。"""

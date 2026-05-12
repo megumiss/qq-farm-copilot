@@ -20,6 +20,7 @@
       "auto_expand": "土地扩建",
       "auto_upgrade": "土地升级",
       "auto_help": "帮忙",
+      "help_only_guard_dog": "只帮护主犬好友",
       "auto_steal": "偷菜",
       "steal_enabled_time_range": "偷菜时段",
       "steal_limit_count": "次数限制",
