@@ -62,6 +62,7 @@ BTN_WEED = Button(area={'qq': (246, 683, 286, 717), 'wechat': (246, 683, 286, 71
 FRIEND_CHECK = Button(area={'qq': (241, 69, 299, 98), 'wechat': (241, 69, 299, 98)}, color={'qq': (225, 186, 159), 'wechat': (225, 186, 159)}, button={'qq': (241, 69, 299, 98), 'wechat': (241, 69, 299, 98)}, file={'qq': 'templates/qq/ui/friend_check.png', 'wechat': 'templates/qq/ui/friend_check.png'}, name='friend_check')
 ICON_BUG_IN_FRIEND_DETAIL = Button(area={'qq': (0, 0, 12, 15), 'wechat': (0, 0, 12, 15)}, color={'qq': (176, 189, 133), 'wechat': (176, 189, 133)}, button={'qq': (0, 0, 12, 15), 'wechat': (0, 0, 12, 15)}, file={'qq': 'templates/qq/icon/icon_bug_in_friend_detail.png', 'wechat': 'templates/qq/icon/icon_bug_in_friend_detail.png'}, name='icon_bug_in_friend_detail')
 ICON_BUG_IN_FRIEND_LIST = Button(area={'qq': (0, 0, 24, 24), 'wechat': (0, 0, 24, 24)}, color={'qq': (167, 156, 153), 'wechat': (167, 156, 153)}, button={'qq': (0, 0, 24, 24), 'wechat': (0, 0, 24, 24)}, file={'qq': 'templates/qq/icon/icon_bug_in_friend_list.png', 'wechat': 'templates/qq/icon/icon_bug_in_friend_list.png'}, name='icon_bug_in_friend_list')
+ICON_GUARD_DOG = Button(area={'qq': (0, 0, 15, 15), 'wechat': (0, 0, 15, 15)}, color={'qq': (219, 198, 172), 'wechat': (219, 198, 172)}, button={'qq': (0, 0, 15, 15), 'wechat': (0, 0, 15, 15)}, file={'qq': 'templates/qq/icon/icon_guard_dog.gif', 'wechat': 'templates/qq/icon/icon_guard_dog.gif'}, name='icon_guard_dog')
 ICON_LAND_AMETHYST = Button(area={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, color={'qq': (209, 168, 232), 'wechat': (209, 168, 232)}, button={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, file={'qq': 'templates/qq/land/icon_land_amethyst.png', 'wechat': 'templates/qq/land/icon_land_amethyst.png'}, name='icon_land_amethyst')
 ICON_LAND_BLACK = Button(area={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, color={'qq': (92, 67, 42), 'wechat': (92, 67, 42)}, button={'qq': (0, 0, 23, 15), 'wechat': (0, 0, 23, 15)}, file={'qq': 'templates/qq/land/icon_land_black.png', 'wechat': 'templates/qq/land/icon_land_black.png'}, name='icon_land_black')
 ICON_LAND_GOLD = Button(area={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, color={'qq': (249, 203, 50), 'wechat': (249, 203, 50)}, button={'qq': (0, 0, 19, 17), 'wechat': (0, 0, 19, 17)}, file={'qq': 'templates/qq/land/icon_land_gold.png', 'wechat': 'templates/qq/land/icon_land_gold.png'}, name='icon_land_gold')
@@ -174,6 +175,7 @@ ASSET_NAME_TO_CONST = {
     'friend_check': FRIEND_CHECK,
     'icon_bug_in_friend_detail': ICON_BUG_IN_FRIEND_DETAIL,
     'icon_bug_in_friend_list': ICON_BUG_IN_FRIEND_LIST,
+    'icon_guard_dog': ICON_GUARD_DOG,
     'icon_land_amethyst': ICON_LAND_AMETHYST,
     'icon_land_black': ICON_LAND_BLACK,
     'icon_land_gold': ICON_LAND_GOLD,

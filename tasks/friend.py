@@ -24,6 +24,7 @@ from core.ui.assets import (
     BTN_WATER,
     BTN_WEED,
     ICON_BUG_IN_FRIEND_LIST,
+    ICON_GUARD_DOG,
     ICON_STEAL_IN_FRIEND_LIST,
     ICON_WATER_IN_FRIEND_LIST,
     ICON_WEED_IN_FRIEND_LIST,
@@ -75,6 +76,8 @@ STEAL_TOTAL_WAIT_TIMEOUT_SECONDS = 10.0
 STEAL_TOTAL_STABLE_WAIT_SECONDS = 1.0
 # 偷取统计：OCR 轮询间隔（秒）。
 STEAL_TOTAL_OCR_POLL_INTERVAL_SECONDS = 0.2
+# 护主犬识别：单个好友详情页内连续识别超时时间（秒）。
+GUARD_DOG_DETECT_TIMEOUT_SECONDS = 2
 # 偷取统计 OCR 固定区域（x1, y1, x2, y2），按当前统一截图坐标系定义。
 STEAL_TOTAL_OCR_REGION = (420, 240, 530, 390)
 # 偷取统计金额 token 正则：支持纯数字/小数/万单位，允许前导负号。
@@ -294,8 +297,9 @@ class TaskFriend(TaskBase):
         help_allowed_current = help_available
         if help_allowed_current and self._help_only_guard_dog:
             help_allowed_current = self._is_current_friend_guard_dog()
+        skipped_by_guard_dog = help_available and self._help_only_guard_dog and not help_allowed_current
 
-        if help_available and self._help_only_guard_dog and not help_allowed_current and not steal_available:
+        if skipped_by_guard_dog and not steal_available:
             if not self._goto_next_friend():
                 logger.info('好友巡查: 切换下一位好友失败，结束好友任务')
                 return
@@ -315,11 +319,14 @@ class TaskFriend(TaskBase):
 
         has_action = self._has_current_friend_actions(enable_help=help_allowed_current, enable_steal=steal_available)
         if not has_action:
-            no_action += 1
-            logger.info('好友巡查: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
-            if no_action >= FRIEND_NO_ACTION_EXIT_STREAK:
-                logger.info('好友巡查: 连续无动作达到阈值，结束好友任务')
-                return
+            if skipped_by_guard_dog:
+                logger.info('好友巡查: 当前好友非护主犬且无偷菜动作，本轮不计入连续空轮询')
+            else:
+                no_action += 1
+                logger.info('好友巡查: 当前好友无可执行动作，连续空轮询={}/{}', no_action, FRIEND_NO_ACTION_EXIT_STREAK)
+                if no_action >= FRIEND_NO_ACTION_EXIT_STREAK:
+                    logger.info('好友巡查: 连续无动作达到阈值，结束好友任务')
+                    return
         else:
             no_action = 0
             if steal_available and self._run_feature_steal(enable_steal_stats=enable_steal_stats):
@@ -355,13 +362,17 @@ class TaskFriend(TaskBase):
         )
 
     def _is_current_friend_guard_dog(self) -> bool:
-        """仅在匹配到护主犬标识时允许执行帮忙。"""
-        self.ui.device.screenshot()
-        matched = self.ui.match_gif_multi(BTN_GUARD_DOG, threshold=0.8) # type: ignore
-        if matched:
-            logger.info('好友巡查: 找到护主犬，继续帮忙')
-            return True
-        logger.info('好友巡查: 未找到护主犬，跳过当前好友')
+        """仅在识别窗口内匹配到护主犬标识时允许执行帮忙。"""
+        timer = Timer(GUARD_DOG_DETECT_TIMEOUT_SECONDS, count=0).start()
+        while 1:
+            self.ui.device.screenshot()
+            matched = self.ui.match_gif_multi(ICON_GUARD_DOG, threshold=0.8)
+            if matched:
+                logger.info('好友巡查: 找到护主犬，继续帮忙')
+                return True
+            if timer.reached():
+                break
+        logger.info('好友巡查: 护主犬识别超时，跳过当前好友')
         return False
 
     def _has_current_friend_actions(self, *, enable_help: bool, enable_steal: bool) -> bool:

@@ -277,6 +277,7 @@ class ModuleBase:
         roi: tuple[int, int, int, int] | None = None,
     ) -> list[Button]:
         """GIF 模板多命中识别（参考 NIKKE `Template.match_multi` 语义）。"""
+        template_name = str(getattr(gif_button, 'template_name', '') or gif_button.name or '').strip()
         if not bool(getattr(gif_button, 'is_gif', False)):
             return []
 
@@ -328,6 +329,13 @@ class ModuleBase:
                 best_h = int(th)
 
         if not points_all:
+            logger.debug(
+                'GIF识别: 未命中 | 模板={} 阈值={:.3f} 最佳分数={:.3f} 帧数={}',
+                template_name,
+                float(threshold),
+                float(best_score),
+                len(templates),
+            )
             return []
 
         grouped = self._group_points_like_nikke(np.array(points_all, dtype=int), threshold=3)
@@ -344,6 +352,14 @@ class ModuleBase:
                 name=gif_button.name,
             )
             out.append(dynamic)
+        logger.debug(
+            'GIF识别: 命中 | 模板={} 阈值={:.3f} 最佳分数={:.3f} 原始命中={} 聚类后={}',
+            template_name,
+            float(threshold),
+            float(best_score),
+            len(points_all),
+            len(out),
+        )
         return out
 
     @staticmethod
