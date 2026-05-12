@@ -25,8 +25,8 @@ class TaskTimedHarvest(TaskBase):
     """按调度在聚合窗口内持续执行一键收获。"""
 
     @classmethod
-    def build_schedule_points(cls, plots: list[dict[str, Any]], *, aggregation_seconds: int) -> list[datetime]:
-        """按地块快照构建聚合后的执行时间点。"""
+    def _collect_maturity_points(cls, plots: list[dict[str, Any]]) -> list[datetime]:
+        """收集所有地块成熟绝对时间点。"""
         if not isinstance(plots, list) or not plots:
             return []
         maturity_points: list[datetime] = []
@@ -47,17 +47,49 @@ class TaskTimedHarvest(TaskBase):
             seconds = int(hour_str) * 3600 + int(minute_str) * 60 + int(second_str)
             maturity_points.append(sync_time + timedelta(seconds=seconds))
         maturity_points.sort()
+        return maturity_points
+
+    @classmethod
+    def build_schedule_groups(
+        cls,
+        plots: list[dict[str, Any]],
+        *,
+        aggregation_seconds: int,
+    ) -> list[tuple[datetime, datetime]]:
+        """按聚合时间构建执行分组（组起点, 组终点）。"""
+        maturity_points = cls._collect_maturity_points(plots)
         if not maturity_points:
             return []
 
         window = timedelta(seconds=aggregation_seconds)
-        schedule_points: list[datetime] = []
+        groups: list[tuple[datetime, datetime]] = []
+        group_start: datetime | None = None
+        group_end: datetime | None = None
         window_end: datetime | None = None
+
         for point in maturity_points:
             if window_end is None or point > window_end:
-                schedule_points.append(point)
+                if group_start is not None and group_end is not None:
+                    groups.append((group_start, group_end))
+                group_start = point
+                group_end = point
                 window_end = point + window
-        return schedule_points
+                continue
+            if group_end is None or point > group_end:
+                group_end = point
+
+        if group_start is not None and group_end is not None:
+            groups.append((group_start, group_end))
+        return groups
+
+    @classmethod
+    def build_schedule_points(cls, plots: list[dict[str, Any]], *, aggregation_seconds: int) -> list[datetime]:
+        """按地块快照构建聚合后的执行时间点。"""
+        groups = cls.build_schedule_groups(
+            plots,
+            aggregation_seconds=aggregation_seconds,
+        )
+        return [group_start for group_start, _ in groups]
 
     @staticmethod
     def pick_next_schedule_target(
@@ -108,8 +140,26 @@ class TaskTimedHarvest(TaskBase):
 
         self.ui.ui_ensure(page_main)
         aggregation_seconds = self.task.timed_harvest.feature.aggregation_seconds
-        total_window_seconds = aggregation_seconds + TIMED_HARVEST_WINDOW_BUFFER_SECONDS
-        deadline = datetime.now() + timedelta(seconds=total_window_seconds)
+        now = datetime.now()
+        groups = self.build_schedule_groups(
+            self.config.land.plots,
+            aggregation_seconds=aggregation_seconds,
+        )
+        active_group: tuple[datetime, datetime] | None = None
+        for group_start, group_end in groups:
+            if group_end >= now:
+                active_group = (group_start, group_end)
+                break
+
+        if active_group is not None:
+            group_start, group_end = active_group
+            deadline = group_end + timedelta(seconds=TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
+        else:
+            group_start = None
+            group_end = None
+            deadline = now + timedelta(seconds=TIMED_HARVEST_WINDOW_BUFFER_SECONDS)
+
+        total_window_seconds = max(0, int(math.ceil((deadline - now).total_seconds())))
         action_count = 0
         goto_main_click_timer = Timer(TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS, count=0)
         withered_action_timer = Timer(TIMED_HARVEST_GOTO_MAIN_MIN_INTERVAL_SECONDS, count=0)
