@@ -40,6 +40,7 @@ from models.task_views import (
     TaskViewBase,
 )
 from tasks.event_shop import TaskEventShop
+from tasks.fertilize import TaskFertilize
 from tasks.friend import TaskFriend
 from tasks.gift import TaskGift
 from tasks.land_scan import TaskLandScan
@@ -880,6 +881,15 @@ class BotExecutorMixin:
             return err or TaskResult(success=False, error='窗口未找到')
         self._reset_device_runtime_guards()
         task = TaskFriend(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
+        return task.run(rect=rect)
+
+    def _run_task_fertilize(self, _ctx: TaskContext) -> TaskResult:
+        """执行 `task_fertilize` 子流程。"""
+        rect, err = self._prepare_task_scene('fertilize')
+        if err is not None or rect is None:
+            return err or TaskResult(success=False, error='窗口未找到')
+        self._reset_device_runtime_guards()
+        task = TaskFertilize(engine=self, ui=self.ui, ocr_tool=self._get_ocr_tool())
         return task.run(rect=rect)
 
     def _run_task_share(self, _ctx: TaskContext) -> TaskResult:

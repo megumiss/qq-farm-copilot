@@ -21,12 +21,25 @@
 - 实例纳管操作：`新增 / 删除 / 切换 / 克隆 / 重命名`
 - 调度模式：`TaskExecutor` 单线程串行执行
 - 任务配置：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/configs/config.json -> tasks`（动态字典，包含持久化 `next_run`）
+- 农场详情配置：`config.land.plots`（固定 24 格，元素结构：`{plot_id, level, maturity_countdown, need_upgrade, need_planting}`；`maturity_countdown` 为 `HH:MM:SS`，`need_upgrade` 表示地块是否可升级，`need_planting` 表示地块是否需要播种）与 `config.land.countdown_sync_time`（`YYYY-MM-DD HH:MM:SS`，表示倒计时快照基准时间）及 `config.land.profile`（`level/gold/coupon/exp`，来源于等级同步 OCR）
 - 好友黑名单配置：`config.tasks.friend.features.blacklist`（`list[str]`，在任务设置详情弹窗维护）
+- 数据统计开关：`config.tasks.friend.features.steal_stats`（默认 `false`；开启后仅在偷取动作后执行 OCR 统计，偷取速度会变慢）
+- 好友偷菜限制：`config.tasks.friend.features.steal_enabled_time_range`（默认 `00:00:00-23:59:59`）与 `config.tasks.friend.features.steal_limit_count`（默认 `0`，表示不限）
+- 好友帮忙限制：`config.tasks.friend.features.help_enabled_time_range`（默认 `00:00:00-23:59:59`）与 `config.tasks.friend.features.help_limit_count`（默认 `0`，表示不限）
+- 数据统计落盘：`%APPDATA%/QQFarmCopilot/instances/<instance_id>/stats/daily_action_stats.csv`（按天累计 `harvest/operation/friend_steal/friend_help`）
+- 定时重启任务：`config.tasks.restart`（默认关闭；`trigger=interval`，默认 `interval_seconds=14400`；重启等待时间使用实例级 `config.window_restart_delay_seconds`，默认 `5` 秒）
+- 自动施肥任务：`config.tasks.fertilize`（默认关闭；`trigger=interval`，默认 `interval_seconds=900`；参数：`maturity_threshold_seconds/auto_buy_fertilizer/fertilizer_purchase_threshold_seconds`）
 - 高级配置：`config.safety.debug_log_enabled` 控制 Debug 日志输出
+- 异常恢复配置：`config.recovery`（`task_restart_attempts/task_retry_delay_seconds/startup_retry_step_sleep_seconds/startup_stabilize_timeout_seconds`）
+- 全局日志保留：`%APPDATA%/QQFarmCopilot/app_settings.json -> logging.retention_days`（单位天，默认 `7`；启动与全局设置变更时清理过期 `.log`）
+- 截图频率：`config.screenshot.capture_interval_seconds`（默认 `0.3` 秒；`0` 表示不限制最小截图间隔）
+- 播种稳定超时：`config.planting.planting_stable_timeout_seconds`（默认 `3.0` 秒；用于背景树锚点稳定等待超时）
 - 播种选种：`config.planting.warehouse_first` 默认开启；开启时优先按 `BgPatchNumberOCR` 在区域 `x:[50,480], y:[地块点击y+40, 地块点击y+80]` 识别最左数字块
 - 活动作物跳过：`SEED_BTN_HEART_FRUIT`（爱心果）固定排除；`config.planting.skip_event_crops` 默认关闭，仅控制是否额外排除 `SEED_BTN_MUGWORT`（艾草）
 - 等级同步：播种前执行等级 OCR；由 `config.planting.level_ocr_enabled` 控制，识别后回写 `config.planting.player_level`；统一 ROI 使用 `tasks/main.py` 内常量（不区分平台）
+- 小程序快捷方式：`config.window_shortcut_path` 保存桌面快捷方式路径（`.lnk`，在设置面板“窗口关键词”上方选择）；`config.window_shortcut_launch_delay_seconds`（默认 `3` 秒）控制快捷方式拉起后到窗口初始化之间的等待时间
 - 窗口选择：`config.window_select_rule` 仅保存匹配顺序（`auto` / `index:N`），不保存 `hwnd`
+- 窗口定位：`config.planting.window_screen_index` 保存目标屏幕序号（与显示器查询序号一致；`0` 表示默认主屏）；`config.planting.window_position` 保存该屏幕内的位置锚点（左中/居中/右中/四角）；`config.planting.virtual_desktop_index` 保存目标虚拟桌面序号（`0` 表示不移动，`1+` 表示目标桌面）
 - 视觉按钮来源：`core/ui/assets.py`（由 `tools/button_extract.py` 生成）
 - 版本来源：`utils/version.py::APP_VERSION`（Release 打包前由 `tools/write_version.py --tag <tag>` 自动写入）
 - 更新检查：读取 GitHub `releases/latest`；启动后自动检查一次，之后每 `6` 小时检查一次；有更新时左侧“设置”图标显示红点
@@ -40,16 +53,16 @@
 : 实例会话管理（实例增删改查、当前实例切换、元数据保存）。
 
 - `core/engine/bot/runtime.py`
-: 生命周期与会话控制（start/stop/pause/resume/run_once）、配置更新、可中断睡眠、坐标映射。
+: 生命周期与会话控制（start/stop/pause/resume/run_once）、配置更新、可中断睡眠、坐标映射；并负责启动阶段异常收敛与恢复。
 
 - `core/engine/bot/executor.py`
-: 任务注册与调度桥接（自动发现 `_run_task_*`）。
+: 任务注册与调度桥接（自动发现 `_run_task_*`），并作为任务异常恢复主入口（NIKKE 风格单层 `try/except` 直分支）。
 
 - `core/engine/task/executor.py`
-: 通用任务执行器（pending/waiting 队列、优先级排序、结果回写 next_run）。
+: 通用任务执行器（pending/waiting 队列、按固定任务顺序调度、结果回写 next_run）。
 
-- `core/tasks/*.py`
-: 业务任务实现（`main/friend/share/reward` 及子任务）。
+- `tasks/*.py`
+: 业务任务实现（`main/fertilize/friend/share/reward/gift/sell/land_scan` 及子任务；`restart` 入口在 `executor.py`）。
 
 - `core/ui/ui.py` + `core/base/module_base.py`
 : 页面识别、导航、弹窗清理、`appear/appear_then_click` 等模板点击能力。
@@ -64,8 +77,8 @@
 ### 2.2 排序规则
 
 - 仅执行 `enabled=true` 且 `next_run <= now` 的任务。
-- `pending` 队列按 `priority` 升序排序（值越小优先级越高）。
-- 同一时刻到期任务按 `priority` 串行执行，不并发。
+- `pending` 队列按 `config.executor.task_order`（`>` 分隔）从左到右排序。
+- 同一时刻到期任务按 `task_order` 串行执行，不并发。
 
 ### 2.3 触发类型
 
@@ -147,30 +160,29 @@
 : 推迟任务下一次执行。
 
 - `update_task(name, **kwargs)`
-: 热更新任务参数（enabled/priority/interval 等）。
+: 热更新任务参数（enabled/interval/trigger/next_run 等）。
 
 ## 4. 业务任务逻辑（当前实现）
 
 - `main`
-: 主流程任务，内部先巡查维护，再按页面分发子任务。
+: 主流程任务，按功能开关顺序执行收获维护、扩建、播种、升级等动作。
 
 - `main` 在自动播种前会先尝试等级 OCR（可由 `config.planting.level_ocr_enabled` 关闭）。
 
-- `main` 在主页面的子任务顺序（命中即短路）：
-1. `plant`
-2. `upgrade(expand)`
-3. `sell`
-4. `reward`
-5. `friend`
+- `main` 内部动作顺序（按 feature 开关）：
+1. `harvest`
+2. `weed`
+3. `bug`
+4. `water`
+5. `expand`
+6. `plant`（前置等级 OCR）
+7. `upgrade`
 
-- `harvest` 内部顺序（命中即返回）：
-1. 收获
-2. 除草
-3. 除虫
-4. 浇水
+- `fertilize`
+: 独立自动施肥任务（默认关闭，默认 `interval_seconds=900`）；参数：`features.maturity_threshold_seconds`（默认 `3600` 秒）、`features.auto_buy_fertilizer`（默认 `false`）、`features.fertilizer_purchase_threshold_seconds`（默认 `108000` 秒，30 小时）；每轮按 `land.plots[].maturity_countdown` 筛选地块并施肥，库存不足时可自动进商店补货。
 
 - `friend`
-: 独立好友任务，复用 `TaskFriend`；支持 `features.blacklist: list[str]` 配置。
+: 独立好友任务，复用 `TaskFriend`；支持 `features.blacklist: list[str]`、`features.steal_stats: bool`，以及 `steal/help` 各自的 `enabled_time_range` 与 `limit_count` 配置（功能时段与次数限制在任务调度时段内生效）。
 
 - `share`
 : 独立分享任务，仅执行分享领奖流程（仅支持微信平台；无 `features` 分项开关）。
@@ -179,29 +191,37 @@
 : 独立任务奖励领取任务，支持分项开关：`features.claim_growth_task`（默认 false）、`features.claim_daily_task`（默认 true）。
 
 - `gift`
-: 物品领取任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 模板，缺失时自动跳过）。
+: 物品领取任务，支持分项开关：`features.auto_svip_gift`（默认 true）、`features.auto_mall_gift`（默认 true）、`features.auto_mail`（默认 true，依赖 `menu_goto_mail` 导航链路进入邮箱页）。
+
+- `land_scan`
+: 地块巡查任务（默认关闭，默认 `interval_seconds=1800`）；流程为左滑 120 后扫描右到左前 5 列、右滑 240 后扫描左到右前 4 列，最后回正，并对每个点击地块执行 OCR 采集；从文本中正则提取 `HH:MM:SS` 回写到 `config.land.plots[].maturity_countdown`，并标记 `config.land.plots[].need_upgrade` 与 `config.land.plots[].need_planting`（空地为 `true`）。
+
+- `restart`
+: 定时重启任务（默认关闭，默认 `interval_seconds=14400`）；重启等待使用实例级 `config.window_restart_delay_seconds`（默认 `5` 秒），执行时会校验 `window_shortcut_path` 并重启窗口后收敛回主页面。
 
 ## 5. 新增任务标准流程
 
 1. 在 `core/engine/bot/executor.py` 增加 `_run_task_<name>(ctx)`。
 2. 在 `configs/config.template.json` 与用户配置中增加 `tasks.<name>`。
-3. 任务业务代码放入 `core/tasks/<name>.py`（或复用已有子任务）。
-4. 在任务中通过 `engine.get_task_features('<name>')` 读取开关。
-5. 必要时补充 `configs/ui_labels.json` 文案映射。
+3. 任务业务代码放入 `tasks/<name>.py`（或复用已有子任务）。
+4. 任务中优先通过强类型入口读取参数：`self.task.<task_name>.feature.<field>`（任务参数）与 `self.config.planting.<field>`（播种配置）。
+5. 当 `tasks.<name>.features` 结构新增/变更后，执行 `.\.venv\Scripts\python.exe tools\gen_task_views.py` 重新生成 `models/task_views.py`。
+6. 必要时补充 `configs/ui_labels.json` 文案映射。
 
 ## 6. 配置字段约定（tasks）
+
+- `executor.task_order: "task_a>task_b>task_c"`（固定任务顺序，`>` 分隔）
 
 每个任务项建议包含：
 
 - `enabled: bool`
-- `priority: int`（>=1）
 - `trigger: "interval" | "daily"`
 - `interval_seconds: int`（>=1，实际生效下限见 `executor.min_task_interval_seconds`）
 - `enabled_time_range: "HH:MM:SS-HH:MM:SS"`（默认 `00:00:00-23:59:59`，仅 `trigger=interval` 生效）
 - `daily_time: "HH:MM"`
 - `next_run: "YYYY-MM-DD HH:MM[:SS]"`（默认 `2026-01-01 00:00`）
 - `failure_interval_seconds: int`（>=1，实际生效下限见 `executor.min_task_interval_seconds`）
-- `features: {str: bool | list[str]}`
+- `features: {str: bool | int | str | list[str]}`
 
 ## 7. 修改边界与禁令
 
@@ -226,7 +246,7 @@ rg -n "from core\.ops|core\.ops|model_fields\.keys\(\)" core gui models
 : 检查 `window_title_keyword`、`window_select_rule`、窗口平台（QQ/微信）、模板是否与平台匹配。
 
 - 任务未执行
-: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds/enabled_time_range`、`priority`。
+: 检查 `tasks.<name>.enabled`、`trigger/daily_time/interval_seconds/enabled_time_range`、`executor.task_order`。
 
 - 修改文案后界面未更新
 : UI 文案读取 `configs/ui_labels.json`（内置配置）；修改后需重启程序，运行中不会热重建已创建面板。

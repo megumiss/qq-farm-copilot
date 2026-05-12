@@ -11,6 +11,7 @@ from core.engine.task.registry import TaskResult
 from models.config import AppConfig
 from models.task_views import (
     EventShopTaskView,
+    FertilizeTaskView,
     FriendTaskView,
     GiftTaskView,
     LandScanTaskView,
@@ -53,6 +54,10 @@ class TaskViews:
     @property
     def friend(self) -> FriendTaskView:
         return self.owner.engine.build_task_view('friend')  # type: ignore[return-value]
+
+    @property
+    def fertilize(self) -> FertilizeTaskView:
+        return self.owner.engine.build_task_view('fertilize')  # type: ignore[return-value]
 
     @property
     def gift(self) -> GiftTaskView:
@@ -306,6 +311,43 @@ class TaskBase:
             except Exception:
                 pass
         logger.info('{}: 状态回填完成 | flag={} plots={}', log_prefix, key, sorted(changed_plot_ids))
+
+    @staticmethod
+    def physical_col_from_plot_ref(plot_ref: str) -> int | None:
+        """由地块序号(如 `3-2`)计算物理列序号(1-9)。"""
+        text = str(plot_ref or '').strip()
+        left, sep, right = text.partition('-')
+        if sep != '-':
+            return None
+        try:
+            logical_col = int(left)
+            logical_row = int(right)
+        except Exception:
+            return None
+        idx = (4 - logical_row) + (logical_col - 1) + 1
+        return max(1, min(9, idx))
+
+    def split_plot_refs_by_physical_group(self, plot_refs: list[str]) -> tuple[list[str], list[str]]:
+        """按物理列将地块序号拆分为 `1-5` 与 `6-9` 两组。"""
+        uniq_refs: list[str] = []
+        seen_refs: set[str] = set()
+        for ref in plot_refs:
+            text = str(ref or '').strip()
+            if not text or text in seen_refs:
+                continue
+            seen_refs.add(text)
+            uniq_refs.append(text)
+
+        ordered = sorted(
+            uniq_refs,
+            key=lambda ref: (
+                int(self.physical_col_from_plot_ref(ref) or 9),
+                ref,
+            ),
+        )
+        refs_12345 = [ref for ref in ordered if int(self.physical_col_from_plot_ref(ref) or 9) <= 5]
+        refs_6789 = [ref for ref in ordered if int(self.physical_col_from_plot_ref(ref) or 9) > 5]
+        return refs_12345, refs_6789
 
     @staticmethod
     def ok(*, next_run_seconds: int | None = None) -> TaskResult:

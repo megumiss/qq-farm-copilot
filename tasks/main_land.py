@@ -47,44 +47,6 @@ class TaskMainLandMixin:
                 logger.info('自动升级流程: 地块升级完成 | 序号={}', plot_ref)
                 break
 
-    @staticmethod
-    def _physical_col_from_plot_ref(plot_ref: str) -> int | None:
-        """由地块序号（如 `1-1`）计算物理列索引（1..9）。"""
-        text = str(plot_ref or '').strip()
-        left, sep, right = text.partition('-')
-        if sep != '-':
-            return None
-        try:
-            logical_col = int(left)
-            logical_row = int(right)
-        except Exception:
-            return None
-        idx = (4 - logical_row) + (logical_col - 1) + 1
-        return max(1, min(9, idx))
-
-    def _split_plot_refs_by_physical_group(self, plot_refs: list[str]) -> tuple[list[str], list[str]]:
-        """按物理列将地块序号拆分为 `1-5` 与 `6-9` 两组。"""
-        uniq_refs: list[str] = []
-        seen_refs: set[str] = set()
-        for ref in plot_refs:
-            text = str(ref or '').strip()
-            if not text or text in seen_refs:
-                continue
-            seen_refs.add(text)
-            uniq_refs.append(text)
-
-        ordered = sorted(
-            uniq_refs,
-            key=lambda ref: (
-                int(self._physical_col_from_plot_ref(ref) or 9),
-                ref,
-            ),
-        )
-
-        group_12345 = [ref for ref in ordered if int(self._physical_col_from_plot_ref(ref) or 9) <= 5]
-        group_6789 = [ref for ref in ordered if int(self._physical_col_from_plot_ref(ref) or 9) > 5]
-        return group_12345, group_6789
-
     def _swipe_to_upgrade_group(self, group_name: str) -> None:
         """根据分组执行升级前画面滑动。"""
         # 参考土地巡查任务手势：LAND_SCAN_SWIPE_H_P1=(250,190), LAND_SCAN_SWIPE_H_P2=(200,190)
@@ -235,7 +197,7 @@ class TaskMainLandMixin:
             return None
 
         initial_refs = [ref for ref, _ in initial_targets]
-        refs_12345, refs_6789 = self._split_plot_refs_by_physical_group(initial_refs)
+        refs_12345, refs_6789 = self.split_plot_refs_by_physical_group(initial_refs)
         if refs_12345:
             logger.info('自动升级流程: 分组 1-5 | 序号={}', refs_12345)
             self._swipe_to_upgrade_group('12345')
