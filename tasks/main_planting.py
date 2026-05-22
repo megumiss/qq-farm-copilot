@@ -606,6 +606,10 @@ class TaskMainPlantingMixin(TaskMainBuySeedMixin):
 
         seed_index: int | None = None
         if not use_warehouse_first:
+            preview_land_coords, _, _ = self._collect_pending_plant_land_coords()
+            if not preview_land_coords:
+                logger.info('自动播种: 未发现空土地，跳过仓库种子确认')
+                return []
             seed_index = self._ensure_seed_index_in_warehouse(crop_name)
             if seed_index is None:
                 logger.warning('自动播种: 仓库确认种子失败，结束本轮 | 作物={}', crop_name)
